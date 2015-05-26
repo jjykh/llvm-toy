@@ -1,3 +1,3 @@
 #include <LLVMAPI.h>
 
-LLVMAPI* llvm;
+LLVMAPI* llvmAPI;

@@ -9,5 +9,5 @@ struct LLVMAPI {
 #undef LLVM_API_FUNCTION_DECLARATION
     
 };
-extern LLVMAPI* llvm;
+extern LLVMAPI* llvmAPI;
 #endif /* LLVMAPI_H */

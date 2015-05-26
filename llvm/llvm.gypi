@@ -5,6 +5,7 @@
     'variables': {
         'sources': [
             'InitializeLLVM.cpp',
+            'LLVMAPI.cpp',
         ],
     },
 }

@@ -14,6 +14,16 @@
                 'include_dirs': [
                     '.',
                 ],
+                'libraries': [
+                    '<!(llvm-config --libs)',
+                    '-ldl',
+                    '-lz',
+                    '-lpthread',
+                    '-lcurses',
+                ],
+                'ldflags': [
+                    '<!(llvm-config --ldflags)',
+                ],
             },
         },
     ],

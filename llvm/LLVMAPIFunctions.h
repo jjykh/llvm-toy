@@ -1,5 +1,6 @@
 #ifndef LLVMAPIFUNCTIONS_H
 #define LLVMAPIFUNCTIONS_H
+#include "LLVMHeaders.h"
 
 #define FOR_EACH_LLVM_API_FUNCTION(macro) \
     macro(LLVMBool, ParseBitcode, (LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutModule, char **OutMessage)) \

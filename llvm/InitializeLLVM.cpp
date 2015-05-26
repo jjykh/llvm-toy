@@ -1,4 +1,8 @@
+#include <stdio.h>
+#include <assert.h>
 #include "LLVMAPI.h"
+#include "InitializeLLVM.h"
+#include <llvm/Support/CommandLine.h>
 
 template<typename... Args>
 void initCommandLine(Args... args)
@@ -6,33 +10,33 @@ void initCommandLine(Args... args)
     const char* theArgs[] = { args... };
     llvm::cl::ParseCommandLineOptions(sizeof(theArgs) / sizeof(const char*), theArgs);
 }
+static void llvmCrash(const char*) __attribute__((noreturn));
 
-static LLVMAPI* initializeAndGetLLVMAPI(
-    void (*callback)(const char*, ...),
-    bool* enableFastISel)
+void llvmCrash(const char* reason)
 {
-    g_llvmTrapCallback = callback;
+    fprintf(stderr, "LLVM fatal error: %s", reason);
+    assert(false);
+}
+
+static LLVMAPI* initializeAndGetLLVMAPI(void)
+{
     
     LLVMInstallFatalErrorHandler(llvmCrash);
 
-    if (!LLVMStartMultithreaded())
-        callback("Could not start LLVM multithreading");
+    if (!LLVMStartMultithreaded()) {
+        llvmCrash("Could not start LLVM multithreading");
+    }
     
     LLVMLinkInMCJIT();
     
     // You think you want to call LLVMInitializeNativeTarget()? Think again. This presumes that
     // LLVM was ./configured correctly, which won't be the case in cross-compilation situations.
     
-#if CPU(X86_64)
     LLVMInitializeX86TargetInfo();
     LLVMInitializeX86Target();
     LLVMInitializeX86TargetMC();
     LLVMInitializeX86AsmPrinter();
     LLVMInitializeX86Disassembler();
-#elif CPU(ARM64)
-#else
-    UNREACHABLE_FOR_PLATFORM();
-#endif
     
 #if LLVM_VERSION_MAJOR >= 4 || (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 6)
     // It's OK to have fast ISel, if it was requested.
@@ -41,10 +45,7 @@ static LLVMAPI* initializeAndGetLLVMAPI(
     *enableFastISel = false;
 #endif
 
-    if (*enableFastISel)
-        initCommandLine("-enable-misched=false", "-regalloc=basic");
-    else
-        initCommandLine("-enable-patchpoint-liveness=true");
+    initCommandLine("-enable-patchpoint-liveness=true");
     
     LLVMAPI* result = new LLVMAPI;
     
@@ -59,9 +60,7 @@ static LLVMAPI* initializeAndGetLLVMAPI(
     return result;
 }
 
-static void constructor(void) __attribute__((constructor));
-
-void constructor(void)
+void initLLVM(void)
 {
-    llvm = initializeAndGetLLVMAPI();
+    llvmAPI = initializeAndGetLLVMAPI();
 }
