@@ -1,0 +1,2 @@
+#!/bin/sh
+GYP_GENERATORS=ninja ../gyp-read-only/gyp --depth=. build/all.gyp --no-parallel
