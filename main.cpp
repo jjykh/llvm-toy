@@ -3,6 +3,7 @@
 #include "LLVMAPI.h"
 #include "InitializeLLVM.h"
 #include "CompilerState.h"
+#include "log.h"
 typedef jit::CompilerState State;
 #define SECTION_NAME_PREFIX "."
 #define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
@@ -54,8 +55,14 @@ int main()
     LLVMMCJITCompilerOptions options;
     llvmAPI->InitializeMCJITCompilerOptions(&options, sizeof(options));
     options.OptLevel = 2;
-    State state;
+    State state("test");
+    LLVMExecutionEngineRef engine;
+    char* error = 0;
 
     options.MCJMM = llvmAPI->CreateSimpleMCJITMemoryManager(
         &state, mmAllocateCodeSection, mmAllocateDataSection, mmApplyPermissions, mmDestroy);
+    if (llvmAPI->CreateMCJITCompilerForModule(&engine, state.m_module, &options, sizeof(options), &error)) {
+        LOGE("FATAL: Could not create LLVM execution engine: %s", error);
+        assert(false);
+    }
 }
