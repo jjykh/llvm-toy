@@ -18,6 +18,7 @@ struct CompilerState {
     LLVMModuleRef m_module;
     LLVMContextRef m_context;
     CompilerState(const char* moduleName);
+    ~CompilerState();
 };
 }
 

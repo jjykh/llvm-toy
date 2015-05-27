@@ -65,4 +65,29 @@ int main()
         LOGE("FATAL: Could not create LLVM execution engine: %s", error);
         assert(false);
     }
+    LLVMModuleRef module = state.m_module;
+    LLVMPassManagerRef functionPasses = 0;
+    LLVMPassManagerRef modulePasses;
+
+    LLVMPassManagerBuilderRef passBuilder = llvmAPI->PassManagerBuilderCreate();
+    llvmAPI->PassManagerBuilderSetOptLevel(passBuilder, 2);
+    llvmAPI->PassManagerBuilderUseInlinerWithThreshold(passBuilder, 275);
+    llvmAPI->PassManagerBuilderSetSizeLevel(passBuilder, 0);
+
+    functionPasses = llvmAPI->CreateFunctionPassManagerForModule(module);
+    modulePasses = llvmAPI->CreatePassManager();
+
+    llvmAPI->AddTargetData(llvmAPI->GetExecutionEngineTargetData(engine), modulePasses);
+
+    llvmAPI->PassManagerBuilderPopulateFunctionPassManager(passBuilder, functionPasses);
+    llvmAPI->PassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);
+
+    llvmAPI->PassManagerBuilderDispose(passBuilder);
+
+    llvmAPI->InitializeFunctionPassManager(functionPasses);
+    for (LLVMValueRef function = llvmAPI->GetFirstFunction(module); function; function = llvmAPI->GetNextFunction(function))
+        llvmAPI->RunFunctionPassManager(functionPasses, function);
+    llvmAPI->FinalizeFunctionPassManager(functionPasses);
+
+    llvmAPI->RunPassManager(modulePasses, module);
 }
