@@ -8,6 +8,8 @@
             'LLVMAPI.cpp',
             'log.cpp',
             'CompilerState.cpp',
+            'IntrinsicRepository.cpp',
+            'CommonValues.cpp',
         ],
         'llvmlog_level': 0,
     },

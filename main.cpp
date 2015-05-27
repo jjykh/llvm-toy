@@ -3,6 +3,7 @@
 #include "LLVMAPI.h"
 #include "InitializeLLVM.h"
 #include "CompilerState.h"
+#include "IntrinsicRepository.h"
 #include "log.h"
 typedef jit::CompilerState State;
 #define SECTION_NAME_PREFIX "."
@@ -104,24 +105,26 @@ int main()
 {
     initLLVM();
     State state("test");
-    LLVMTypeRef int32Type = llvmAPI->Int32TypeInContext(state.m_context);
-    LLVMTypeRef structElements[] = { int32Type };
-    LLVMTypeRef argumentType = llvmAPI->PointerType(llvmAPI->StructTypeInContext(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0]), false), 0);
-    state.m_function = llvmAPI->AddFunction(
-        state.m_module, "test", llvmAPI->FunctionType(int32Type, &argumentType, 1, false));
-    LLVMValueRef arg0 = llvmAPI->GetParam(state.m_function, 0);
-    LLVMBasicBlockRef entry = llvmAPI->AppendBasicBlockInContext(state.m_context, state.m_function, "Prologue");
-    LLVMBuilderRef builder = llvmAPI->CreateBuilderInContext(state.m_context);
+    using namespace jit;
+    LType int32Type_ = int32Type(state.m_context);
+    LType structElements[] = { int32Type_ };
+    LType argumentType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
+    state.m_function = addFunction(
+        state.m_module, "test", functionType(int32Type_, argumentType));
+    LValue arg0 = getParam(state.m_function, 0);
+    LBasicBlock entry = appendBasicBlock(state.m_context, state.m_function, "Prologue");
+    LBuilder builder = llvmAPI->CreateBuilderInContext(state.m_context);
     llvmAPI->PositionBuilderAtEnd(builder, entry);
-    LLVMValueRef one = llvmAPI->ConstInt(llvmAPI->Int32TypeInContext(state.m_context), 1, false);
-    LLVMValueRef gep = llvmAPI->BuildStructGEP(builder, arg0, 0, "");
-    LLVMValueRef loaded = llvmAPI->BuildLoad(builder, gep, "");
-    LLVMValueRef add = llvmAPI->BuildAdd(builder, loaded, one, "");
-    llvmAPI->BuildRet(builder, add);
+    LValue one = constInt(int32Type_, 1);
+    LValue gep = buildStructGEP(builder, arg0, 0);
+    LValue loaded = buildLoad(builder, gep);
+    LValue add = buildAdd(builder, loaded, one);
+    buildRet(builder, add);
     llvmAPI->DisposeBuilder(builder);
 
+    dumpModule(state.m_module);
     compile(state);
-    llvmAPI->DumpModule(state.m_module);
+    dumpModule(state.m_module);
     assert(state.m_entryPoint == state.m_codeSectionList.front().data());
     return 0;
 }
