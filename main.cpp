@@ -68,6 +68,10 @@ int main()
     LLVMModuleRef module = state.m_module;
     LLVMPassManagerRef functionPasses = 0;
     LLVMPassManagerRef modulePasses;
+    LLVMTargetDataRef targetData = llvmAPI->GetExecutionEngineTargetData(engine);
+    char* stringRepOfTargetData = llvmAPI->CopyStringRepOfTargetData(targetData);
+    llvmAPI->SetDataLayout(module, stringRepOfTargetData);
+    free(stringRepOfTargetData);
 
     LLVMPassManagerBuilderRef passBuilder = llvmAPI->PassManagerBuilderCreate();
     llvmAPI->PassManagerBuilderSetOptLevel(passBuilder, 2);
