@@ -16,7 +16,9 @@ struct CompilerState {
     StringList m_dataSectionNames;
     ByteBuffer* m_stackMapsSection;
     LLVMModuleRef m_module;
+    LLVMValueRef m_function;
     LLVMContextRef m_context;
+    void* m_entryPoint;
     CompilerState(const char* moduleName);
     ~CompilerState();
 };

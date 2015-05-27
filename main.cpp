@@ -49,13 +49,11 @@ static void mmDestroy(void*)
 {
 }
 
-int main()
+static void compile(State& state)
 {
-    initLLVM();
     LLVMMCJITCompilerOptions options;
     llvmAPI->InitializeMCJITCompilerOptions(&options, sizeof(options));
     options.OptLevel = 2;
-    State state("test");
     LLVMExecutionEngineRef engine;
     char* error = 0;
 
@@ -94,4 +92,36 @@ int main()
     llvmAPI->FinalizeFunctionPassManager(functionPasses);
 
     llvmAPI->RunPassManager(modulePasses, module);
+    state.m_entryPoint = reinterpret_cast<void*>(llvmAPI->GetPointerToGlobal(engine, state.m_function));
+
+    if (functionPasses)
+        llvmAPI->DisposePassManager(functionPasses);
+    llvmAPI->DisposePassManager(modulePasses);
+    llvmAPI->DisposeExecutionEngine(engine);
+}
+
+int main()
+{
+    initLLVM();
+    State state("test");
+    LLVMTypeRef int32Type = llvmAPI->Int32TypeInContext(state.m_context);
+    LLVMTypeRef structElements[] = { int32Type };
+    LLVMTypeRef argumentType = llvmAPI->PointerType(llvmAPI->StructTypeInContext(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0]), false), 0);
+    state.m_function = llvmAPI->AddFunction(
+        state.m_module, "test", llvmAPI->FunctionType(int32Type, &argumentType, 1, false));
+    LLVMValueRef arg0 = llvmAPI->GetParam(state.m_function, 0);
+    LLVMBasicBlockRef entry = llvmAPI->AppendBasicBlockInContext(state.m_context, state.m_function, "Prologue");
+    LLVMBuilderRef builder = llvmAPI->CreateBuilderInContext(state.m_context);
+    llvmAPI->PositionBuilderAtEnd(builder, entry);
+    LLVMValueRef one = llvmAPI->ConstInt(llvmAPI->Int32TypeInContext(state.m_context), 1, false);
+    LLVMValueRef gep = llvmAPI->BuildStructGEP(builder, arg0, 0, "");
+    LLVMValueRef loaded = llvmAPI->BuildLoad(builder, gep, "");
+    LLVMValueRef add = llvmAPI->BuildAdd(builder, loaded, one, "");
+    llvmAPI->BuildRet(builder, add);
+    llvmAPI->DisposeBuilder(builder);
+
+    compile(state);
+    llvmAPI->DumpModule(state.m_module);
+    assert(state.m_entryPoint == state.m_codeSectionList.front().data());
+    return 0;
 }
