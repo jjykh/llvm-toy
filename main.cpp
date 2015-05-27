@@ -111,6 +111,7 @@ int main()
     LType argumentType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
     state.m_function = addFunction(
         state.m_module, "test", functionType(int32Type_, argumentType));
+    IntrinsicRepository repo(state.m_context, state.m_module);
     LValue arg0 = getParam(state.m_function, 0);
     LBasicBlock entry = appendBasicBlock(state.m_context, state.m_function, "Prologue");
     LBuilder builder = llvmAPI->CreateBuilderInContext(state.m_context);
@@ -119,6 +120,7 @@ int main()
     LValue gep = buildStructGEP(builder, arg0, 0);
     LValue loaded = buildLoad(builder, gep);
     LValue add = buildAdd(builder, loaded, one);
+    buildCall(builder, repo.patchpointVoidIntrinsic(), constInt(int64Type(state.m_context), 0), constInt(int32Type_, 8), constNull(repo.ref8), constInt(int32Type_, 1), add);
     buildRet(builder, add);
     llvmAPI->DisposeBuilder(builder);
 

@@ -47,7 +47,6 @@ private:
     FOR_EACH_FTL_INTRINSIC(INTRINSIC_FIELD_DECLARATION)
 #undef INTRINSIC_FIELD_DECLARATION
     LContext m_context;
-    LModule m_module;
 };
 }
 #endif /* INTRINSICREPOSITORY_H */
