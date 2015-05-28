@@ -11,6 +11,7 @@
             'IntrinsicRepository.cpp',
             'CommonValues.cpp',
             'Output.cpp',
+            'Compile.cpp',
         ],
         'llvmlog_level': 0,
     },
