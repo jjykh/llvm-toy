@@ -276,7 +276,9 @@ static inline LValue buildSwitch(LBuilder builder, LValue value, const VectorTyp
     return result;
 }
 static inline LValue buildRet(LBuilder builder, LValue value) { return llvmAPI->BuildRet(builder, value); }
+static inline LValue buildRetVoid(LBuilder builder) { return llvmAPI->BuildRetVoid(builder); }
 static inline LValue buildUnreachable(LBuilder builder) { return llvmAPI->BuildUnreachable(builder); }
+static inline void   setTailCall(LValue callInst, bool istail) { return llvmAPI->SetTailCall(callInst, istail); }
 
 static inline void dumpModule(LModule module) { llvmAPI->DumpModule(module); }
 static inline void verifyModule(LModule module)

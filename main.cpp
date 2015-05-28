@@ -14,14 +14,14 @@ static uint8_t* mmAllocateCodeSection(
 {
     State& state = *static_cast<State*>(opaqueState);
 
-    jit::ByteBuffer bb(size);
+    state.m_codeSectionList.push_back(jit::ByteBuffer());
+    state.m_codeSectionNames.push_back(sectionName);
+
+    jit::ByteBuffer& bb(state.m_codeSectionList.back());
     bb.resize(size);
     assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
 
-    state.m_codeSectionList.push_back(std::move(bb));
-    state.m_codeSectionNames.push_back(sectionName);
-
-    return const_cast<uint8_t*>(state.m_codeSectionList.back().data());
+    return const_cast<uint8_t*>(bb.data());
 }
 
 static uint8_t* mmAllocateDataSection(
@@ -29,16 +29,15 @@ static uint8_t* mmAllocateDataSection(
     const char* sectionName, LLVMBool)
 {
     State& state = *static_cast<State*>(opaqueState);
-    jit::ByteBuffer bb(size);
+
+    state.m_dataSectionList.push_back(jit::ByteBuffer());
+    state.m_dataSectionNames.push_back(sectionName);
+
+    jit::ByteBuffer& bb(state.m_dataSectionList.back());
     bb.resize(size);
     assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
-    state.m_codeSectionList.push_back(std::move(bb));
-    state.m_codeSectionNames.push_back(sectionName);
-    jit::ByteBuffer& bb2 = state.m_codeSectionList.back();
 
-    if (!strcmp(sectionName, SECTION_NAME("llvm_stackmaps")))
-        state.m_stackMapsSection = &bb2;
-    return const_cast<uint8_t*>(bb2.data());
+    return const_cast<uint8_t*>(bb.data());
 }
 
 static LLVMBool mmApplyPermissions(void*, char**)
@@ -109,9 +108,9 @@ int main()
     LType int32Type_ = int32Type(state.m_context);
     LType structElements[] = { int32Type_ };
     LType argumentType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
-    state.m_function = addFunction(
-        state.m_module, "test", functionType(int32Type_, argumentType));
     IntrinsicRepository repo(state.m_context, state.m_module);
+    state.m_function = addFunction(
+        state.m_module, "test", functionType(repo.int64, argumentType));
     LValue arg0 = getParam(state.m_function, 0);
     LBasicBlock entry = appendBasicBlock(state.m_context, state.m_function, "Prologue");
     LBuilder builder = llvmAPI->CreateBuilderInContext(state.m_context);
@@ -120,8 +119,12 @@ int main()
     LValue gep = buildStructGEP(builder, arg0, 0);
     LValue loaded = buildLoad(builder, gep);
     LValue add = buildAdd(builder, loaded, one);
-    buildCall(builder, repo.patchpointVoidIntrinsic(), constInt(int64Type(state.m_context), 0), constInt(int32Type_, 8), constNull(repo.ref8), constInt(int32Type_, 1), add);
-    buildRet(builder, add);
+    LBasicBlock patch = appendBasicBlock(state.m_context, state.m_function, "Patch");
+    buildBr(builder, patch);
+    llvmAPI->PositionBuilderAtEnd(builder, patch);
+    LValue call = buildCall(builder, repo.patchpointInt64Intrinsic(), constInt(int64Type(state.m_context), 0), constInt(int32Type_, 20), constInt(int64Type(state.m_context), 0x12345678), constInt(int32Type_, 1), add);
+    buildRet(builder, call);
+
     llvmAPI->DisposeBuilder(builder);
 
     dumpModule(state.m_module);
