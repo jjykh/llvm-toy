@@ -10,6 +10,7 @@
             'CompilerState.cpp',
             'IntrinsicRepository.cpp',
             'CommonValues.cpp',
+            'Output.cpp',
         ],
         'llvmlog_level': 0,
     },

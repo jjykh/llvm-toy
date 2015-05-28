@@ -8,6 +8,8 @@ namespace jit {
 class CommonValues {
 public:
     CommonValues(LContext context);
+    CommonValues(const CommonValues&) = delete;
+    const CommonValues& operator=(const CommonValues&) = delete;
 
     void initialize(LModule module)
     {

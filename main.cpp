@@ -3,7 +3,7 @@
 #include "LLVMAPI.h"
 #include "InitializeLLVM.h"
 #include "CompilerState.h"
-#include "IntrinsicRepository.h"
+#include "Output.h"
 #include "log.h"
 typedef jit::CompilerState State;
 #define SECTION_NAME_PREFIX "."
@@ -103,29 +103,21 @@ static void compile(State& state)
 int main()
 {
     initLLVM();
-    State state("test");
     using namespace jit;
-    LType int32Type_ = int32Type(state.m_context);
-    LType structElements[] = { int32Type_ };
-    LType argumentType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
-    IntrinsicRepository repo(state.m_context, state.m_module);
-    state.m_function = addFunction(
-        state.m_module, "test", functionType(repo.int64, argumentType));
-    LValue arg0 = getParam(state.m_function, 0);
-    LBasicBlock entry = appendBasicBlock(state.m_context, state.m_function, "Prologue");
-    LBuilder builder = llvmAPI->CreateBuilderInContext(state.m_context);
-    llvmAPI->PositionBuilderAtEnd(builder, entry);
-    LValue one = constInt(int32Type_, 1);
-    LValue gep = buildStructGEP(builder, arg0, 0);
-    LValue loaded = buildLoad(builder, gep);
-    LValue add = buildAdd(builder, loaded, one);
-    LBasicBlock patch = appendBasicBlock(state.m_context, state.m_function, "Patch");
-    buildBr(builder, patch);
-    llvmAPI->PositionBuilderAtEnd(builder, patch);
-    LValue call = buildCall(builder, repo.patchpointInt64Intrinsic(), constInt(int64Type(state.m_context), 0), constInt(int32Type_, 20), constInt(int64Type(state.m_context), 0x12345678), constInt(int32Type_, 1), add);
-    buildRet(builder, call);
-
-    llvmAPI->DisposeBuilder(builder);
+    State state("test");
+    Output output(state);
+    LValue arg0 = output.getParam(0);
+    LBasicBlock entry = output.appendBasicBlock("Prologue");
+    output.positionToBBEnd(entry);
+    LValue one = output.constInt32(1);
+    LValue gep = output.buildStructGEP(arg0, 0);
+    LValue loaded = output.buildLoad(gep);
+    LValue add = output.buildAdd(loaded, one);
+    LBasicBlock patch = output.appendBasicBlock("Patch");
+    output.buildBr(patch);
+    output.positionToBBEnd(patch);
+    LValue call = output.buildCall(output.repo().patchpointInt64Intrinsic(), output.constInt64(0), output.constInt32(13), output.constInt64(0x12345678), output.constInt32(2), arg0, add);
+    output.buildRet(call);
 
     dumpModule(state.m_module);
     compile(state);

@@ -21,6 +21,8 @@ struct CompilerState {
     void* m_entryPoint;
     CompilerState(const char* moduleName);
     ~CompilerState();
+    CompilerState(const CompilerState&) = delete;
+    const CompilerState& operator=(const CompilerState&) = delete;
 };
 }
 
