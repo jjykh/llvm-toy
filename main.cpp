@@ -10,11 +10,9 @@ typedef jit::CompilerState State;
 #define SECTION_NAME_PREFIX "."
 #define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
 
-int main()
+static void buildIR(State& state)
 {
-    initLLVM();
     using namespace jit;
-    State state("test");
     Output output(state);
     LValue arg0 = output.getParam(0);
     LBasicBlock entry = output.appendBasicBlock("Prologue");
@@ -28,10 +26,16 @@ int main()
     output.positionToBBEnd(patch);
     LValue call = output.buildCall(output.repo().patchpointInt64Intrinsic(), output.constInt64(0), output.constInt32(13), output.constInt64(0x12345678), output.constInt32(2), arg0, add);
     output.buildRet(call);
+}
 
+int main()
+{
+    initLLVM();
+    using namespace jit;
+    State state("test");
+    buildIR(state);
     dumpModule(state.m_module);
     compile(state);
-    dumpModule(state.m_module);
     assert(state.m_entryPoint == state.m_codeSectionList.front().data());
     return 0;
 }

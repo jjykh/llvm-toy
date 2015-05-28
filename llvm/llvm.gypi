@@ -12,6 +12,7 @@
             'CommonValues.cpp',
             'Output.cpp',
             'Compile.cpp',
+            'StackMaps.cpp',
         ],
         'llvmlog_level': 0,
     },
