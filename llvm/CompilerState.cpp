@@ -4,7 +4,11 @@
 namespace jit {
 
 CompilerState::CompilerState(const char* moduleName)
-    : m_entryPoint(nullptr)
+    : m_stackMapsSection(nullptr)
+    , m_module(nullptr)
+    , m_function(nullptr)
+    , m_context(nullptr)
+    , m_entryPoint(nullptr)
 {
     m_context = llvmAPI->ContextCreate();
     m_module = llvmAPI->ModuleCreateWithNameInContext("test", m_context);

@@ -8,12 +8,12 @@ public:
     Output(CompilerState& state);
     ~Output();
     LBasicBlock appendBasicBlock(const char* name = nullptr);
-    LValue getParam(unsigned index);
     void positionToBBEnd(LBasicBlock);
     LValue constInt32(int);
     LValue constInt64(long long);
     LValue buildStructGEP(LValue structVal, unsigned field);
     LValue buildLoad(LValue toLoad);
+    LValue buildStore(LValue val, LValue pointer);
     LValue buildAdd(LValue lhs, LValue rhs);
     LValue buildBr(LBasicBlock bb);
     LValue buildRet(LValue ret);
@@ -44,12 +44,25 @@ public:
         return buildCall(function, argsArray, sizeof(argsArray) / sizeof(LValue));
     }
 
-    inline IntrinsicRepository& repo() { return m_repo; }
+    LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
 
+    void buildChainPatch(void* where);
+    void buildXIndirectPatch(LValue where);
+
+    inline IntrinsicRepository& repo() { return m_repo; }
+    inline LType argType() const { return m_argType; }
+    inline LBasicBlock prologue() const { return m_prologue; }
+    inline LValue arg() const { return m_arg; }
 private:
+    LValue buildGetArgPatch();
+
     CompilerState& m_state;
     IntrinsicRepository m_repo;
     LBuilder m_builder;
+    LType m_argType;
+    LBasicBlock m_prologue;
+    LValue m_arg;
+    uint32_t m_stackMapsId;
 };
 }
 #endif /* OUTPUT_H */

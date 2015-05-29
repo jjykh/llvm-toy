@@ -7,6 +7,24 @@
 #include <bitset>
 namespace jit {
 
+enum AMD64 {
+    RAX = 0,
+    RCX = 1,
+    RDX = 2,
+    RSP = 4,
+    RBP = 5,
+    R11 = 11,
+    RSI = 6,
+    RDI = 7,
+    R8 = 8,
+    R9 = 9,
+    R12 = 12,
+    R13 = 13,
+    R14 = 14,
+    R15 = 15,
+    RBX = 3,
+};
+
 class DataView {
 public:
     DataView(const uint8_t* data)
@@ -26,7 +44,42 @@ private:
     const uint8_t* m_data;
 };
 
-typedef std::bitset<32> RegisterSet;
+// lower 32 for gerneral purpose register
+// upper 32 for fp register
+typedef std::bitset<64> RegisterSet;
+
+class Reg {
+public:
+    Reg(void)
+        : m_val(invalid())
+    {
+    }
+    Reg(int val)
+        : m_val(val)
+    {
+    }
+    Reg(AMD64 val)
+        : m_val(val)
+    {
+    }
+    int val() const { return m_val; }
+    bool isFloat() const { return m_isFloat; }
+    static inline int invalid() { return -1; }
+private:
+    int m_val;
+
+protected:
+    bool m_isFloat = false;
+};
+
+class FPRReg : public Reg {
+public:
+    FPRReg(int val)
+        : Reg(val)
+    {
+        m_isFloat = true;
+    }
+};
 
 class DWARFRegister {
 public:
@@ -41,7 +94,7 @@ public:
     }
 
     int16_t dwarfRegNum() const { return m_dwarfRegNum; }
-    uint16_t reg() const { return m_dwarfRegNum; }
+    Reg reg() const;
 
 private:
     int16_t m_dwarfRegNum;

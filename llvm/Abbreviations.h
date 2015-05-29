@@ -278,7 +278,7 @@ static inline LValue buildSwitch(LBuilder builder, LValue value, const VectorTyp
 static inline LValue buildRet(LBuilder builder, LValue value) { return llvmAPI->BuildRet(builder, value); }
 static inline LValue buildRetVoid(LBuilder builder) { return llvmAPI->BuildRetVoid(builder); }
 static inline LValue buildUnreachable(LBuilder builder) { return llvmAPI->BuildUnreachable(builder); }
-static inline void   setTailCall(LValue callInst, bool istail) { return llvmAPI->SetTailCall(callInst, istail); }
+static inline void setTailCall(LValue callInst, bool istail) { return llvmAPI->SetTailCall(callInst, istail); }
 
 static inline void dumpModule(LModule module) { llvmAPI->DumpModule(module); }
 static inline void verifyModule(LModule module)
@@ -287,5 +287,13 @@ static inline void verifyModule(LModule module)
     llvmAPI->VerifyModule(module, LLVMAbortProcessAction, &error);
     llvmAPI->DisposeMessage(error);
 }
+static inline LValue constInlineAsm(LType Ty, const char* AsmString, const char* Constraints, bool HasSideEffects, bool IsAlignStack)
+{
+    llvmAPI->ConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
+}
+inline uint32_t argPatchId() { return 0; }
+inline uint32_t chainPatchId() { return 1; }
+inline uint32_t xIndirectPatchId() { return 2; }
+inline uint32_t otherPatchStartId() { return 3; }
 }
 #endif /* ABBREVIATIONS_H */

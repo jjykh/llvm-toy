@@ -1,8 +1,11 @@
 #include <assert.h>
+#include <string.h>
 #include "log.h"
 #include "LLVMAPI.h"
 #include "CompilerState.h"
 #include "Compile.h"
+#define SECTION_NAME_PREFIX "."
+#define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
 
 namespace jit {
 typedef CompilerState State;
@@ -34,6 +37,9 @@ static uint8_t* mmAllocateDataSection(
     jit::ByteBuffer& bb(state.m_dataSectionList.back());
     bb.resize(size);
     assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
+    if (!strcmp(sectionName, SECTION_NAME("llvm_stackmaps"))) {
+        state.m_stackMapsSection = &bb;
+    }
 
     return const_cast<uint8_t*>(bb.data());
 }

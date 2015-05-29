@@ -1,37 +1,39 @@
 #include "StackMaps.h"
 namespace jit {
 
-// Reg DWARFRegister::reg() const
-// {
-// #if CPU(X86_64)
-//     if (m_dwarfRegNum >= 0 && m_dwarfRegNum < 16) {
-//         switch (dwarfRegNum()) {
-//         case 0:
-//             return X86Registers::eax;
-//         case 1:
-//             return X86Registers::edx;
-//         case 2:
-//             return X86Registers::ecx;
-//         case 3:
-//             return X86Registers::ebx;
-//         case 4:
-//             return X86Registers::esi;
-//         case 5:
-//             return X86Registers::edi;
-//         case 6:
-//             return X86Registers::ebp;
-//         case 7:
-//             return X86Registers::esp;
-//         default:
-//             RELEASE_ASSERT(m_dwarfRegNum < 16);
-//             // Registers r8..r15 are numbered sensibly.
-//             return static_cast<GPRReg>(m_dwarfRegNum);
-//         }
-//     }
-//     if (m_dwarfRegNum >= 17 && m_dwarfRegNum <= 32)
-//         return static_cast<FPRReg>(m_dwarfRegNum - 17);
-//     return Reg();
-// }
+Reg DWARFRegister::reg() const
+{
+#if __x86_64__
+    if (m_dwarfRegNum >= 0 && m_dwarfRegNum < 16) {
+        switch (dwarfRegNum()) {
+        case 0:
+            return AMD64::RAX;
+        case 1:
+            return AMD64::RDX;
+        case 2:
+            return AMD64::RCX;
+        case 3:
+            return AMD64::RBX;
+        case 4:
+            return AMD64::RSI;
+        case 5:
+            return AMD64::RDI;
+        case 6:
+            return AMD64::RBP;
+        case 7:
+            return AMD64::RSP;
+        default:
+            // Registers r8..r15 are numbered sensibly.
+            return static_cast<Reg>(m_dwarfRegNum);
+        }
+    }
+    if (m_dwarfRegNum >= 17 && m_dwarfRegNum <= 32)
+        return static_cast<FPRReg>(m_dwarfRegNum - 17);
+    return Reg();
+#else
+#error unsupported arch.
+#endif
+}
 
 template <typename T>
 T readObject(StackMaps::ParseContext& context)
@@ -112,8 +114,8 @@ RegisterSet StackMaps::Record::locationSet() const
 {
     RegisterSet result;
     for (unsigned i = locations.size(); i--;) {
-        uint16_t reg = locations[i].dwarfReg.reg();
-        result.set(reg);
+        Reg reg = locations[i].dwarfReg.reg();
+        result.set(reg.val() << (reg.isFloat() ? 32 : 0));
     }
     return result;
 }
@@ -123,11 +125,11 @@ RegisterSet StackMaps::Record::liveOutsSet() const
     RegisterSet result;
     for (unsigned i = liveOuts.size(); i--;) {
         LiveOut liveOut = liveOuts[i];
-        uint16_t reg = liveOut.dwarfReg.reg();
+        Reg reg = liveOut.dwarfReg.reg();
         // FIXME: Either assert that size is not greater than sizeof(pointer), or actually
         // save the high bits of registers.
         // https://bugs.webkit.org/show_bug.cgi?id=130885
-        result.set(reg);
+        result.set(reg.val() << (reg.isFloat() ? 32 : 0));
     }
     return result;
 }
