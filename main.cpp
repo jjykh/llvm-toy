@@ -33,7 +33,6 @@ static void buildIR(State& state)
     output.buildBr(patch);
     output.positionToBBEnd(patch);
     output.buildChainPatch(reinterpret_cast<void*>(myexit));
-    output.buildRetVoid();
 }
 
 static void mydispChain(void);

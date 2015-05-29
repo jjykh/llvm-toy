@@ -41,21 +41,6 @@ static uint8_t* doAMode_R(uint8_t* p, unsigned greg, unsigned ereg)
     return doAMode_R__wrk(p, iregEnc3210(greg), iregEnc3210(ereg));
 }
 
-static void linkArg(CompilerState& state, const StackMaps::RecordMap& rm, uint8_t* code)
-{
-    auto recordPairs = rm.find(argPatchId());
-    assert(recordPairs != rm.end());
-    auto records = recordPairs->second;
-    for (auto& record : records) {
-        auto p = code + record.instructionOffset;
-        *p++ = rexAMode_R(static_cast<unsigned>(AMD64::RBX),
-            static_cast<unsigned>(AMD64::RAX));
-        *p++ = 0x89;
-        p = doAMode_R(p, static_cast<unsigned>(AMD64::RBX),
-            static_cast<unsigned>(AMD64::RAX));
-    }
-}
-
 static uint8_t* emit64(uint8_t* p, uint64_t w64)
 {
     *reinterpret_cast<uint64_t*>(p) = w64;
@@ -88,7 +73,6 @@ void link(CompilerState& state, void* dispChain, void* dispXind)
     auto rm = sm.computeRecordMap();
     assert(state.m_codeSectionList.size() == 1);
     uint8_t* code = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(state.m_codeSectionList.front().data()));
-    linkArg(state, rm, code);
     linkChain(state, rm, code, dispChain);
 }
 }

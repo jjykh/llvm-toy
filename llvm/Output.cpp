@@ -11,13 +11,12 @@ Output::Output(CompilerState& state)
     LType structElements[] = { repo().int32 };
     m_argType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
     state.m_function = addFunction(
-        state.m_module, "body", functionType(repo().int64, repo().voidType));
-    llvmAPI->AddFunctionAttr(state.m_function, LLVMNakedAttribute);
+        state.m_module, "main", functionType(repo().int64, m_argType));
     m_builder = llvmAPI->CreateBuilderInContext(state.m_context);
 
     m_prologue = appendBasicBlock("Prologue");
     positionToBBEnd(m_prologue);
-    m_arg = buildGetArgPatch();
+    buildGetArg();
 }
 Output::~Output()
 {
@@ -84,19 +83,20 @@ LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy)
     llvmAPI->BuildCast(m_builder, Op, Val, DestTy, "");
 }
 
-LValue Output::buildGetArgPatch()
+void Output::buildGetArg()
 {
-    LValue callRet = buildCall(repo().patchpointInt64Intrinsic(), constInt64(argPatchId()), constInt32(3), constNull(repo().ref8), constInt32(0));
-    return buildCast(LLVMIntToPtr, callRet, m_argType);
+    m_arg = llvmAPI->GetParam(m_state.m_function, 0);
 }
 
 void Output::buildChainPatch(void* where)
 {
     buildCall(repo().patchpointInt64Intrinsic(), constInt64(chainPatchId()), constInt32(20), constInt64(0), constInt32(2), constInt(repo().intPtr, reinterpret_cast<uintptr_t>(where)), m_arg);
+    buildUnreachable(m_builder);
 }
 
 void Output::buildXIndirectPatch(LValue where)
 {
     buildCall(repo().patchpointInt64Intrinsic(), constInt64(xIndirectPatchId()), constInt32(20), constNull(repo().ref8), constInt32(2), where, m_arg);
+    buildUnreachable(m_builder);
 }
 }

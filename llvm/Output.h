@@ -54,7 +54,7 @@ public:
     inline LBasicBlock prologue() const { return m_prologue; }
     inline LValue arg() const { return m_arg; }
 private:
-    LValue buildGetArgPatch();
+    void buildGetArg();
 
     CompilerState& m_state;
     IntrinsicRepository m_repo;

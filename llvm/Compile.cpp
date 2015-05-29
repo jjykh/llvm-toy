@@ -60,7 +60,6 @@ void compile(State& state)
     options.OptLevel = 2;
     LLVMExecutionEngineRef engine;
     char* error = 0;
-
     options.MCJMM = llvmAPI->CreateSimpleMCJITMemoryManager(
         &state, mmAllocateCodeSection, mmAllocateDataSection, mmApplyPermissions, mmDestroy);
     if (llvmAPI->CreateMCJITCompilerForModule(&engine, state.m_module, &options, sizeof(options), &error)) {
