@@ -14,10 +14,11 @@ public:
     {
     }
     template <typename T>
-    T read(off_t off, bool littenEndian)
+    T read(unsigned& off, bool littenEndian)
     {
         assert(littenEndian == true);
         T t = *reinterpret_cast<const T*>(m_data + off);
+        off += sizeof(T);
         return t;
     }
 

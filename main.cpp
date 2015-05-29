@@ -5,10 +5,9 @@
 #include "CompilerState.h"
 #include "Output.h"
 #include "Compile.h"
+#include "Link.h"
 #include "log.h"
 typedef jit::CompilerState State;
-#define SECTION_NAME_PREFIX "."
-#define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
 
 static void buildIR(State& state)
 {
@@ -37,5 +36,6 @@ int main()
     dumpModule(state.m_module);
     compile(state);
     assert(state.m_entryPoint == state.m_codeSectionList.front().data());
+    link(state);
     return 0;
 }

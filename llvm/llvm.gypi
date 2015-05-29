@@ -13,6 +13,7 @@
             'Output.cpp',
             'Compile.cpp',
             'StackMaps.cpp',
+            'Link.cpp',
         ],
         'llvmlog_level': 0,
     },
