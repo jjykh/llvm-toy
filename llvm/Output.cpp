@@ -90,13 +90,15 @@ void Output::buildGetArg()
 
 void Output::buildChainPatch(void* where)
 {
-    buildCall(repo().patchpointInt64Intrinsic(), constInt64(chainPatchId()), constInt32(20), constInt64(0), constInt32(2), constInt(repo().intPtr, reinterpret_cast<uintptr_t>(where)), m_arg);
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt64(chainPatchId()), constInt32(20), constInt64(0), constInt32(2), constInt(repo().intPtr, reinterpret_cast<uintptr_t>(where)), m_arg);
+    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
 }
 
 void Output::buildXIndirectPatch(LValue where)
 {
-    buildCall(repo().patchpointInt64Intrinsic(), constInt64(xIndirectPatchId()), constInt32(20), constNull(repo().ref8), constInt32(2), where, m_arg);
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt64(xIndirectPatchId()), constInt32(20), constNull(repo().ref8), constInt32(2), where, m_arg);
+    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
 }
 }
