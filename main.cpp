@@ -136,7 +136,6 @@ int main()
     buildIR(state);
     dumpModule(state.m_module);
     compile(state);
-    assert(state.m_entryPoint == state.m_codeSectionList.front().data());
     link(state, reinterpret_cast<void*>(mydispChain), reinterpret_cast<void*>(mydispChain));
     return 0;
 }

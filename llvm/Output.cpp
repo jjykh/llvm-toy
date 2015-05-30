@@ -92,8 +92,8 @@ void Output::buildDirectPatch(uintptr_t where)
 {
     LValue constAddr = constInt64(where);
     // FIXME: need rip index in platform desc.
-    LValue constIndex = constInt32(24);
-    buildStore(constAddr, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, &constIndex, 1, ""));
+    LValue constIndex[] = { constInt32(0), constInt32(24) };
+    buildStore(constAddr, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
     LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_directSize), constNull(repo().ref8), constInt32(0));
     llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
@@ -105,8 +105,8 @@ void Output::buildDirectPatch(uintptr_t where)
 void Output::buildIndirectPatch(LValue where)
 {
     // FIXME: need rip index in platform desc.
-    LValue constIndex = constInt32(24);
-    buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, &constIndex, 1, ""));
+    LValue constIndex[] = { constInt32(0), constInt32(24) };
+    buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
     LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_indirectSize), constNull(repo().ref8), constInt32(0));
     llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
