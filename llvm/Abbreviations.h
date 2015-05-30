@@ -291,9 +291,5 @@ static inline LValue constInlineAsm(LType Ty, const char* AsmString, const char*
 {
     llvmAPI->ConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
 }
-
-inline uint32_t chainPatchId() { return 1; }
-inline uint32_t xIndirectPatchId() { return 2; }
-inline uint32_t otherPatchStartId() { return 3; }
 }
 #endif /* ABBREVIATIONS_H */

@@ -10,6 +10,11 @@
 namespace jit {
 typedef CompilerState State;
 
+static inline size_t round_up(size_t s, unsigned alignment)
+{
+    return (s + alignment - 1) & ~(alignment - 1);
+}
+
 static uint8_t* mmAllocateCodeSection(
     void* opaqueState, uintptr_t size, unsigned alignment, unsigned, const char* sectionName)
 {
@@ -19,10 +24,12 @@ static uint8_t* mmAllocateCodeSection(
     state.m_codeSectionNames.push_back(sectionName);
 
     jit::ByteBuffer& bb(state.m_codeSectionList.back());
+    size_t additionSize = round_up(state.m_platformDesc.m_prologueSize, alignment);
+    size += additionSize;
     bb.resize(size);
     assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
 
-    return const_cast<uint8_t*>(bb.data());
+    return const_cast<uint8_t*>(bb.data() + additionSize);
 }
 
 static uint8_t* mmAllocateDataSection(
