@@ -35,16 +35,18 @@ static void buildIR(State& state)
     output.buildChainPatch(reinterpret_cast<void*>(myexit));
     output.buildRetVoid();
 }
-
-static void mydispChain(void);
-
-void mydispChain(void)
-{
-    asm volatile("\n"
-                 "movq %rdi, %r11\n"
-                 "movq %rsi, %rbp\n"
-                 "jmp *%r11\n");
+extern "C" {
+void mydispChain(void);
 }
+
+asm volatile("\n"
+".section	.text,\"axG\",@progbits,comdat\n"
+".type	mydispChain, @function\n"
+"mydispChain:\n"
+"movq %rdi, %r11\n"
+"movq %rsi, %rbp\n"
+"jmp *%r11\n");
+
 
 int main()
 {
