@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "CompilerState.h"
 #include "Output.h"
 
@@ -6,18 +7,16 @@ Output::Output(CompilerState& state)
     : m_state(state)
     , m_repo(state.m_context, state.m_module)
     , m_builder(nullptr)
-    , m_stackMapsId(otherPatchStartId())
+    , m_stackMapsId(1)
 {
-    LType structElements[] = { repo().int32 };
-    m_argType = pointerType(structType(state.m_context, structElements, sizeof(structElements) / sizeof(structElements[0])));
+    m_argType = pointerType(arrayType(repo().int64, 40));
     state.m_function = addFunction(
-        state.m_module, "body", functionType(repo().int64, repo().voidType));
-    llvmAPI->AddFunctionAttr(state.m_function, LLVMNakedAttribute);
+        state.m_module, "main", functionType(repo().int64, m_argType));
     m_builder = llvmAPI->CreateBuilderInContext(state.m_context);
 
     m_prologue = appendBasicBlock("Prologue");
     positionToBBEnd(m_prologue);
-    m_arg = buildGetArgPatch();
+    buildGetArg();
 }
 Output::~Output()
 {
@@ -84,19 +83,35 @@ LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy)
     llvmAPI->BuildCast(m_builder, Op, Val, DestTy, "");
 }
 
-LValue Output::buildGetArgPatch()
+void Output::buildGetArg()
 {
-    LValue callRet = buildCall(repo().patchpointInt64Intrinsic(), constInt64(argPatchId()), constInt32(3), constNull(repo().ref8), constInt32(0));
-    return buildCast(LLVMIntToPtr, callRet, m_argType);
+    m_arg = llvmAPI->GetParam(m_state.m_function, 0);
 }
 
-void Output::buildChainPatch(void* where)
+void Output::buildDirectPatch(uintptr_t where)
 {
-    buildCall(repo().patchpointInt64Intrinsic(), constInt64(chainPatchId()), constInt32(20), constInt64(0), constInt32(2), constInt(repo().intPtr, reinterpret_cast<uintptr_t>(where)), m_arg);
+    LValue constAddr = constInt64(where);
+    // FIXME: need rip index in platform desc.
+    LValue constIndex[] = { constInt32(0), constInt32(24) };
+    buildStore(constAddr, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_directSize), constNull(repo().ref8), constInt32(0));
+    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
+    buildUnreachable(m_builder);
+    // record the stack map info
+    PatchDesc desc = { PatchType::Direct };
+    m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
 }
 
-void Output::buildXIndirectPatch(LValue where)
+void Output::buildIndirectPatch(LValue where)
 {
-    buildCall(repo().patchpointInt64Intrinsic(), constInt64(xIndirectPatchId()), constInt32(20), constNull(repo().ref8), constInt32(2), where, m_arg);
+    // FIXME: need rip index in platform desc.
+    LValue constIndex[] = { constInt32(0), constInt32(24) };
+    buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_indirectSize), constNull(repo().ref8), constInt32(0));
+    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
+    buildUnreachable(m_builder);
+    // record the stack map info
+    PatchDesc desc = { PatchType::Indirect };
+    m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
 }
 }

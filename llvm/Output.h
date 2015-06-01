@@ -46,15 +46,16 @@ public:
 
     LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
 
-    void buildChainPatch(void* where);
-    void buildXIndirectPatch(LValue where);
+    void buildDirectPatch(uintptr_t where);
+    void buildIndirectPatch(LValue where);
 
     inline IntrinsicRepository& repo() { return m_repo; }
     inline LType argType() const { return m_argType; }
     inline LBasicBlock prologue() const { return m_prologue; }
     inline LValue arg() const { return m_arg; }
+
 private:
-    LValue buildGetArgPatch();
+    void buildGetArg();
 
     CompilerState& m_state;
     IntrinsicRepository m_repo;
