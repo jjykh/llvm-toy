@@ -90,27 +90,30 @@ void Output::buildGetArg()
 
 void Output::buildDirectPatch(uintptr_t where)
 {
-    LValue constAddr = constInt64(where);
-    LValue constIndex[] = { constInt32(0), constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t)) };
-    buildStore(constAddr, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_directSize), constNull(repo().ref8), constInt32(0));
-    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
-    buildUnreachable(m_builder);
-    // record the stack map info
     PatchDesc desc = { PatchType::Direct };
-    m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
+    buildPatchCommon(constInt64(where), desc, m_state.m_platformDesc.m_directSize);
 }
 
 void Output::buildIndirectPatch(LValue where)
 {
-    // FIXME: need rip index in platform desc.
+    PatchDesc desc = { PatchType::Indirect };
+    buildPatchCommon(where, desc, m_state.m_platformDesc.m_indirectSize);
+}
+
+void Output::buildAssistPatch(LValue where)
+{
+    PatchDesc desc = { PatchType::Assist };
+    buildPatchCommon(where, desc, m_state.m_platformDesc.m_assistSize);
+}
+
+void Output::buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchSize)
+{
     LValue constIndex[] = { constInt32(0), constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t)) };
     buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(m_state.m_platformDesc.m_indirectSize), constNull(repo().ref8), constInt32(0));
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(patchSize), constNull(repo().ref8), constInt32(0));
     llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
     // record the stack map info
-    PatchDesc desc = { PatchType::Indirect };
     m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
 }
 }

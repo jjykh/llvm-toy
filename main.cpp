@@ -35,17 +35,21 @@ static void buildIR(State& state)
     output.positionToBBEnd(patch);
     output.buildDirectPatch(reinterpret_cast<uintptr_t>(myexit));
 }
-extern "C" {
-void mydispChain(void);
+
+static void mydispIndirect(void)
+{
+    printf("%s.\n", __FUNCTION__);
 }
 
-asm volatile("\n"
-             ".section	.text,\"axG\",@progbits,comdat\n"
-             ".type	mydispChain, @function\n"
-             "mydispChain:\n"
-             "movq %rdi, %r11\n"
-             "movq %rsi, %rbp\n"
-             "jmp *%r11\n");
+static void mydispDirect(void)
+{
+    printf("%s.\n", __FUNCTION__);
+}
+
+static void mydispAssist(void)
+{
+    printf("%s.\n", __FUNCTION__);
+}
 
 inline static uint8_t rexAMode_R__wrk(unsigned gregEnc3210, unsigned eregEnc3210)
 {
@@ -115,13 +119,63 @@ static void patchDirect(void*, uint8_t* p)
     /* 10 bytes: movabsq $target, %r11 */
     *p++ = 0x49;
     *p++ = 0xBB;
-    p = emit64(p, reinterpret_cast<uintptr_t>(mydispChain));
+    p = emit64(p, reinterpret_cast<uintptr_t>(mydispDirect));
     /* movq %r11, RIP(%rbp) */
 
     /* 3 bytes: call*%r11 */
     *p++ = 0x41;
     *p++ = 0xFF;
     *p++ = 0xD3;
+}
+
+static void patchIndirect(void*, uint8_t* p)
+{
+    // epilogue
+
+    // 3 bytes
+    *p++ = rexAMode_R(jit::RBP,
+        jit::RDI);
+    *p++ = 0x89;
+    p = doAMode_R(p, jit::RBP,
+        jit::RSP);
+    // 1 bytes pop rbp
+    *p++ = 0x5d;
+
+    /* 10 bytes: movabsq $target, %r11 */
+    *p++ = 0x49;
+    *p++ = 0xBB;
+    p = emit64(p, reinterpret_cast<uintptr_t>(mydispIndirect));
+    /* movq %r11, RIP(%rbp) */
+
+    /* 3 bytes: jmp *%r11 */
+    *p++ = 0x41;
+    *p++ = 0xFF;
+    *p++ = 0xE3;
+}
+
+static void patchAssist(void*, uint8_t* p)
+{
+    // epilogue
+
+    // 3 bytes
+    *p++ = rexAMode_R(jit::RBP,
+        jit::RDI);
+    *p++ = 0x89;
+    p = doAMode_R(p, jit::RBP,
+        jit::RSP);
+    // 1 bytes pop rbp
+    *p++ = 0x5d;
+
+    /* 10 bytes: movabsq $target, %r11 */
+    *p++ = 0x49;
+    *p++ = 0xBB;
+    p = emit64(p, reinterpret_cast<uintptr_t>(mydispAssist));
+    /* movq %r11, RIP(%rbp) */
+
+    /* 3 bytes: jmp *%r11 */
+    *p++ = 0x41;
+    *p++ = 0xFF;
+    *p++ = 0xE3;
 }
 
 int main()
@@ -138,11 +192,12 @@ int main()
         nullptr, /* opaque */
         patchProloge,
         patchDirect,
+        patchAssist,
     };
     State state("test", desc);
     buildIR(state);
     dumpModule(state.m_module);
     compile(state);
-    link(state, reinterpret_cast<void*>(mydispChain), reinterpret_cast<void*>(mydispChain));
+    link(state);
     return 0;
 }

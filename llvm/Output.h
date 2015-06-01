@@ -48,6 +48,7 @@ public:
 
     void buildDirectPatch(uintptr_t where);
     void buildIndirectPatch(LValue where);
+    void buildAssistPatch(LValue where);
 
     inline IntrinsicRepository& repo() { return m_repo; }
     inline LType argType() const { return m_argType; }
@@ -56,6 +57,7 @@ public:
 
 private:
     void buildGetArg();
+    void buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchSize);
 
     CompilerState& m_state;
     IntrinsicRepository m_repo;

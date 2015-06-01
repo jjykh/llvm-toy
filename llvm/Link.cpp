@@ -6,7 +6,7 @@
 
 namespace jit {
 
-void link(CompilerState& state, void* dispChain, void* dispXind)
+void link(CompilerState& state)
 {
     StackMaps sm;
     DataView dv(state.m_stackMapsSection->data());

@@ -2,6 +2,6 @@
 #define LINK_H
 namespace jit {
 
-void link(CompilerState& state, void* dispChain, void* dispXind);
+void link(CompilerState& state);
 }
 #endif /* LINK_H */
