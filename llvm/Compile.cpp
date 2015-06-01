@@ -24,7 +24,7 @@ static uint8_t* mmAllocateCodeSection(
     state.m_codeSectionNames.push_back(sectionName);
 
     jit::ByteBuffer& bb(state.m_codeSectionList.back());
-    size_t additionSize = round_up(state.m_platformDesc.m_prologueSize, alignment);
+    size_t additionSize = state.m_platformDesc.m_prologueSize;
     size += additionSize;
     bb.resize(size);
     assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);

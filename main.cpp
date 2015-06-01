@@ -40,13 +40,12 @@ void mydispChain(void);
 }
 
 asm volatile("\n"
-".section	.text,\"axG\",@progbits,comdat\n"
-".type	mydispChain, @function\n"
-"mydispChain:\n"
-"movq %rdi, %r11\n"
-"movq %rsi, %rbp\n"
-"jmp *%r11\n");
-
+             ".section	.text,\"axG\",@progbits,comdat\n"
+             ".type	mydispChain, @function\n"
+             "mydispChain:\n"
+             "movq %rdi, %r11\n"
+             "movq %rsi, %rbp\n"
+             "jmp *%r11\n");
 
 inline static uint8_t rexAMode_R__wrk(unsigned gregEnc3210, unsigned eregEnc3210)
 {
@@ -92,6 +91,8 @@ static uint8_t* emit64(uint8_t* p, uint64_t w64)
 static void patchProloge(void*, uint8_t* start, uint8_t* end)
 {
     uint8_t* p = start;
+    *p++ = rexAMode_R(jit::RBP,
+        jit::RDI);
     *p++ = 0x89;
     p = doAMode_R(p, jit::RBP,
         jit::RDI);
@@ -102,7 +103,9 @@ static void patchDirect(void*, uint8_t* p)
 {
     // epilogue
 
-    // 2 bytes
+    // 3 bytes
+    *p++ = rexAMode_R(jit::RBP,
+        jit::RDI);
     *p++ = 0x89;
     p = doAMode_R(p, jit::RBP,
         jit::RSP);
@@ -126,10 +129,12 @@ int main()
     initLLVM();
     using namespace jit;
     PlatformDesc desc = {
-        2, /* prologue size */
-        16, /* direct size */
-        16, /* indirect size */
-        16, /* assist size */
+        40 * sizeof(intptr_t), /* context size */
+        192, /* offset of pc */
+        3, /* prologue size */
+        17, /* direct size */
+        17, /* indirect size */
+        17, /* assist size */
         nullptr, /* opaque */
         patchProloge,
         patchDirect,
