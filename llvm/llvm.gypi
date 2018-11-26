@@ -5,7 +5,6 @@
     'variables': {
         'sources': [
             'InitializeLLVM.cpp',
-            'LLVMAPI.cpp',
             'log.cpp',
             'CompilerState.cpp',
             'IntrinsicRepository.cpp',

@@ -2,7 +2,6 @@
 #define ABBREVIATIONS_H
 #include <cstring>
 #include "AbbreviatedTypes.h"
-#include "LLVMAPI.h"
 
 // This file contains short-form calls into the LLVM C API. It is meant to
 // save typing and make the lowering code clearer. If we ever call an LLVM C API
@@ -10,25 +9,25 @@
 // it here.
 namespace jit {
 
-static inline LType voidType(LContext context) { return llvmAPI->VoidTypeInContext(context); }
-static inline LType int1Type(LContext context) { return llvmAPI->Int1TypeInContext(context); }
-static inline LType int8Type(LContext context) { return llvmAPI->Int8TypeInContext(context); }
-static inline LType int16Type(LContext context) { return llvmAPI->Int16TypeInContext(context); }
-static inline LType int32Type(LContext context) { return llvmAPI->Int32TypeInContext(context); }
-static inline LType int64Type(LContext context) { return llvmAPI->Int64TypeInContext(context); }
-static inline LType intPtrType(LContext context) { return llvmAPI->Int64TypeInContext(context); }
-static inline LType floatType(LContext context) { return llvmAPI->FloatTypeInContext(context); }
-static inline LType doubleType(LContext context) { return llvmAPI->DoubleTypeInContext(context); }
+static inline LType voidType(LContext context) { return LLVMVoidTypeInContext(context); }
+static inline LType int1Type(LContext context) { return LLVMInt1TypeInContext(context); }
+static inline LType int8Type(LContext context) { return LLVMInt8TypeInContext(context); }
+static inline LType int16Type(LContext context) { return LLVMInt16TypeInContext(context); }
+static inline LType int32Type(LContext context) { return LLVMInt32TypeInContext(context); }
+static inline LType int64Type(LContext context) { return LLVMInt64TypeInContext(context); }
+static inline LType intPtrType(LContext context) { return LLVMInt64TypeInContext(context); }
+static inline LType floatType(LContext context) { return LLVMFloatTypeInContext(context); }
+static inline LType doubleType(LContext context) { return LLVMDoubleTypeInContext(context); }
 
-static inline LType pointerType(LType type) { return llvmAPI->PointerType(type, 0); }
-static inline LType arrayType(LType type, unsigned count) { return llvmAPI->ArrayType(type, count); }
-static inline LType vectorType(LType type, unsigned count) { return llvmAPI->VectorType(type, count); }
+static inline LType pointerType(LType type) { return LLVMPointerType(type, 0); }
+static inline LType arrayType(LType type, unsigned count) { return LLVMArrayType(type, count); }
+static inline LType vectorType(LType type, unsigned count) { return LLVMVectorType(type, count); }
 
 enum PackingMode { NotPacked,
     Packed };
 static inline LType structType(LContext context, LType* elementTypes, unsigned elementCount, PackingMode packing = NotPacked)
 {
-    return llvmAPI->StructTypeInContext(context, elementTypes, elementCount, packing == Packed);
+    return LLVMStructTypeInContext(context, elementTypes, elementCount, packing == Packed);
 }
 static inline LType structType(LContext context, PackingMode packing = NotPacked)
 {
@@ -51,7 +50,7 @@ enum Variadicity { NotVariadic,
     Variadic };
 static inline LType functionType(LType returnType, const LType* paramTypes, unsigned paramCount, Variadicity variadicity)
 {
-    return llvmAPI->FunctionType(returnType, const_cast<LType*>(paramTypes), paramCount, variadicity == Variadic);
+    return LLVMFunctionType(returnType, const_cast<LType*>(paramTypes), paramCount, variadicity == Variadic);
 }
 template <typename VectorType>
 inline LType functionType(LType returnType, const VectorType& vector, Variadicity variadicity = NotVariadic)
@@ -92,14 +91,14 @@ static inline LType functionType(LType returnType, LType param1, LType param2, L
     return functionType(returnType, paramTypes, 6, variadicity);
 }
 
-static inline LType typeOf(LValue value) { return llvmAPI->TypeOf(value); }
+static inline LType typeOf(LValue value) { return LLVMTypeOf(value); }
 
-static inline LType getElementType(LType value) { return llvmAPI->GetElementType(value); }
+static inline LType getElementType(LType value) { return LLVMGetElementType(value); }
 
-static inline unsigned mdKindID(LContext context, const char* string) { return llvmAPI->GetMDKindIDInContext(context, string, std::strlen(string)); }
-static inline LValue mdString(LContext context, const char* string, unsigned length) { return llvmAPI->MDStringInContext(context, string, length); }
+static inline unsigned mdKindID(LContext context, const char* string) { return LLVMGetMDKindIDInContext(context, string, std::strlen(string)); }
+static inline LValue mdString(LContext context, const char* string, unsigned length) { return LLVMMDStringInContext(context, string, length); }
 static inline LValue mdString(LContext context, const char* string) { return mdString(context, string, std::strlen(string)); }
-static inline LValue mdNode(LContext context, LValue* args, unsigned numArgs) { return llvmAPI->MDNodeInContext(context, args, numArgs); }
+static inline LValue mdNode(LContext context, LValue* args, unsigned numArgs) { return LLVMMDNodeInContext(context, args, numArgs); }
 template <typename VectorType>
 static inline LValue mdNode(LContext context, const VectorType& vector) { return mdNode(context, const_cast<LValue*>(vector.begin()), vector.size()); }
 static inline LValue mdNode(LContext context) { return mdNode(context, 0, 0); }
@@ -115,29 +114,29 @@ static inline LValue mdNode(LContext context, LValue arg1, LValue arg2, LValue a
     return mdNode(context, args, 3);
 }
 
-static inline void setMetadata(LValue instruction, unsigned kind, LValue metadata) { llvmAPI->SetMetadata(instruction, kind, metadata); }
+static inline void setMetadata(LValue instruction, unsigned kind, LValue metadata) { LLVMSetMetadata(instruction, kind, metadata); }
 
-static inline LValue getFirstInstruction(LBasicBlock block) { return llvmAPI->GetFirstInstruction(block); }
-static inline LValue getNextInstruction(LValue instruction) { return llvmAPI->GetNextInstruction(instruction); }
+static inline LValue getFirstInstruction(LBasicBlock block) { return LLVMGetFirstInstruction(block); }
+static inline LValue getNextInstruction(LValue instruction) { return LLVMGetNextInstruction(instruction); }
 
-static inline LValue addFunction(LModule module, const char* name, LType type) { return llvmAPI->AddFunction(module, name, type); }
-static inline LValue getNamedFunction(LModule module, const char* name) { return llvmAPI->GetNamedFunction(module, name); }
-static inline LValue getFirstFunction(LModule module) { return llvmAPI->GetFirstFunction(module); }
-static inline LValue getNextFunction(LValue function) { return llvmAPI->GetNextFunction(function); }
+static inline LValue addFunction(LModule module, const char* name, LType type) { return LLVMAddFunction(module, name, type); }
+static inline LValue getNamedFunction(LModule module, const char* name) { return LLVMGetNamedFunction(module, name); }
+static inline LValue getFirstFunction(LModule module) { return LLVMGetFirstFunction(module); }
+static inline LValue getNextFunction(LValue function) { return LLVMGetNextFunction(function); }
 
-static inline void setFunctionCallingConv(LValue function, LCallConv convention) { llvmAPI->SetFunctionCallConv(function, convention); }
-static inline void addTargetDependentFunctionAttr(LValue function, const char* key, const char* value) { llvmAPI->AddTargetDependentFunctionAttr(function, key, value); }
+static inline void setFunctionCallingConv(LValue function, LCallConv convention) { LLVMSetFunctionCallConv(function, convention); }
+static inline void addTargetDependentFunctionAttr(LValue function, const char* key, const char* value) { LLVMAddTargetDependentFunctionAttr(function, key, value); }
 
-static inline LLVMLinkage getLinkage(LValue global) { return llvmAPI->GetLinkage(global); }
-static inline void setLinkage(LValue global, LLVMLinkage linkage) { llvmAPI->SetLinkage(global, linkage); }
-static inline void setVisibility(LValue global, LLVMVisibility viz) { llvmAPI->SetVisibility(global, viz); }
-static inline LLVMBool isDeclaration(LValue global) { return llvmAPI->IsDeclaration(global); }
+static inline LLVMLinkage getLinkage(LValue global) { return LLVMGetLinkage(global); }
+static inline void setLinkage(LValue global, LLVMLinkage linkage) { LLVMSetLinkage(global, linkage); }
+static inline void setVisibility(LValue global, LLVMVisibility viz) { LLVMSetVisibility(global, viz); }
+static inline LLVMBool isDeclaration(LValue global) { return LLVMIsDeclaration(global); }
 
-static inline const char* getValueName(LValue global) { return llvmAPI->GetValueName(global); }
+static inline const char* getValueName(LValue global) { return LLVMGetValueName(global); }
 
-static inline LValue getNamedGlobal(LModule module, const char* name) { return llvmAPI->GetNamedGlobal(module, name); }
-static inline LValue getFirstGlobal(LModule module) { return llvmAPI->GetFirstGlobal(module); }
-static inline LValue getNextGlobal(LValue global) { return llvmAPI->GetNextGlobal(global); }
+static inline LValue getNamedGlobal(LModule module, const char* name) { return LLVMGetNamedGlobal(module, name); }
+static inline LValue getFirstGlobal(LModule module) { return LLVMGetFirstGlobal(module); }
+static inline LValue getNextGlobal(LValue global) { return LLVMGetNextGlobal(global); }
 
 static inline LValue addExternFunction(LModule module, const char* name, LType type)
 {
@@ -148,94 +147,94 @@ static inline LValue addExternFunction(LModule module, const char* name, LType t
 
 static inline LLVMBool createMemoryBufferWithContentsOfFile(const char* path, LLVMMemoryBufferRef* outMemBuf, char** outMessage)
 {
-    return llvmAPI->CreateMemoryBufferWithContentsOfFile(path, outMemBuf, outMessage);
+    return LLVMCreateMemoryBufferWithContentsOfFile(path, outMemBuf, outMessage);
 }
 
 static inline LLVMBool parseBitcodeInContext(LLVMContextRef contextRef, LLVMMemoryBufferRef memBuf, LModule* outModule, char** outMessage)
 {
-    return llvmAPI->ParseBitcodeInContext(contextRef, memBuf, outModule, outMessage);
+    return LLVMParseBitcodeInContext(contextRef, memBuf, outModule, outMessage);
 }
 
-static inline void disposeMemoryBuffer(LLVMMemoryBufferRef memBuf) { llvmAPI->DisposeMemoryBuffer(memBuf); }
+static inline void disposeMemoryBuffer(LLVMMemoryBufferRef memBuf) { LLVMDisposeMemoryBuffer(memBuf); }
 
-static inline LModule moduleCreateWithNameInContext(const char* moduleID, LContext context) { return llvmAPI->ModuleCreateWithNameInContext(moduleID, context); }
-static inline void disposeModule(LModule m) { llvmAPI->DisposeModule(m); }
+static inline LModule moduleCreateWithNameInContext(const char* moduleID, LContext context) { return LLVMModuleCreateWithNameInContext(moduleID, context); }
+static inline void disposeModule(LModule m) { LLVMDisposeModule(m); }
 
-static inline void disposeMessage(char* outMsg) { llvmAPI->DisposeMessage(outMsg); }
+static inline void disposeMessage(char* outMsg) { LLVMDisposeMessage(outMsg); }
 
-static inline LValue getParam(LValue function, unsigned index) { return llvmAPI->GetParam(function, index); }
+static inline LValue getParam(LValue function, unsigned index) { return LLVMGetParam(function, index); }
 
-static inline void getParamTypes(LType function, LType* dest) { return llvmAPI->GetParamTypes(function, dest); }
-static inline LValue getUndef(LType type) { return llvmAPI->GetUndef(type); }
+static inline void getParamTypes(LType function, LType* dest) { return LLVMGetParamTypes(function, dest); }
+static inline LValue getUndef(LType type) { return LLVMGetUndef(type); }
 
 enum BitExtension { ZeroExtend,
     SignExtend };
-static inline LValue constInt(LType type, unsigned long long value, BitExtension extension = ZeroExtend) { return llvmAPI->ConstInt(type, value, extension == SignExtend); }
-static inline LValue constReal(LType type, double value) { return llvmAPI->ConstReal(type, value); }
-static inline LValue constIntToPtr(LValue value, LType type) { return llvmAPI->ConstIntToPtr(value, type); }
-static inline LValue constNull(LType type) { return llvmAPI->ConstNull(type); }
-static inline LValue constBitCast(LValue value, LType type) { return llvmAPI->ConstBitCast(value, type); }
+static inline LValue constInt(LType type, unsigned long long value, BitExtension extension = ZeroExtend) { return LLVMConstInt(type, value, extension == SignExtend); }
+static inline LValue constReal(LType type, double value) { return LLVMConstReal(type, value); }
+static inline LValue constIntToPtr(LValue value, LType type) { return LLVMConstIntToPtr(value, type); }
+static inline LValue constNull(LType type) { return LLVMConstNull(type); }
+static inline LValue constBitCast(LValue value, LType type) { return LLVMConstBitCast(value, type); }
 
-static inline LBasicBlock getFirstBasicBlock(LValue function) { return llvmAPI->GetFirstBasicBlock(function); }
-static inline LBasicBlock getNextBasicBlock(LBasicBlock block) { return llvmAPI->GetNextBasicBlock(block); }
+static inline LBasicBlock getFirstBasicBlock(LValue function) { return LLVMGetFirstBasicBlock(function); }
+static inline LBasicBlock getNextBasicBlock(LBasicBlock block) { return LLVMGetNextBasicBlock(block); }
 
-static inline LBasicBlock appendBasicBlock(LContext context, LValue function, const char* name = "") { return llvmAPI->AppendBasicBlockInContext(context, function, name); }
-static inline LBasicBlock insertBasicBlock(LContext context, LBasicBlock beforeBasicBlock, const char* name = "") { return llvmAPI->InsertBasicBlockInContext(context, beforeBasicBlock, name); }
+static inline LBasicBlock appendBasicBlock(LContext context, LValue function, const char* name = "") { return LLVMAppendBasicBlockInContext(context, function, name); }
+static inline LBasicBlock insertBasicBlock(LContext context, LBasicBlock beforeBasicBlock, const char* name = "") { return LLVMInsertBasicBlockInContext(context, beforeBasicBlock, name); }
 
-static inline LValue buildPhi(LBuilder builder, LType type) { return llvmAPI->BuildPhi(builder, type, ""); }
+static inline LValue buildPhi(LBuilder builder, LType type) { return LLVMBuildPhi(builder, type, ""); }
 static inline void addIncoming(LValue phi, const LValue* values, const LBasicBlock* blocks, unsigned numPredecessors)
 {
-    llvmAPI->AddIncoming(phi, const_cast<LValue*>(values), const_cast<LBasicBlock*>(blocks), numPredecessors);
+    LLVMAddIncoming(phi, const_cast<LValue*>(values), const_cast<LBasicBlock*>(blocks), numPredecessors);
 }
 
-static inline LValue buildAlloca(LBuilder builder, LType type) { return llvmAPI->BuildAlloca(builder, type, ""); }
-static inline LValue buildAdd(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildAdd(builder, left, right, ""); }
-static inline LValue buildSub(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildSub(builder, left, right, ""); }
-static inline LValue buildMul(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildMul(builder, left, right, ""); }
-static inline LValue buildDiv(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildSDiv(builder, left, right, ""); }
-static inline LValue buildRem(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildSRem(builder, left, right, ""); }
-static inline LValue buildNeg(LBuilder builder, LValue value) { return llvmAPI->BuildNeg(builder, value, ""); }
-static inline LValue buildFAdd(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildFAdd(builder, left, right, ""); }
-static inline LValue buildFSub(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildFSub(builder, left, right, ""); }
-static inline LValue buildFMul(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildFMul(builder, left, right, ""); }
-static inline LValue buildFDiv(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildFDiv(builder, left, right, ""); }
-static inline LValue buildFRem(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildFRem(builder, left, right, ""); }
-static inline LValue buildFNeg(LBuilder builder, LValue value) { return llvmAPI->BuildFNeg(builder, value, ""); }
-static inline LValue buildAnd(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildAnd(builder, left, right, ""); }
-static inline LValue buildOr(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildOr(builder, left, right, ""); }
-static inline LValue buildXor(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildXor(builder, left, right, ""); }
-static inline LValue buildShl(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildShl(builder, left, right, ""); }
-static inline LValue buildAShr(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildAShr(builder, left, right, ""); }
-static inline LValue buildLShr(LBuilder builder, LValue left, LValue right) { return llvmAPI->BuildLShr(builder, left, right, ""); }
-static inline LValue buildNot(LBuilder builder, LValue value) { return llvmAPI->BuildNot(builder, value, ""); }
-static inline LValue buildLoad(LBuilder builder, LValue pointer) { return llvmAPI->BuildLoad(builder, pointer, ""); }
-static inline LValue buildStructGEP(LBuilder builder, LValue pointer, unsigned idx) { return llvmAPI->BuildStructGEP(builder, pointer, idx, ""); }
-static inline LValue buildStore(LBuilder builder, LValue value, LValue pointer) { return llvmAPI->BuildStore(builder, value, pointer); }
-static inline LValue buildSExt(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildSExt(builder, value, type, ""); }
-static inline LValue buildZExt(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildZExt(builder, value, type, ""); }
-static inline LValue buildFPToSI(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildFPToSI(builder, value, type, ""); }
-static inline LValue buildFPToUI(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildFPToUI(builder, value, type, ""); }
-static inline LValue buildSIToFP(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildSIToFP(builder, value, type, ""); }
-static inline LValue buildUIToFP(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildUIToFP(builder, value, type, ""); }
-static inline LValue buildIntCast(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildIntCast(builder, value, type, ""); }
-static inline LValue buildFPCast(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildFPCast(builder, value, type, ""); }
-static inline LValue buildIntToPtr(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildIntToPtr(builder, value, type, ""); }
-static inline LValue buildPtrToInt(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildPtrToInt(builder, value, type, ""); }
-static inline LValue buildBitCast(LBuilder builder, LValue value, LType type) { return llvmAPI->BuildBitCast(builder, value, type, ""); }
-static inline LValue buildICmp(LBuilder builder, LIntPredicate cond, LValue left, LValue right) { return llvmAPI->BuildICmp(builder, cond, left, right, ""); }
-static inline LValue buildFCmp(LBuilder builder, LRealPredicate cond, LValue left, LValue right) { return llvmAPI->BuildFCmp(builder, cond, left, right, ""); }
-static inline LValue buildInsertElement(LBuilder builder, LValue vector, LValue element, LValue index) { return llvmAPI->BuildInsertElement(builder, vector, element, index, ""); }
+static inline LValue buildAlloca(LBuilder builder, LType type) { return LLVMBuildAlloca(builder, type, ""); }
+static inline LValue buildAdd(LBuilder builder, LValue left, LValue right) { return LLVMBuildAdd(builder, left, right, ""); }
+static inline LValue buildSub(LBuilder builder, LValue left, LValue right) { return LLVMBuildSub(builder, left, right, ""); }
+static inline LValue buildMul(LBuilder builder, LValue left, LValue right) { return LLVMBuildMul(builder, left, right, ""); }
+static inline LValue buildDiv(LBuilder builder, LValue left, LValue right) { return LLVMBuildSDiv(builder, left, right, ""); }
+static inline LValue buildRem(LBuilder builder, LValue left, LValue right) { return LLVMBuildSRem(builder, left, right, ""); }
+static inline LValue buildNeg(LBuilder builder, LValue value) { return LLVMBuildNeg(builder, value, ""); }
+static inline LValue buildFAdd(LBuilder builder, LValue left, LValue right) { return LLVMBuildFAdd(builder, left, right, ""); }
+static inline LValue buildFSub(LBuilder builder, LValue left, LValue right) { return LLVMBuildFSub(builder, left, right, ""); }
+static inline LValue buildFMul(LBuilder builder, LValue left, LValue right) { return LLVMBuildFMul(builder, left, right, ""); }
+static inline LValue buildFDiv(LBuilder builder, LValue left, LValue right) { return LLVMBuildFDiv(builder, left, right, ""); }
+static inline LValue buildFRem(LBuilder builder, LValue left, LValue right) { return LLVMBuildFRem(builder, left, right, ""); }
+static inline LValue buildFNeg(LBuilder builder, LValue value) { return LLVMBuildFNeg(builder, value, ""); }
+static inline LValue buildAnd(LBuilder builder, LValue left, LValue right) { return LLVMBuildAnd(builder, left, right, ""); }
+static inline LValue buildOr(LBuilder builder, LValue left, LValue right) { return LLVMBuildOr(builder, left, right, ""); }
+static inline LValue buildXor(LBuilder builder, LValue left, LValue right) { return LLVMBuildXor(builder, left, right, ""); }
+static inline LValue buildShl(LBuilder builder, LValue left, LValue right) { return LLVMBuildShl(builder, left, right, ""); }
+static inline LValue buildAShr(LBuilder builder, LValue left, LValue right) { return LLVMBuildAShr(builder, left, right, ""); }
+static inline LValue buildLShr(LBuilder builder, LValue left, LValue right) { return LLVMBuildLShr(builder, left, right, ""); }
+static inline LValue buildNot(LBuilder builder, LValue value) { return LLVMBuildNot(builder, value, ""); }
+static inline LValue buildLoad(LBuilder builder, LValue pointer) { return LLVMBuildLoad(builder, pointer, ""); }
+static inline LValue buildStructGEP(LBuilder builder, LValue pointer, unsigned idx) { return LLVMBuildStructGEP(builder, pointer, idx, ""); }
+static inline LValue buildStore(LBuilder builder, LValue value, LValue pointer) { return LLVMBuildStore(builder, value, pointer); }
+static inline LValue buildSExt(LBuilder builder, LValue value, LType type) { return LLVMBuildSExt(builder, value, type, ""); }
+static inline LValue buildZExt(LBuilder builder, LValue value, LType type) { return LLVMBuildZExt(builder, value, type, ""); }
+static inline LValue buildFPToSI(LBuilder builder, LValue value, LType type) { return LLVMBuildFPToSI(builder, value, type, ""); }
+static inline LValue buildFPToUI(LBuilder builder, LValue value, LType type) { return LLVMBuildFPToUI(builder, value, type, ""); }
+static inline LValue buildSIToFP(LBuilder builder, LValue value, LType type) { return LLVMBuildSIToFP(builder, value, type, ""); }
+static inline LValue buildUIToFP(LBuilder builder, LValue value, LType type) { return LLVMBuildUIToFP(builder, value, type, ""); }
+static inline LValue buildIntCast(LBuilder builder, LValue value, LType type) { return LLVMBuildIntCast(builder, value, type, ""); }
+static inline LValue buildFPCast(LBuilder builder, LValue value, LType type) { return LLVMBuildFPCast(builder, value, type, ""); }
+static inline LValue buildIntToPtr(LBuilder builder, LValue value, LType type) { return LLVMBuildIntToPtr(builder, value, type, ""); }
+static inline LValue buildPtrToInt(LBuilder builder, LValue value, LType type) { return LLVMBuildPtrToInt(builder, value, type, ""); }
+static inline LValue buildBitCast(LBuilder builder, LValue value, LType type) { return LLVMBuildBitCast(builder, value, type, ""); }
+static inline LValue buildICmp(LBuilder builder, LIntPredicate cond, LValue left, LValue right) { return LLVMBuildICmp(builder, cond, left, right, ""); }
+static inline LValue buildFCmp(LBuilder builder, LRealPredicate cond, LValue left, LValue right) { return LLVMBuildFCmp(builder, cond, left, right, ""); }
+static inline LValue buildInsertElement(LBuilder builder, LValue vector, LValue element, LValue index) { return LLVMBuildInsertElement(builder, vector, element, index, ""); }
 
 enum SynchronizationScope { SingleThread,
     CrossThread };
 static inline LValue buildFence(LBuilder builder, LAtomicOrdering ordering, SynchronizationScope scope = CrossThread)
 {
-    return llvmAPI->BuildFence(builder, ordering, scope == SingleThread, "");
+    return LLVMBuildFence(builder, ordering, scope == SingleThread, "");
 }
 
 static inline LValue buildCall(LBuilder builder, LValue function, const LValue* args, unsigned numArgs)
 {
-    return llvmAPI->BuildCall(builder, function, const_cast<LValue*>(args), numArgs, "");
+    return LLVMBuildCall(builder, function, const_cast<LValue*>(args), numArgs, "");
 }
 template <typename VectorType>
 inline LValue buildCall(LBuilder builder, LValue function, const VectorType& vector)
@@ -257,13 +256,13 @@ LValue buildCall(LBuilder builder, LValue function, LValue arg1, Args... args)
     return buildCall(builder, function, argsArray, sizeof(argsArray) / sizeof(LValue));
 }
 
-static inline void setInstructionCallingConvention(LValue instruction, LCallConv callingConvention) { llvmAPI->SetInstructionCallConv(instruction, callingConvention); }
-static inline LValue buildExtractValue(LBuilder builder, LValue aggVal, unsigned index) { return llvmAPI->BuildExtractValue(builder, aggVal, index, ""); }
-static inline LValue buildSelect(LBuilder builder, LValue condition, LValue taken, LValue notTaken) { return llvmAPI->BuildSelect(builder, condition, taken, notTaken, ""); }
-static inline LValue buildBr(LBuilder builder, LBasicBlock destination) { return llvmAPI->BuildBr(builder, destination); }
-static inline LValue buildCondBr(LBuilder builder, LValue condition, LBasicBlock taken, LBasicBlock notTaken) { return llvmAPI->BuildCondBr(builder, condition, taken, notTaken); }
-static inline LValue buildSwitch(LBuilder builder, LValue value, LBasicBlock fallThrough, unsigned numCases) { return llvmAPI->BuildSwitch(builder, value, fallThrough, numCases); }
-static inline void addCase(LValue switchInst, LValue value, LBasicBlock target) { llvmAPI->AddCase(switchInst, value, target); }
+static inline void setInstructionCallingConvention(LValue instruction, LCallConv callingConvention) { LLVMSetInstructionCallConv(instruction, callingConvention); }
+static inline LValue buildExtractValue(LBuilder builder, LValue aggVal, unsigned index) { return LLVMBuildExtractValue(builder, aggVal, index, ""); }
+static inline LValue buildSelect(LBuilder builder, LValue condition, LValue taken, LValue notTaken) { return LLVMBuildSelect(builder, condition, taken, notTaken, ""); }
+static inline LValue buildBr(LBuilder builder, LBasicBlock destination) { return LLVMBuildBr(builder, destination); }
+static inline LValue buildCondBr(LBuilder builder, LValue condition, LBasicBlock taken, LBasicBlock notTaken) { return LLVMBuildCondBr(builder, condition, taken, notTaken); }
+static inline LValue buildSwitch(LBuilder builder, LValue value, LBasicBlock fallThrough, unsigned numCases) { return LLVMBuildSwitch(builder, value, fallThrough, numCases); }
+static inline void addCase(LValue switchInst, LValue value, LBasicBlock target) { LLVMAddCase(switchInst, value, target); }
 template <typename VectorType>
 static inline LValue buildSwitch(LBuilder builder, LValue value, const VectorType& cases, LBasicBlock fallThrough)
 {
@@ -272,21 +271,21 @@ static inline LValue buildSwitch(LBuilder builder, LValue value, const VectorTyp
         addCase(result, cases[i].value(), cases[i].target());
     return result;
 }
-static inline LValue buildRet(LBuilder builder, LValue value) { return llvmAPI->BuildRet(builder, value); }
-static inline LValue buildRetVoid(LBuilder builder) { return llvmAPI->BuildRetVoid(builder); }
-static inline LValue buildUnreachable(LBuilder builder) { return llvmAPI->BuildUnreachable(builder); }
-static inline void setTailCall(LValue callInst, bool istail) { return llvmAPI->SetTailCall(callInst, istail); }
+static inline LValue buildRet(LBuilder builder, LValue value) { return LLVMBuildRet(builder, value); }
+static inline LValue buildRetVoid(LBuilder builder) { return LLVMBuildRetVoid(builder); }
+static inline LValue buildUnreachable(LBuilder builder) { return LLVMBuildUnreachable(builder); }
+static inline void setTailCall(LValue callInst, bool istail) { return LLVMSetTailCall(callInst, istail); }
 
-static inline void dumpModule(LModule module) { llvmAPI->DumpModule(module); }
+static inline void dumpModule(LModule module) { LLVMDumpModule(module); }
 static inline void verifyModule(LModule module)
 {
     char* error = 0;
-    llvmAPI->VerifyModule(module, LLVMAbortProcessAction, &error);
-    llvmAPI->DisposeMessage(error);
+    LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
+    LLVMDisposeMessage(error);
 }
 static inline LValue constInlineAsm(LType Ty, const char* AsmString, const char* Constraints, bool HasSideEffects, bool IsAlignStack)
 {
-    return llvmAPI->ConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
+    return LLVMConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
 }
 }
 #endif /* ABBREVIATIONS_H */

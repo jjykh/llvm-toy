@@ -26,7 +26,7 @@ public:
 
     inline LValue buildCall(LValue function, const LValue* args, unsigned numArgs)
     {
-        return llvmAPI->BuildCall(m_builder, function, const_cast<LValue*>(args), numArgs, "");
+        return LLVMBuildCall(m_builder, function, const_cast<LValue*>(args), numArgs, "");
     }
 
     template <typename VectorType>

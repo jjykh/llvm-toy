@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <string.h>
 #include "log.h"
-#include "LLVMAPI.h"
 #include "CompilerState.h"
 #include "Compile.h"
 #define SECTION_NAME_PREFIX "."
@@ -63,48 +62,48 @@ static void mmDestroy(void*)
 void compile(State& state)
 {
     LLVMMCJITCompilerOptions options;
-    llvmAPI->InitializeMCJITCompilerOptions(&options, sizeof(options));
+    LLVMInitializeMCJITCompilerOptions(&options, sizeof(options));
     options.OptLevel = 2;
     LLVMExecutionEngineRef engine;
     char* error = 0;
-    options.MCJMM = llvmAPI->CreateSimpleMCJITMemoryManager(
+    options.MCJMM = LLVMCreateSimpleMCJITMemoryManager(
         &state, mmAllocateCodeSection, mmAllocateDataSection, mmApplyPermissions, mmDestroy);
-    if (llvmAPI->CreateMCJITCompilerForModule(&engine, state.m_module, &options, sizeof(options), &error)) {
+    if (LLVMCreateMCJITCompilerForModule(&engine, state.m_module, &options, sizeof(options), &error)) {
         LOGE("FATAL: Could not create LLVM execution engine: %s", error);
         assert(false);
     }
     LLVMModuleRef module = state.m_module;
     LLVMPassManagerRef functionPasses = 0;
     LLVMPassManagerRef modulePasses;
-    LLVMTargetDataRef targetData = llvmAPI->GetExecutionEngineTargetData(engine);
-    char* stringRepOfTargetData = llvmAPI->CopyStringRepOfTargetData(targetData);
-    llvmAPI->SetDataLayout(module, stringRepOfTargetData);
+    LLVMTargetDataRef targetData = LLVMGetExecutionEngineTargetData(engine);
+    char* stringRepOfTargetData = LLVMCopyStringRepOfTargetData(targetData);
+    LLVMSetDataLayout(module, stringRepOfTargetData);
     free(stringRepOfTargetData);
 
-    LLVMPassManagerBuilderRef passBuilder = llvmAPI->PassManagerBuilderCreate();
-    llvmAPI->PassManagerBuilderSetOptLevel(passBuilder, 2);
-    llvmAPI->PassManagerBuilderUseInlinerWithThreshold(passBuilder, 275);
-    llvmAPI->PassManagerBuilderSetSizeLevel(passBuilder, 0);
+    LLVMPassManagerBuilderRef passBuilder = LLVMPassManagerBuilderCreate();
+    LLVMPassManagerBuilderSetOptLevel(passBuilder, 2);
+    LLVMPassManagerBuilderUseInlinerWithThreshold(passBuilder, 275);
+    LLVMPassManagerBuilderSetSizeLevel(passBuilder, 0);
 
-    functionPasses = llvmAPI->CreateFunctionPassManagerForModule(module);
-    modulePasses = llvmAPI->CreatePassManager();
+    functionPasses = LLVMCreateFunctionPassManagerForModule(module);
+    modulePasses = LLVMCreatePassManager();
 
-    llvmAPI->PassManagerBuilderPopulateFunctionPassManager(passBuilder, functionPasses);
-    llvmAPI->PassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);
+    LLVMPassManagerBuilderPopulateFunctionPassManager(passBuilder, functionPasses);
+    LLVMPassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);
 
-    llvmAPI->PassManagerBuilderDispose(passBuilder);
+    LLVMPassManagerBuilderDispose(passBuilder);
 
-    llvmAPI->InitializeFunctionPassManager(functionPasses);
-    for (LLVMValueRef function = llvmAPI->GetFirstFunction(module); function; function = llvmAPI->GetNextFunction(function))
-        llvmAPI->RunFunctionPassManager(functionPasses, function);
-    llvmAPI->FinalizeFunctionPassManager(functionPasses);
+    LLVMInitializeFunctionPassManager(functionPasses);
+    for (LLVMValueRef function = LLVMGetFirstFunction(module); function; function = LLVMGetNextFunction(function))
+        LLVMRunFunctionPassManager(functionPasses, function);
+    LLVMFinalizeFunctionPassManager(functionPasses);
 
-    llvmAPI->RunPassManager(modulePasses, module);
-    state.m_entryPoint = reinterpret_cast<void*>(llvmAPI->GetPointerToGlobal(engine, state.m_function));
+    LLVMRunPassManager(modulePasses, module);
+    state.m_entryPoint = reinterpret_cast<void*>(LLVMGetPointerToGlobal(engine, state.m_function));
 
     if (functionPasses)
-        llvmAPI->DisposePassManager(functionPasses);
-    llvmAPI->DisposePassManager(modulePasses);
-    llvmAPI->DisposeExecutionEngine(engine);
+        LLVMDisposePassManager(functionPasses);
+    LLVMDisposePassManager(modulePasses);
+    LLVMDisposeExecutionEngine(engine);
 }
 }

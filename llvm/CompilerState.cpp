@@ -1,4 +1,3 @@
-#include "LLVMAPI.h"
 #include "CompilerState.h"
 
 namespace jit {
@@ -11,12 +10,12 @@ CompilerState::CompilerState(const char* moduleName, const PlatformDesc& desc)
     , m_entryPoint(nullptr)
     , m_platformDesc(desc)
 {
-    m_context = llvmAPI->ContextCreate();
-    m_module = llvmAPI->ModuleCreateWithNameInContext("test", m_context);
+    m_context = LLVMContextCreate();
+    m_module = LLVMModuleCreateWithNameInContext("test", m_context);
 }
 
 CompilerState::~CompilerState()
 {
-    llvmAPI->ContextDispose(m_context);
+    LLVMContextDispose(m_context);
 }
 }

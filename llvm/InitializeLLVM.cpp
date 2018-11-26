@@ -1,8 +1,8 @@
-#include <stdio.h>
-#include <assert.h>
-#include "LLVMAPI.h"
 #include "InitializeLLVM.h"
+#include "LLVMHeaders.h"
+#include <assert.h>
 #include <llvm/Support/CommandLine.h>
+#include <stdio.h>
 
 template <typename... Args>
 void initCommandLine(Args... args)
@@ -16,9 +16,10 @@ void llvmCrash(const char* reason)
 {
     fprintf(stderr, "LLVM fatal error: %s", reason);
     assert(false);
+    __builtin_unreachable();
 }
 
-static LLVMAPI* initializeAndGetLLVMAPI(void)
+static void initializeAndGetLLVMAPI(void)
 {
 
     LLVMInstallFatalErrorHandler(llvmCrash);
@@ -46,21 +47,9 @@ static LLVMAPI* initializeAndGetLLVMAPI(void)
 #endif
 
     initCommandLine("-enable-patchpoint-liveness=true");
-
-    LLVMAPI* result = new LLVMAPI;
-
-    // Initialize the whole thing to null.
-    memset(result, 0, sizeof(*result));
-
-#define LLVM_API_FUNCTION_ASSIGNMENT(returnType, name, signature) \
-    result->name = LLVM##name;
-    FOR_EACH_LLVM_API_FUNCTION(LLVM_API_FUNCTION_ASSIGNMENT);
-#undef LLVM_API_FUNCTION_ASSIGNMENT
-
-    return result;
 }
 
 void initLLVM(void)
 {
-    llvmAPI = initializeAndGetLLVMAPI();
+    initializeAndGetLLVMAPI();
 }

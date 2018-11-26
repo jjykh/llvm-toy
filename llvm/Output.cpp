@@ -12,7 +12,7 @@ Output::Output(CompilerState& state)
     m_argType = pointerType(arrayType(repo().intPtr, state.m_platformDesc.m_contextSize / sizeof(intptr_t)));
     state.m_function = addFunction(
         state.m_module, "main", functionType(repo().int64, m_argType));
-    m_builder = llvmAPI->CreateBuilderInContext(state.m_context);
+    m_builder = LLVMCreateBuilderInContext(state.m_context);
 
     m_prologue = appendBasicBlock("Prologue");
     positionToBBEnd(m_prologue);
@@ -20,7 +20,7 @@ Output::Output(CompilerState& state)
 }
 Output::~Output()
 {
-    llvmAPI->DisposeBuilder(m_builder);
+    LLVMDisposeBuilder(m_builder);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name)
@@ -30,7 +30,7 @@ LBasicBlock Output::appendBasicBlock(const char* name)
 
 void Output::positionToBBEnd(LBasicBlock bb)
 {
-    llvmAPI->PositionBuilderAtEnd(m_builder, bb);
+    LLVMPositionBuilderAtEnd(m_builder, bb);
 }
 
 LValue Output::constInt32(int i)
@@ -85,12 +85,12 @@ LValue Output::buildRetVoid(void)
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy)
 {
-    return llvmAPI->BuildCast(m_builder, Op, Val, DestTy, "");
+    return LLVMBuildCast(m_builder, Op, Val, DestTy, "");
 }
 
 void Output::buildGetArg()
 {
-    m_arg = llvmAPI->GetParam(m_state.m_function, 0);
+    m_arg = LLVMGetParam(m_state.m_function, 0);
 }
 
 void Output::buildDirectPatch(uintptr_t where)
@@ -114,9 +114,9 @@ void Output::buildAssistPatch(LValue where)
 void Output::buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchSize)
 {
     LValue constIndex[] = { constInt32(0), constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t)) };
-    buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
+    buildStore(where, LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
     LValue call = buildCall(repo().patchpointInt64Intrinsic(), constIntPtr(m_stackMapsId), constInt32(patchSize), constNull(repo().ref8), constInt32(0));
-    llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
+    LLVMSetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
     // record the stack map info
     m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
@@ -125,13 +125,13 @@ void Output::buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchS
 LValue Output::buildLoadArgIndex(int index)
 {
     LValue constIndex[] = { constInt32(0), constInt32(index) };
-    return buildLoad(llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
+    return buildLoad(LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
 }
 
 LValue Output::buildStoreArgIndex(LValue val, int index)
 {
     LValue constIndex[] = { constInt32(0), constInt32(index) };
-    return buildStore(val, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
+    return buildStore(val, LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
 }
 
 LValue Output::buildSelect(LValue condition, LValue taken, LValue notTaken)

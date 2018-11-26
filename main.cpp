@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
-#include "LLVMAPI.h"
 #include "InitializeLLVM.h"
 #include "CompilerState.h"
 #include "Output.h"
