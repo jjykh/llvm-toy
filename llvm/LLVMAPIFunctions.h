@@ -7,9 +7,6 @@
     macro(LLVMBool, ParseBitcodeInContext, (LLVMContextRef ContextRef, LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutModule, char **OutMessage)) \
     macro(LLVMBool, GetBitcodeModuleInContext, (LLVMContextRef ContextRef, LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM, char **OutMessage)) \
     macro(LLVMBool, GetBitcodeModule, (LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM, char **OutMessage)) \
-    macro(LLVMBool, GetBitcodeModuleProviderInContext, (LLVMContextRef ContextRef, LLVMMemoryBufferRef MemBuf, LLVMModuleProviderRef *OutMP, char **OutMessage)) \
-    macro(LLVMBool, GetBitcodeModuleProvider, (LLVMMemoryBufferRef MemBuf, LLVMModuleProviderRef *OutMP, char **OutMessage)) \
-    macro(LLVMBool, LinkModules, (LLVMModuleRef Dest, LLVMModuleRef Str, LLVMLinkerMode Mode, char **OutMessage)) \
     macro(void, InitializeCore, (LLVMPassRegistryRef R)) \
     macro(void, Shutdown, ()) \
     macro(char *, CreateMessage, (const char *Message)) \
@@ -299,10 +296,7 @@
     macro(void, SetFunctionCallConv, (LLVMValueRef Fn, unsigned CC)) \
     macro(const char *, GetGC, (LLVMValueRef Fn)) \
     macro(void, SetGC, (LLVMValueRef Fn, const char *Name)) \
-    macro(void, AddFunctionAttr, (LLVMValueRef Fn, LLVMAttribute PA)) \
     macro(void, AddTargetDependentFunctionAttr, (LLVMValueRef Fn, const char *A, const char *V)) \
-    macro(LLVMAttribute, GetFunctionAttr, (LLVMValueRef Fn)) \
-    macro(void, RemoveFunctionAttr, (LLVMValueRef Fn, LLVMAttribute PA)) \
     macro(unsigned, CountParams, (LLVMValueRef Fn)) \
     macro(void, GetParams, (LLVMValueRef Fn, LLVMValueRef *Params)) \
     macro(LLVMValueRef, GetParam, (LLVMValueRef Fn, unsigned Index)) \
@@ -311,9 +305,6 @@
     macro(LLVMValueRef, GetLastParam, (LLVMValueRef Fn)) \
     macro(LLVMValueRef, GetNextParam, (LLVMValueRef Arg)) \
     macro(LLVMValueRef, GetPreviousParam, (LLVMValueRef Arg)) \
-    macro(void, AddAttribute, (LLVMValueRef Arg, LLVMAttribute PA)) \
-    macro(void, RemoveAttribute, (LLVMValueRef Arg, LLVMAttribute PA)) \
-    macro(LLVMAttribute, GetAttribute, (LLVMValueRef Arg)) \
     macro(void, SetParamAlignment, (LLVMValueRef Arg, unsigned align)) \
     macro(LLVMValueRef, MDStringInContext, (LLVMContextRef C, const char *Str, unsigned SLen)) \
     macro(LLVMValueRef, MDString, (const char *Str, unsigned SLen)) \
@@ -355,8 +346,6 @@
     macro(LLVMIntPredicate, GetICmpPredicate, (LLVMValueRef Inst)) \
     macro(void, SetInstructionCallConv, (LLVMValueRef Instr, unsigned CC)) \
     macro(unsigned, GetInstructionCallConv, (LLVMValueRef Instr)) \
-    macro(void, AddInstrAttribute, (LLVMValueRef Instr, unsigned index, LLVMAttribute)) \
-    macro(void, RemoveInstrAttribute, (LLVMValueRef Instr, unsigned index, LLVMAttribute)) \
     macro(void, SetInstrParamAlignment, (LLVMValueRef Instr, unsigned index, unsigned align)) \
     macro(LLVMBool, IsTailCall, (LLVMValueRef CallInst)) \
     macro(void, SetTailCall, (LLVMValueRef CallInst, LLVMBool IsTailCall)) \
@@ -495,7 +484,6 @@
     macro(void, StopMultithreaded, ()) \
     macro(LLVMBool, IsMultithreaded, ()) \
     macro(LLVMTargetDataRef, CreateTargetData, (const char *StringRep)) \
-    macro(void, AddTargetData, (LLVMTargetDataRef, LLVMPassManagerRef)) \
     macro(void, AddTargetLibraryInfo, (LLVMTargetLibraryInfoRef, LLVMPassManagerRef)) \
     macro(char *, CopyStringRepOfTargetData, (LLVMTargetDataRef)) \
     macro(enum LLVMByteOrdering, ByteOrder, (LLVMTargetDataRef)) \
@@ -523,7 +511,6 @@
     macro(char *, GetTargetMachineTriple, (LLVMTargetMachineRef T)) \
     macro(char *, GetTargetMachineCPU, (LLVMTargetMachineRef T)) \
     macro(char *, GetTargetMachineFeatureString, (LLVMTargetMachineRef T)) \
-    macro(LLVMTargetDataRef, GetTargetMachineData, (LLVMTargetMachineRef T)) \
     macro(LLVMBool, TargetMachineEmitToFile, (LLVMTargetMachineRef T, LLVMModuleRef M, char *Filename, LLVMCodeGenFileType codegen, char **ErrorMessage)) \
     macro(void, LinkInMCJIT, (void)) \
     macro(LLVMGenericValueRef, CreateGenericValueOfInt, (LLVMTypeRef Ty, unsigned long long N, LLVMBool IsSigned)) \
@@ -537,7 +524,6 @@
     macro(LLVMBool, CreateExecutionEngineForModule, (LLVMExecutionEngineRef *OutEE, LLVMModuleRef M, char **OutError)) \
     macro(void, InitializeMCJITCompilerOptions, (struct LLVMMCJITCompilerOptions *Options, size_t SizeOfOptions)) \
     macro(LLVMBool, CreateMCJITCompilerForModule, (LLVMExecutionEngineRef *OutJIT, LLVMModuleRef M, struct LLVMMCJITCompilerOptions *Options, size_t SizeOfOptions, char **OutError)) \
-    macro(LLVMBool, CreateExecutionEngine, (LLVMExecutionEngineRef *OutEE, LLVMModuleProviderRef MP, char **OutError)) \
     macro(void, DisposeExecutionEngine, (LLVMExecutionEngineRef EE)) \
     macro(void, RunStaticConstructors, (LLVMExecutionEngineRef EE)) \
     macro(void, RunStaticDestructors, (LLVMExecutionEngineRef EE)) \
@@ -545,9 +531,7 @@
     macro(LLVMGenericValueRef, RunFunction, (LLVMExecutionEngineRef EE, LLVMValueRef F, unsigned NumArgs, LLVMGenericValueRef *Args)) \
     macro(void, FreeMachineCodeForFunction, (LLVMExecutionEngineRef EE, LLVMValueRef F)) \
     macro(void, AddModule, (LLVMExecutionEngineRef EE, LLVMModuleRef M)) \
-    macro(void, AddModuleProvider, (LLVMExecutionEngineRef EE, LLVMModuleProviderRef MP)) \
     macro(LLVMBool, RemoveModule, (LLVMExecutionEngineRef EE, LLVMModuleRef M, LLVMModuleRef *OutMod, char **OutError)) \
-    macro(LLVMBool, RemoveModuleProvider, (LLVMExecutionEngineRef EE, LLVMModuleProviderRef MP, LLVMModuleRef *OutMod, char **OutError)) \
     macro(LLVMBool, FindFunction, (LLVMExecutionEngineRef EE, const char *Name, LLVMValueRef *OutFn)) \
     macro(void *, RecompileAndRelinkFunction, (LLVMExecutionEngineRef EE, LLVMValueRef Fn)) \
     macro(LLVMTargetDataRef, GetExecutionEngineTargetData, (LLVMExecutionEngineRef EE)) \

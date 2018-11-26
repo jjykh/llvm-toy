@@ -2,7 +2,7 @@
 #define OUTPUT_H
 #include "IntrinsicRepository.h"
 namespace jit {
-class CompilerState;
+struct CompilerState;
 class Output {
 public:
     Output(CompilerState& state);
@@ -10,6 +10,7 @@ public:
     LBasicBlock appendBasicBlock(const char* name = nullptr);
     void positionToBBEnd(LBasicBlock);
     LValue constInt32(int);
+    LValue constIntPtr(intptr_t);
     LValue constInt64(long long);
     LValue buildStructGEP(LValue structVal, unsigned field);
     LValue buildLoad(LValue toLoad);

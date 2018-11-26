@@ -89,8 +89,6 @@ void compile(State& state)
     functionPasses = llvmAPI->CreateFunctionPassManagerForModule(module);
     modulePasses = llvmAPI->CreatePassManager();
 
-    llvmAPI->AddTargetData(llvmAPI->GetExecutionEngineTargetData(engine), modulePasses);
-
     llvmAPI->PassManagerBuilderPopulateFunctionPassManager(passBuilder, functionPasses);
     llvmAPI->PassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);
 

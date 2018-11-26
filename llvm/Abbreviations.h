@@ -127,14 +127,11 @@ static inline LValue getNextFunction(LValue function) { return llvmAPI->GetNextF
 
 static inline void setFunctionCallingConv(LValue function, LCallConv convention) { llvmAPI->SetFunctionCallConv(function, convention); }
 static inline void addTargetDependentFunctionAttr(LValue function, const char* key, const char* value) { llvmAPI->AddTargetDependentFunctionAttr(function, key, value); }
-static inline void removeFunctionAttr(LValue function, LLVMAttribute pa) { llvmAPI->RemoveFunctionAttr(function, pa); }
 
 static inline LLVMLinkage getLinkage(LValue global) { return llvmAPI->GetLinkage(global); }
 static inline void setLinkage(LValue global, LLVMLinkage linkage) { llvmAPI->SetLinkage(global, linkage); }
 static inline void setVisibility(LValue global, LLVMVisibility viz) { llvmAPI->SetVisibility(global, viz); }
 static inline LLVMBool isDeclaration(LValue global) { return llvmAPI->IsDeclaration(global); }
-
-static inline LLVMBool linkModules(LModule dest, LModule str, LLVMLinkerMode mode, char** outMessage) { return llvmAPI->LinkModules(dest, str, mode, outMessage); }
 
 static inline const char* getValueName(LValue global) { return llvmAPI->GetValueName(global); }
 
@@ -289,7 +286,7 @@ static inline void verifyModule(LModule module)
 }
 static inline LValue constInlineAsm(LType Ty, const char* AsmString, const char* Constraints, bool HasSideEffects, bool IsAlignStack)
 {
-    llvmAPI->ConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
+    return llvmAPI->ConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects, IsAlignStack);
 }
 }
 #endif /* ABBREVIATIONS_H */

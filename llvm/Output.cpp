@@ -43,6 +43,11 @@ LValue Output::constInt64(long long l)
     return jit::constInt(m_repo.int64, l);
 }
 
+LValue Output::constIntPtr(intptr_t i)
+{
+    return jit::constInt(m_repo.intPtr, i);
+}
+
 LValue Output::buildStructGEP(LValue structVal, unsigned field)
 {
     return jit::buildStructGEP(m_builder, structVal, field);
@@ -80,7 +85,7 @@ LValue Output::buildRetVoid(void)
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy)
 {
-    llvmAPI->BuildCast(m_builder, Op, Val, DestTy, "");
+    return llvmAPI->BuildCast(m_builder, Op, Val, DestTy, "");
 }
 
 void Output::buildGetArg()
@@ -110,7 +115,7 @@ void Output::buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchS
 {
     LValue constIndex[] = { constInt32(0), constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t)) };
     buildStore(where, llvmAPI->BuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constInt32(m_stackMapsId), constInt32(patchSize), constNull(repo().ref8), constInt32(0));
+    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constIntPtr(m_stackMapsId), constInt32(patchSize), constNull(repo().ref8), constInt32(0));
     llvmAPI->SetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
     // record the stack map info

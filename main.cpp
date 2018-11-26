@@ -20,15 +20,15 @@ static void buildIR(State& state)
 {
     using namespace jit;
     Output output(state);
-    LValue arg = output.arg();
+    // LValue arg = output.arg();
     LBasicBlock body = output.appendBasicBlock("Body");
     output.buildBr(body);
     output.positionToBBEnd(body);
-    LValue one = output.constInt32(1);
+    LValue one = output.constIntPtr(1);
     LValue indicator = output.buildLoadArgIndex(2);
     LValue val = output.buildLoadArgIndex(0);
     LValue add = output.buildAdd(val, one);
-    LValue result = output.buildSelect(output.buildICmp(LLVMIntNE, indicator, output.constInt32(0)), add, val);
+    LValue result = output.buildSelect(output.buildICmp(LLVMIntNE, indicator, output.constIntPtr(0)), add, val);
     output.buildStoreArgIndex(result, 0);
 
     LBasicBlock patch = output.appendBasicBlock("Patch");

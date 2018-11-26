@@ -1,6 +1,6 @@
 {
     'variables': {
-      'clang%': 0,
+      'clang%': 1,
       'conditions': [
         ['OS == "linux"',
             {

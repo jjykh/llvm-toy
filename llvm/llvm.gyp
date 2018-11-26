@@ -30,7 +30,19 @@
                 'defines': [
                     'LLVMLOG_LEVEL=<(llvmlog_level)',
                 ],
+                'cflags_cc': [
+                    '<!(llvm-config --cxxflags)',
+                ],
+                'cflags': [
+                    '<!(llvm-config --cflags)',
+                ],
             },
+            'cflags_cc': [
+                '<!(llvm-config --cxxflags)',
+            ],
+            'cflags': [
+                '<!(llvm-config --cflags)',
+            ],
         },
     ],
 }
