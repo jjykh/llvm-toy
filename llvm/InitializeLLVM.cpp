@@ -33,18 +33,11 @@ static void initializeAndGetLLVMAPI(void)
     // You think you want to call LLVMInitializeNativeTarget()? Think again. This presumes that
     // LLVM was ./configured correctly, which won't be the case in cross-compilation situations.
 
-    LLVMInitializeX86TargetInfo();
-    LLVMInitializeX86Target();
-    LLVMInitializeX86TargetMC();
-    LLVMInitializeX86AsmPrinter();
-    LLVMInitializeX86Disassembler();
-
-#if LLVM_VERSION_MAJOR >= 4 || (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 6)
-// It's OK to have fast ISel, if it was requested.
-#else
-    // We don't have enough support for fast ISel. Disable it.
-    *enableFastISel = false;
-#endif
+    LLVMInitializeARMTargetInfo();
+    LLVMInitializeARMTarget();
+    LLVMInitializeARMTargetMC();
+    LLVMInitializeARMAsmPrinter();
+    LLVMInitializeARMDisassembler();
 
     initCommandLine("-enable-patchpoint-liveness=true");
 }

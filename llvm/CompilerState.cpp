@@ -12,6 +12,7 @@ CompilerState::CompilerState(const char* moduleName, const PlatformDesc& desc)
 {
     m_context = LLVMContextCreate();
     m_module = LLVMModuleCreateWithNameInContext("test", m_context);
+    LLVMSetTarget(m_module, "armv7-linux-android");
 }
 
 CompilerState::~CompilerState()
