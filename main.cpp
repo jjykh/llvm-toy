@@ -178,6 +178,46 @@ static void patchAssist(void*, uint8_t* p)
     *p++ = 0xE3;
 }
 
+static const char* symbolLookupCallback(void* DisInfo, uint64_t ReferenceValue,
+    uint64_t* ReferenceType,
+    uint64_t ReferencePC,
+    const char** ReferenceName)
+{
+    *ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
+    return nullptr;
+}
+
+static void disassemble(jit::ByteBuffer& code)
+{
+    LLVMDisasmContextRef DCR = LLVMCreateDisasm("x86_64-pc-linux", nullptr, 0,
+        nullptr, symbolLookupCallback);
+
+    uint8_t* BytesP = code.data();
+
+    unsigned NumBytes = code.size();
+    unsigned PC = 0;
+    const char OutStringSize = 100;
+    char OutString[OutStringSize];
+    printf("================================================================================\n");
+    while (NumBytes != 0) {
+
+        size_t InstSize = LLVMDisasmInstruction(DCR, BytesP, NumBytes, PC, OutString,
+            OutStringSize);
+
+        PC += InstSize;
+        BytesP += InstSize;
+        NumBytes -= InstSize;
+        printf("%s\n", OutString);
+    }
+}
+
+static void disassemble(State& state)
+{
+    for (auto& code : state.m_codeSectionList) {
+        disassemble(code);
+    }
+}
+
 int main()
 {
     initLLVM();
@@ -199,5 +239,6 @@ int main()
     dumpModule(state.m_module);
     compile(state);
     link(state);
+    disassemble(state);
     return 0;
 }
