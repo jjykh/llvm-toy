@@ -21,25 +21,24 @@ void llvmCrash(const char* reason)
 
 static void initializeAndGetLLVMAPI(void)
 {
-
     LLVMInstallFatalErrorHandler(llvmCrash);
-
-    if (!LLVMStartMultithreaded()) {
-        llvmCrash("Could not start LLVM multithreading");
-    }
-
-    LLVMLinkInMCJIT();
 
     // You think you want to call LLVMInitializeNativeTarget()? Think again. This presumes that
     // LLVM was ./configured correctly, which won't be the case in cross-compilation situations.
 
+#if 0
     LLVMInitializeARMTargetInfo();
     LLVMInitializeARMTarget();
     LLVMInitializeARMTargetMC();
     LLVMInitializeARMAsmPrinter();
     LLVMInitializeARMDisassembler();
-
-    initCommandLine("-enable-patchpoint-liveness=true");
+#else
+    LLVMInitializeAllTargetInfos();
+    LLVMInitializeAllTargets();
+    LLVMInitializeAllTargetMCs();
+    LLVMInitializeAllAsmPrinters();
+    LLVMInitializeAllDisassemblers();
+#endif
 }
 
 void initLLVM(void)

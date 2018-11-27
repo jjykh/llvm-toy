@@ -47,6 +47,7 @@ struct StackMaps {
     struct StackSize {
         uint64_t functionOffset;
         uint64_t size;
+        uint64_t callSiteCount;
 
         void parse(ParseContext&);
     };

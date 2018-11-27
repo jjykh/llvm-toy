@@ -54,11 +54,19 @@ void StackMaps::StackSize::parse(StackMaps::ParseContext& context)
     case 0:
         functionOffset = context.view->read<uint32_t>(context.offset, true);
         size = context.view->read<uint32_t>(context.offset, true);
+        callSiteCount = -1;
         break;
 
-    default:
+    case 1:
+    case 2:
         functionOffset = context.view->read<uint64_t>(context.offset, true);
         size = context.view->read<uint64_t>(context.offset, true);
+        callSiteCount = -1;
+        break;
+    case 3:
+        functionOffset = context.view->read<uint64_t>(context.offset, true);
+        size = context.view->read<uint64_t>(context.offset, true);
+        callSiteCount = context.view->read<uint64_t>(context.offset, true);
         break;
     }
 }
@@ -136,7 +144,7 @@ RegisterSet StackMaps::Record::liveOutsSet() const
 
 static void merge(RegisterSet& dst, const RegisterSet& input)
 {
-    for (int i = 0; i < input.size(); ++i) {
+    for (size_t i = 0; i < input.size(); ++i) {
         dst.set(i, dst.test(i) ^ input.test(i) ^ dst.test(i));
     }
 }

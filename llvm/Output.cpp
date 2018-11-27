@@ -115,8 +115,8 @@ void Output::buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchS
 {
     LValue constIndex[] = { constInt32(0), constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t)) };
     buildStore(where, LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-    LValue call = buildCall(repo().patchpointInt64Intrinsic(), constIntPtr(m_stackMapsId), constInt32(patchSize), constNull(repo().ref8), constInt32(0));
-    // LLVMSetInstructionCallConv(call, LLVMAnyRegCallConv);
+    LValue call = buildCall(repo().patchpointVoidIntrinsic(), constIntPtr(m_stackMapsId), constInt32(patchSize), constIntToPtr(constInt32(patchSize), repo().ref8), constInt32(1), constIntToPtr(where,repo().ref8));
+    LLVMSetInstructionCallConv(call, LLVMAnyRegCallConv);
     buildUnreachable(m_builder);
     // record the stack map info
     m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));

@@ -35,7 +35,6 @@
           'Debug_Base': {
               'abstract': 1,
               'defines': [
-                  'DEBUG=1',
                   'LOG_LEVEL=5',
               ],
               'conditions': [
