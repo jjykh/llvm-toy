@@ -1,10 +1,10 @@
+#include "Compile.h"
 #include <assert.h>
 #include <string.h>
-#include "log.h"
 #include "CompilerState.h"
-#include "Compile.h"
+#include "log.h"
 
-#include "llvm/IR/Type.h"
+#include <memory>
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -23,6 +23,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/MC/SubtargetFeature.h"
@@ -42,21 +43,18 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include <memory>
 #define SECTION_NAME_PREFIX "."
 #define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
 
 namespace jit {
 typedef CompilerState State;
 
-void compile(State& state)
-{
+void compile(State& state) {
   using namespace llvm;
   // Load the module to be compiled...
   SMDiagnostic Err;
   Module* M = unwrap(state.m_module);
   Triple TheTriple;
-
 
   // If user just wants to list available options, skip module loading
   TheTriple = Triple(Triple::normalize(M->getTargetTriple()));
@@ -66,8 +64,8 @@ void compile(State& state)
 
   // Get the target specific parser.
   std::string Error;
-  const Target *TheTarget = TargetRegistry::lookupTarget(MArch, TheTriple,
-                                                         Error);
+  const Target* TheTarget =
+      TargetRegistry::lookupTarget(MArch, TheTriple, Error);
   if (!TheTarget) {
     errs() << ": " << Error;
     return;
@@ -93,7 +91,6 @@ void compile(State& state)
 
   assert(Target && "Could not allocate target machine!");
 
-
   assert(M && "Should have exited if we didn't have a module!");
   if (FloatABIForCalls != FloatABI::Default)
     Options.FloatABIType = FloatABIForCalls;
@@ -118,14 +115,15 @@ void compile(State& state)
     SmallVector<char, 0> Buffer;
     std::unique_ptr<raw_svector_ostream> BOS;
     BOS = make_unique<raw_svector_ostream>(Buffer);
-    raw_pwrite_stream *OS = BOS.get();
+    raw_pwrite_stream* OS = BOS.get();
 
-    LLVMTargetMachine &LLVMTM = static_cast<LLVMTargetMachine&>(*Target);
-    MachineModuleInfo *MMI = new MachineModuleInfo(&LLVMTM);
+    LLVMTargetMachine& LLVMTM = static_cast<LLVMTargetMachine&>(*Target);
+    MachineModuleInfo* MMI = new MachineModuleInfo(&LLVMTM);
 
     // Construct a custom pass pipeline that starts after instruction
     // selection.
-    if (Target->addPassesToEmitFile(PM, *OS, nullptr, TargetMachine::CGFT_AssemblyFile, false, MMI)) {
+    if (Target->addPassesToEmitFile(
+            PM, *OS, nullptr, TargetMachine::CGFT_AssemblyFile, false, MMI)) {
       errs() << ": target does not support generation of this"
              << " file type!\n";
       return;
@@ -135,4 +133,4 @@ void compile(State& state)
     printf("%s\n", Buffer.data());
   }
 }
-}
+}  // namespace jit

@@ -3,14 +3,14 @@
 #ifdef LLVMLOG_LEVEL
 // always print LOGE
 #define LOGE(...) __my_log('E', __VA_ARGS__)
-#define EMASSERT(p)                               \
-    if (!(p)) {                                   \
-        __my_assert_fail(#p, __FILE__, __LINE__); \
-    }
+#define EMASSERT(p)                           \
+  if (!(p)) {                                 \
+    __my_assert_fail(#p, __FILE__, __LINE__); \
+  }
 
 #if LLVMLOG_LEVEL >= 10
 #define LOGV(...) __my_log('V', __VA_ARGS__)
-#endif // DEFINING LOGV
+#endif  // DEFINING LOGV
 
 #if LLVMLOG_LEVEL >= 4
 // debug log
@@ -24,13 +24,15 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif //__cplusplus
-void __my_log(char type, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
-void __my_assert_fail(const char* msg, const char* file_name, int lineno) __attribute__((noreturn));
+#endif  //__cplusplus
+void __my_log(char type, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+void __my_assert_fail(const char* msg, const char* file_name, int lineno)
+    __attribute__((noreturn));
 #ifdef __cplusplus
 }
-#endif //__cplusplus
-#endif // LLVMLOG_LEVEL
+#endif  //__cplusplus
+#endif  // LLVMLOG_LEVEL
 
 #ifndef LOGE
 #define LOGE(...)

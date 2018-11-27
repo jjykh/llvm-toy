@@ -5,5 +5,5 @@ namespace jit {
 struct CompilerState;
 void compile(CompilerState& state);
 
-}
+}  // namespace jit
 #endif /* COMPILE_H */
