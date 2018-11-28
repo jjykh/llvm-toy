@@ -1,0 +1,1410 @@
+--- BLOCK B0 ---
+  1: Parameter[0](0)
+  2: Parameter[1](0)
+  3: Parameter[2](0)
+  4: Parameter[3](0)
+  5: Parameter[4](0)
+  7: LoadParentFramePointer
+  8: Int32Constant[-8]
+  9: Load[kRepTagged|kTypeAny](7, 8)
+  10: Int32Constant[23]
+  11: Load[kRepTagged|kTypeAny](9, 10)
+  12: Int32Constant[3]
+  13: Load[kRepTagged|kTypeAny](11, 12)
+  14: Int32Constant[3]
+  15: Int32Add(2, 14)
+  16: Load[kRepWord8|kTypeUint32](3, 15)
+  17: Int32Constant[1]
+  18: Word32Shl(16, 17)
+  19: Int32Constant[1]
+  20: Int32Add(2, 19)
+  21: Load[kRepWord8|kTypeInt32](3, 20)
+  22: Int32Constant[2]
+  23: Word32Shl(21, 22)
+  24: Load[kRepTagged|kTypeAny](7, 23)
+  25: Int32Constant[2]
+  26: Int32Add(2, 25)
+  27: Load[kRepWord8|kTypeUint32](3, 26)
+  28: Int32Constant[7]
+  29: Load[kRepTagged|kTypeAny](3, 28)
+  30: Int32Constant[2]
+  31: Word32Shl(27, 30)
+  32: Int32Constant[7]
+  33: Int32Add(32, 31)
+  34: Load[kRepTagged|kTypeAny](29, 33)
+  35: Int32Constant[-4]
+  36: Load[kRepTagged|kTypeAny](7, 35)
+  37: Int32Constant[1]
+  38: Word32And(24, 37)
+  39: Int32Constant[0]
+  40: Word32Equal(38, 39)
+  41: Branch[None](40) -> B2, B1
+--- BLOCK B1 <- B0 ---
+  43: Int32Constant[-1]
+  44: Load[kRepTagged|kTypeAny](24, 43)
+  Goto -> B3
+--- BLOCK B2 <- B0 ---
+  42: HeapConstant[0x5ff845d9 <Map(HOLEY_ELEMENTS)>]
+  Goto -> B3
+--- BLOCK B3 <- B2, B1 ---
+  45: Phi[kRepTagged](42, 44, 0)
+  46: Int32Constant[11]
+  47: Load[kRepWord32|kTypeUint32](45, 46)
+  48: Int32Constant[8388608]
+  49: Word32And(47, 48)
+  50: Int32Constant[0]
+  51: Word32Equal(49, 50)
+  52: Int32Constant[0]
+  53: Word32Equal(51, 52)
+  54: Branch[None](53) -> B232, B4
+--- BLOCK B4 <- B3 ---
+  55: Int32Constant[1]
+  56: Word32Shl(18, 55)
+  57: Int32Constant[0]
+  58: Int32Constant[27]
+  59: Int32Add(56, 58)
+  60: Load[kRepTagged|kTypeAny](13, 59)
+  61: Int32Constant[3]
+  62: Load[kRepTagged|kTypeAny](60, 61)
+  63: Word32Equal(45, 62)
+  64: Int32Constant[0]
+  65: Word32Equal(63, 64)
+  66: Branch[None](65) -> B6, B5
+--- BLOCK B5 <- B4 ---
+  67: Int32Constant[31]
+  68: Int32Add(56, 67)
+  69: Load[kRepTagged|kTypeAny](13, 68)
+  Goto -> B25
+--- BLOCK B6 <- B4 ---
+  909: Int32Constant[-1]
+  910: Load[kRepTagged|kTypeAny](60, 909)
+  911: HeapConstant[0x5ff84129 <Map(HOLEY_ELEMENTS)>]
+  912: Word32Equal(910, 911)
+  913: Branch[None](912) -> B8, B7
+--- BLOCK B7 (deferred) <- B6 ---
+  1001: HeapConstant[0x58de0041 <Code BUILTIN>]
+  1002: Int32Constant[-16]
+  1003: Int32Constant[1]
+  1004: Word32Shl(2, 1003)
+  1005: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 1002, 1004)
+  1006: Call[Code:LoadWithVector Descriptor:r1s0i6f0t0](1001, 24, 34, 18, 13, 36)
+  Goto -> B235
+--- BLOCK B8 <- B6 ---
+  914: Int32Constant[0]
+  915: Int32Constant[7]
+  916: Load[kRepTagged|kTypeAny](60, 915)
+  917: Int32Constant[3]
+  918: Load[kRepTagged|kTypeAny](916, 917)
+  919: Word32Equal(45, 918)
+  920: Int32Constant[0]
+  921: Word32Equal(919, 920)
+  922: Branch[None](921) -> B10, B9
+--- BLOCK B9 <- B8 ---
+  923: Int32Constant[1]
+  924: Int32Constant[11]
+  925: Load[kRepTagged|kTypeAny](60, 924)
+  Goto -> B25
+--- BLOCK B10 <- B8 ---
+  926: Int32Constant[2]
+  927: Int32Constant[15]
+  928: Load[kRepTagged|kTypeAny](60, 927)
+  929: Int32Constant[3]
+  930: Load[kRepTagged|kTypeAny](928, 929)
+  931: Word32Equal(45, 930)
+  932: Int32Constant[0]
+  933: Word32Equal(931, 932)
+  934: Branch[None](933) -> B12, B11
+--- BLOCK B11 <- B10 ---
+  935: Int32Constant[3]
+  936: Int32Constant[19]
+  937: Load[kRepTagged|kTypeAny](60, 936)
+  Goto -> B25
+--- BLOCK B12 <- B10 ---
+  938: Int32Constant[3]
+  939: Load[kRepTagged|kTypeAny](60, 938)
+  940: Int32Constant[10]
+  941: Int32LessThanOrEqual(939, 940)
+  942: Branch[None](941) -> B231, B13
+--- BLOCK B13 <- B12 ---
+  943: Int32Constant[4]
+  944: Int32Constant[23]
+  945: Load[kRepTagged|kTypeAny](60, 944)
+  946: Int32Constant[3]
+  947: Load[kRepTagged|kTypeAny](945, 946)
+  948: Word32Equal(45, 947)
+  949: Int32Constant[0]
+  950: Word32Equal(948, 949)
+  951: Branch[None](950) -> B15, B14
+--- BLOCK B14 <- B13 ---
+  952: Int32Constant[5]
+  953: Int32Constant[27]
+  954: Load[kRepTagged|kTypeAny](60, 953)
+  Goto -> B25
+--- BLOCK B15 <- B13 ---
+  955: Int32Constant[14]
+  956: Int32LessThanOrEqual(939, 955)
+  957: Branch[None](956) -> B230, B16
+--- BLOCK B16 <- B15 ---
+  958: Int32Constant[6]
+  959: Int32Constant[31]
+  960: Load[kRepTagged|kTypeAny](60, 959)
+  961: Int32Constant[3]
+  962: Load[kRepTagged|kTypeAny](960, 961)
+  963: Word32Equal(45, 962)
+  964: Int32Constant[0]
+  965: Word32Equal(963, 964)
+  966: Branch[None](965) -> B18, B17
+--- BLOCK B17 <- B16 ---
+  967: Int32Constant[7]
+  968: Int32Constant[35]
+  969: Load[kRepTagged|kTypeAny](60, 968)
+  Goto -> B25
+--- BLOCK B18 <- B16 ---
+  Goto -> B19
+--- BLOCK B19 (deferred) <- B18 ---
+  970: Int32Constant[8]
+  971: Int32Constant[3]
+  972: Load[kRepTagged|kTypeAny](60, 971)
+  973: Int32Constant[1]
+  974: Word32Sar(972, 973)
+  975: Word32Equal(970, 974)
+  976: Branch[None](975) -> B228, B20
+--- BLOCK B20 (deferred) <- B19 ---
+  Goto -> B21
+--- BLOCK B21 (deferred) <- B20, B23 ---
+  977: Phi[kRepWord32](970, 995, 0)
+  978: Int32Constant[2]
+  979: Word32Shl(977, 978)
+  980: Int32Constant[7]
+  981: Int32Add(980, 979)
+  982: Load[kRepTagged|kTypeAny](60, 981)
+  983: Int32Constant[3]
+  984: Load[kRepTagged|kTypeAny](982, 983)
+  985: Word32Equal(45, 984)
+  986: Int32Constant[0]
+  987: Word32Equal(985, 986)
+  988: Branch[None](987) -> B22, B24
+--- BLOCK B22 (deferred) <- B21 ---
+  994: Int32Constant[2]
+  995: Int32Add(977, 994)
+  996: Word32Equal(995, 974)
+  997: Int32Constant[0]
+  998: Word32Equal(996, 997)
+  999: Branch[None](998) -> B23, B227
+--- BLOCK B23 (deferred) <- B22 ---
+  Goto -> B21
+--- BLOCK B24 (deferred) <- B21 ---
+  989: Int32Constant[2]
+  990: Word32Shl(977, 989)
+  991: Int32Constant[11]
+  992: Int32Add(991, 990)
+  993: Load[kRepTagged|kTypeAny](60, 992)
+  Goto -> B25
+--- BLOCK B25 <- B5, B9, B11, B14, B17, B24 ---
+  70: Phi[kRepTagged](69, 925, 937, 954, 969, 993, 0)
+  71: Int32Constant[1]
+  72: Word32And(70, 71)
+  73: Int32Constant[0]
+  74: Word32Equal(72, 73)
+  75: Branch[None](74) -> B101, B26
+--- BLOCK B26 (deferred) <- B25 ---
+  627: Int32Constant[-1]
+  628: Load[kRepTagged|kTypeAny](70, 627)
+  629: HeapConstant[0x5ff84df9 <Map(HOLEY_ELEMENTS)>]
+  630: Word32Equal(628, 629)
+  631: Branch[None](630) -> B100, B27
+--- BLOCK B27 (deferred) <- B26 ---
+  632: Int32Constant[11]
+  633: Load[kRepTagged|kTypeAny](70, 632)
+  634: Int32Constant[0]
+  635: Word32Equal(633, 634)
+  636: Branch[None](635) -> B31, B28
+--- BLOCK B28 (deferred) <- B27 ---
+  637: Int32Constant[3]
+  638: Load[kRepTagged|kTypeAny](633, 637)
+  639: Int32Constant[0]
+  640: Word32Equal(638, 639)
+  641: Int32Constant[0]
+  642: Word32Equal(640, 641)
+  643: Branch[None](642) -> B30, B29
+--- BLOCK B29 (deferred) <- B28 ---
+  Goto -> B32
+--- BLOCK B30 (deferred) <- B28 ---
+  Goto -> B233
+--- BLOCK B31 (deferred) <- B27 ---
+  Goto -> B32
+--- BLOCK B32 (deferred) <- B31, B29 ---
+  644: Int32Constant[7]
+  645: Load[kRepTagged|kTypeAny](70, 644)
+  646: Int32Constant[1]
+  647: Word32Sar(645, 646)
+  648: Int32Constant[32]
+  649: Word32And(647, 648)
+  650: Int32Constant[0]
+  651: Word32Equal(649, 650)
+  652: Int32Constant[0]
+  653: Word32Equal(651, 652)
+  654: Branch[None](653) -> B34, B33
+--- BLOCK B33 (deferred) <- B32 ---
+  Goto -> B92
+--- BLOCK B34 (deferred) <- B32 ---
+  655: Int32Constant[3]
+  656: Load[kRepTagged|kTypeAny](24, 655)
+  657: Int32Constant[1]
+  658: Word32And(656, 657)
+  659: Int32Constant[0]
+  660: Word32Equal(658, 659)
+  661: HeapConstant[0x57f857f9 <HashTable[8]>]
+  662: Branch[None](660) -> B36, B35
+--- BLOCK B35 (deferred) <- B34 ---
+  Goto -> B37
+--- BLOCK B36 (deferred) <- B34 ---
+  Goto -> B37
+--- BLOCK B37 (deferred) <- B36, B35 ---
+  663: Phi[kRepTagged](661, 656, 0)
+  664: Int32Constant[2]
+  665: Int32Constant[15]
+  666: Load[kRepTagged|kTypeAny](663, 665)
+  667: Int32Constant[1]
+  668: Word32Sar(666, 667)
+  669: Int32Constant[1]
+  670: Int32Sub(668, 669)
+  671: Int32Constant[3]
+  672: Load[kRepWord32|kTypeUint32](34, 671)
+  673: Int32Constant[2]
+  674: Word32Shr(672, 673)
+  675: Int32Constant[0]
+  676: Word32And(674, 670)
+  677: HeapConstant[0x57f84125 <undefined>]
+  678: Int32Constant[3]
+  679: Int32Mul(676, 678)
+  680: Int32Constant[5]
+  681: Int32Add(679, 680)
+  682: Int32Constant[2]
+  683: Word32Shl(681, 682)
+  684: Int32Constant[7]
+  685: Int32Add(684, 683)
+  686: Load[kRepTagged|kTypeAny](663, 685)
+  687: Word32Equal(686, 677)
+  688: Branch[None](687) -> B91, B38
+--- BLOCK B38 (deferred) <- B37 ---
+  689: Word32Equal(686, 34)
+  690: Branch[None](689) -> B57, B39
+--- BLOCK B39 (deferred) <- B38 ---
+  691: Int32Constant[1]
+  692: Int32Add(676, 691)
+  693: Word32And(692, 670)
+  694: Int32Constant[3]
+  695: Int32Mul(693, 694)
+  696: Int32Constant[5]
+  697: Int32Add(695, 696)
+  698: Int32Constant[2]
+  699: Word32Shl(697, 698)
+  700: Int32Constant[7]
+  701: Int32Add(700, 699)
+  702: Load[kRepTagged|kTypeAny](663, 701)
+  703: Word32Equal(702, 677)
+  704: Branch[None](703) -> B56, B40
+--- BLOCK B40 (deferred) <- B39 ---
+  705: Word32Equal(702, 34)
+  706: Branch[None](705) -> B55, B41
+--- BLOCK B41 (deferred) <- B40 ---
+  707: Int32Constant[2]
+  708: Int32Add(693, 707)
+  709: Word32And(708, 670)
+  710: Int32Constant[3]
+  711: Int32Mul(709, 710)
+  712: Int32Constant[5]
+  713: Int32Add(711, 712)
+  714: Int32Constant[2]
+  715: Word32Shl(713, 714)
+  716: Int32Constant[7]
+  717: Int32Add(716, 715)
+  718: Load[kRepTagged|kTypeAny](663, 717)
+  719: Word32Equal(718, 677)
+  720: Branch[None](719) -> B54, B42
+--- BLOCK B42 (deferred) <- B41 ---
+  721: Word32Equal(718, 34)
+  722: Branch[None](721) -> B53, B43
+--- BLOCK B43 (deferred) <- B42 ---
+  723: Int32Constant[3]
+  724: Int32Add(709, 723)
+  725: Word32And(724, 670)
+  726: Int32Constant[3]
+  727: Int32Mul(725, 726)
+  728: Int32Constant[5]
+  729: Int32Add(727, 728)
+  730: Int32Constant[2]
+  731: Word32Shl(729, 730)
+  732: Int32Constant[7]
+  733: Int32Add(732, 731)
+  734: Load[kRepTagged|kTypeAny](663, 733)
+  735: Word32Equal(734, 677)
+  736: Branch[None](735) -> B52, B44
+--- BLOCK B44 (deferred) <- B43 ---
+  737: Word32Equal(734, 34)
+  738: Branch[None](737) -> B51, B45
+--- BLOCK B45 (deferred) <- B44 ---
+  739: Int32Constant[4]
+  740: Int32Add(725, 739)
+  741: Word32And(740, 670)
+  Goto -> B46
+--- BLOCK B46 (deferred) <- B45, B48 ---
+  742: Phi[kRepWord32](729, 748, 0)
+  743: Phi[kRepWord32](739, 759, 0)
+  744: Phi[kRepWord32](741, 761, 0)
+  745: Int32Constant[3]
+  746: Int32Mul(744, 745)
+  747: Int32Constant[5]
+  748: Int32Add(746, 747)
+  749: Int32Constant[2]
+  750: Word32Shl(748, 749)
+  751: Int32Constant[7]
+  752: Int32Add(751, 750)
+  753: Load[kRepTagged|kTypeAny](663, 752)
+  754: Word32Equal(753, 677)
+  755: Branch[None](754) -> B50, B47
+--- BLOCK B47 (deferred) <- B46 ---
+  756: Word32Equal(753, 34)
+  757: Branch[None](756) -> B49, B48
+--- BLOCK B48 (deferred) <- B47 ---
+  758: Int32Constant[1]
+  759: Int32Add(743, 758)
+  760: Int32Add(744, 759)
+  761: Word32And(760, 670)
+  Goto -> B46
+--- BLOCK B49 (deferred) <- B47 ---
+  Goto -> B58
+--- BLOCK B50 (deferred) <- B46 ---
+  Goto -> B92
+--- BLOCK B51 (deferred) <- B44 ---
+  Goto -> B58
+--- BLOCK B52 (deferred) <- B43 ---
+  Goto -> B92
+--- BLOCK B53 (deferred) <- B42 ---
+  Goto -> B58
+--- BLOCK B54 (deferred) <- B41 ---
+  Goto -> B92
+--- BLOCK B55 (deferred) <- B40 ---
+  Goto -> B58
+--- BLOCK B56 (deferred) <- B39 ---
+  Goto -> B92
+--- BLOCK B57 (deferred) <- B38 ---
+  Goto -> B58
+--- BLOCK B58 (deferred) <- B57, B55, B53, B51, B49 ---
+  762: Phi[kRepWord32](681, 697, 713, 729, 748, 0)
+  763: Int32Constant[2]
+  764: Word32Shl(762, 763)
+  765: Int32Constant[15]
+  766: Int32Add(765, 764)
+  767: Load[kRepTagged|kTypeAny](663, 766)
+  768: Int32Constant[1]
+  769: Word32Sar(767, 768)
+  770: Int32Constant[2]
+  771: Word32Shl(762, 770)
+  772: Int32Constant[11]
+  773: Int32Add(772, 771)
+  774: Load[kRepTagged|kTypeAny](663, 773)
+  775: Int32Constant[1]
+  776: Word32And(769, 775)
+  777: Int32Constant[0]
+  778: Word32Equal(776, 777)
+  779: Branch[None](778) -> B89, B59
+--- BLOCK B59 (deferred) <- B58 ---
+  780: Int32Constant[-1]
+  781: Load[kRepTagged|kTypeAny](774, 780)
+  782: HeapConstant[0x5ff84219 <Map(PACKED_SMI_ELEMENTS)>]
+  783: Word32Equal(781, 782)
+  784: Branch[None](783) -> B84, B60
+--- BLOCK B60 (deferred) <- B59 ---
+  811: Int32Constant[-1]
+  812: Load[kRepTagged|kTypeAny](24, 811)
+  813: Int32Constant[7]
+  814: Load[kRepWord8|kTypeUint32](812, 813)
+  815: Int32Constant[197]
+  816: Word32Equal(814, 815)
+  817: Branch[None](816) -> B81, B61
+--- BLOCK B61 (deferred) <- B60 ---
+  818: Int32Constant[255]
+  819: Word32Equal(814, 818)
+  820: Branch[None](819) -> B71, B62
+--- BLOCK B62 (deferred) <- B61 ---
+  821: Int32Constant[188]
+  822: Word32Equal(814, 821)
+  823: Branch[None](822) -> B64, B63
+--- BLOCK B63 (deferred) <- B62 ---
+  Goto -> B233
+--- BLOCK B64 (deferred) <- B62 ---
+  858: Int32Constant[3]
+  859: Load[kRepTagged|kTypeAny](774, 858)
+  860: HeapConstant[0x57f84cd9 <String[6]: length>]
+  861: Word32Equal(859, 860)
+  862: Branch[None](861) -> B66, B65
+--- BLOCK B65 (deferred) <- B64 ---
+  Goto -> B233
+--- BLOCK B66 (deferred) <- B64 ---
+  863: Int32Constant[11]
+  864: Load[kRepTagged|kTypeAny](24, 863)
+  865: Int32Constant[1]
+  866: Word32And(864, 865)
+  867: Int32Constant[0]
+  868: Word32Equal(866, 867)
+  869: Int32Constant[0]
+  870: Word32Equal(868, 869)
+  871: Branch[None](870) -> B68, B67
+--- BLOCK B67 (deferred) <- B66 ---
+  Goto -> B233
+--- BLOCK B68 (deferred) <- B66 ---
+  872: Int32Constant[-1]
+  873: Load[kRepTagged|kTypeAny](864, 872)
+  874: Int32Constant[7]
+  875: Load[kRepWord8|kTypeUint32](873, 874)
+  876: Int32Constant[128]
+  877: Int32LessThan(875, 876)
+  878: Branch[None](877) -> B70, B69
+--- BLOCK B69 (deferred) <- B68 ---
+  Goto -> B233
+--- BLOCK B70 (deferred) <- B68 ---
+  879: Int32Constant[7]
+  880: Load[kRepTagged|kTypeAny](864, 879)
+  Goto -> B90
+--- BLOCK B71 (deferred) <- B61 ---
+  831: Int32Constant[3]
+  832: Load[kRepTagged|kTypeAny](774, 831)
+  833: HeapConstant[0x57f84ff1 <String[9]: prototype>]
+  834: Word32Equal(832, 833)
+  835: Branch[None](834) -> B73, B72
+--- BLOCK B72 (deferred) <- B71 ---
+  Goto -> B233
+--- BLOCK B73 (deferred) <- B71 ---
+  836: Int32Constant[8]
+  837: Load[kRepWord8|kTypeUint32](812, 836)
+  838: Int32Constant[1]
+  839: Word32And(837, 838)
+  840: Int32Constant[0]
+  841: Word32Equal(839, 840)
+  842: Int32Constant[0]
+  843: Word32Equal(841, 842)
+  844: Branch[None](843) -> B80, B74
+--- BLOCK B74 (deferred) <- B73 ---
+  845: Int32Constant[11]
+  846: Load[kRepTagged|kTypeAny](24, 845)
+  847: HeapConstant[0x57f84141 <the_hole>]
+  848: Word32Equal(846, 847)
+  849: Branch[None](848) -> B79, B75
+--- BLOCK B75 (deferred) <- B74 ---
+  850: Int32Constant[-1]
+  851: Load[kRepTagged|kTypeAny](846, 850)
+  852: HeapConstant[0x5ff84101 <Map(PACKED_SMI_ELEMENTS)>]
+  853: Word32Equal(851, 852)
+  854: Branch[None](853) -> B77, B76
+--- BLOCK B76 (deferred) <- B75 ---
+  Goto -> B78
+--- BLOCK B77 (deferred) <- B75 ---
+  855: Int32Constant[15]
+  856: Load[kRepTagged|kTypeAny](846, 855)
+  Goto -> B78
+--- BLOCK B78 (deferred) <- B76, B77 ---
+  857: Phi[kRepTagged](846, 856, 0)
+  Goto -> B90
+--- BLOCK B79 (deferred) <- B74 ---
+  Goto -> B233
+--- BLOCK B80 (deferred) <- B73 ---
+  Goto -> B233
+--- BLOCK B81 (deferred) <- B60 ---
+  824: Int32Constant[3]
+  825: Load[kRepTagged|kTypeAny](774, 824)
+  826: HeapConstant[0x57f84cd9 <String[6]: length>]
+  827: Word32Equal(825, 826)
+  828: Branch[None](827) -> B83, B82
+--- BLOCK B82 (deferred) <- B81 ---
+  Goto -> B233
+--- BLOCK B83 (deferred) <- B81 ---
+  829: Int32Constant[11]
+  830: Load[kRepTagged|kTypeAny](24, 829)
+  Goto -> B90
+--- BLOCK B84 (deferred) <- B59 ---
+  785: Int32Constant[3]
+  786: Load[kRepTagged|kTypeAny](774, 785)
+  787: Int32Constant[-1]
+  788: Load[kRepTagged|kTypeAny](786, 787)
+  789: Int32Constant[7]
+  790: Load[kRepWord8|kTypeUint32](788, 789)
+  791: Int32Constant[154]
+  792: Word32Equal(790, 791)
+  793: Branch[None](792) -> B88, B85
+--- BLOCK B85 (deferred) <- B84 ---
+  794: HeapConstant[0x57f84125 <undefined>]
+  795: Int32Constant[8]
+  796: Load[kRepWord8|kTypeUint32](788, 795)
+  797: Int32Constant[2]
+  798: Word32And(796, 797)
+  799: Int32Constant[0]
+  800: Word32Equal(798, 799)
+  801: Int32Constant[0]
+  802: Word32Equal(800, 801)
+  803: Branch[None](802) -> B87, B86
+--- BLOCK B86 (deferred) <- B85 ---
+  Goto -> B90
+--- BLOCK B87 (deferred) <- B85 ---
+  804: Int32Constant[0]
+  805: HeapConstant[0x58d974a1 <Code BUILTIN>]
+  806: Int32Constant[-16]
+  807: Int32Constant[1]
+  808: Word32Shl(2, 807)
+  809: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 806, 808)
+  810: Call[Code:CallTrampoline Descriptor:r1s1i5f0t0](805, 786, 804, 24, 36)
+  Goto -> B90
+--- BLOCK B88 (deferred) <- B84 ---
+  Goto -> B233
+--- BLOCK B89 (deferred) <- B58 ---
+  Goto -> B90
+--- BLOCK B90 (deferred) <- B89, B86, B87, B83, B78, B70 ---
+  881: Phi[kRepTagged](774, 794, 810, 830, 857, 880, 0)
+  Goto -> B235
+--- BLOCK B91 (deferred) <- B37 ---
+  Goto -> B92
+--- BLOCK B92 (deferred) <- B33, B91, B56, B54, B52, B50 ---
+  882: Int32Constant[3]
+  883: Load[kRepTagged|kTypeAny](70, 882)
+  884: Int32Constant[1]
+  885: Word32And(883, 884)
+  886: Int32Constant[0]
+  887: Word32Equal(885, 886)
+  888: Branch[None](887) -> B99, B93
+--- BLOCK B93 (deferred) <- B92 ---
+  889: HeapConstant[0x57f84109 <null>]
+  890: Word32Equal(883, 889)
+  891: Branch[None](890) -> B97, B94
+--- BLOCK B94 (deferred) <- B93 ---
+  892: Int32Constant[3]
+  893: Load[kRepTagged|kTypeAny](883, 892)
+  894: Int32Constant[0]
+  895: Word32Equal(893, 894)
+  896: Branch[None](895) -> B96, B95
+--- BLOCK B95 (deferred) <- B94 ---
+  Goto -> B98
+--- BLOCK B96 (deferred) <- B94 ---
+  Goto -> B233
+--- BLOCK B97 (deferred) <- B93 ---
+  Goto -> B98
+--- BLOCK B98 (deferred) <- B97, B95 ---
+  897: Phi[kRepTagged](24, 893, 0)
+  Goto -> B102
+--- BLOCK B99 (deferred) <- B92 ---
+  898: HeapConstant[0x58da6b41 <Code BUILTIN>]
+  899: Int32Constant[-16]
+  900: Int32Constant[1]
+  901: Word32Shl(2, 900)
+  902: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 899, 901)
+  903: Call[Code:LoadICProtoArray Descriptor:r1s0i7f0t0](898, 24, 34, 18, 13, 70, 36)
+  Goto -> B235
+--- BLOCK B100 (deferred) <- B26 ---
+  904: Int32Constant[-16]
+  905: Int32Constant[1]
+  906: Word32Shl(2, 905)
+  907: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 904, 906)
+  908: Call[Code:LoadWithVector Descriptor:r1s0i6f0t0](70, 24, 34, 18, 13, 36)
+  Goto -> B235
+--- BLOCK B101 <- B25 ---
+  Goto -> B102
+--- BLOCK B102 <- B101, B98 ---
+  76: Phi[kRepTagged](24, 897, 0)
+  77: Phi[kRepTagged](70, 645, 0)
+  78: Int32Constant[1]
+  79: Word32Sar(77, 78)
+  80: Int32Constant[15]
+  81: Word32And(79, 80)
+  82: Int32Constant[3]
+  83: Word32Equal(81, 82)
+  84: Branch[None](83) -> B213, B103
+--- BLOCK B103 <- B102 ---
+  85: Int32Constant[4]
+  86: Word32Equal(81, 85)
+  87: Branch[None](86) -> B210, B104
+--- BLOCK B104 <- B103 ---
+  88: Int32Constant[8]
+  89: Word32Equal(81, 88)
+  90: Branch[None](89) -> B209, B105
+--- BLOCK B105 <- B104 ---
+  91: Int32Constant[1]
+  92: Word32Equal(81, 91)
+  93: Branch[None](92) -> B151, B106
+--- BLOCK B106 <- B105 ---
+  94: Int32Constant[5]
+  95: Word32Equal(81, 94)
+  96: Branch[None](95) -> B150, B107
+--- BLOCK B107 <- B106 ---
+  97: Int32Constant[2]
+  98: Word32Equal(81, 97)
+  99: Branch[None](98) -> B115, B108
+--- BLOCK B108 <- B107 ---
+  100: Int32Constant[7]
+  101: Word32Equal(81, 100)
+  102: Branch[None](101) -> B114, B109
+--- BLOCK B109 <- B108 ---
+  103: Int32Constant[9]
+  104: Word32Equal(81, 103)
+  105: Branch[None](104) -> B111, B110
+--- BLOCK B110 (deferred) <- B109 ---
+  559: HeapConstant[0x58d86001 <Code STUB>]
+  560: ExternalConstant[0x9a57e44]
+  561: Int32Constant[5]
+  562: Int32Constant[-16]
+  563: Int32Constant[1]
+  564: Word32Shl(2, 563)
+  565: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 562, 564)
+  566: Call[Code:LoadPropertyWithInterceptor:r1s5i9f0t0](559, 34, 24, 76, 18, 13, 560, 561, 36)
+  Goto -> B235
+--- BLOCK B111 (deferred) <- B109 ---
+  567: Int32Constant[2147483632]
+  568: Word32And(79, 567)
+  569: Int32Constant[4]
+  570: Word32Shr(568, 569)
+  571: Int32Constant[11]
+  572: Load[kRepTaggedPointer|kTypeAny](24, 571)
+  573: Int32Constant[7]
+  574: Load[kRepTaggedPointer|kTypeAny](572, 573)
+  575: Int32Constant[2]
+  576: Word32Shl(570, 575)
+  577: Int32Constant[7]
+  578: Int32Add(577, 576)
+  579: Load[kRepTagged|kTypeAny](574, 578)
+  580: Int32Constant[3]
+  581: Load[kRepTagged|kTypeAny](579, 580)
+  582: HeapConstant[0x57f84141 <the_hole>]
+  583: Word32Equal(581, 582)
+  584: Branch[None](583) -> B113, B112
+--- BLOCK B112 (deferred) <- B111 ---
+  Goto -> B235
+--- BLOCK B113 (deferred) <- B111 ---
+  585: Int32Constant[312]
+  586: HeapConstant[0x58d86001 <Code STUB>]
+  587: ExternalConstant[0x9a12c14]
+  588: Int32Constant[2]
+  589: Int32Constant[-16]
+  590: Int32Constant[1]
+  591: Word32Shl(2, 590)
+  592: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 589, 591)
+  593: Call[Code:ThrowReferenceError:r1s2i6f0t0](586, 585, 34, 587, 588, 36)
+  Goto -> B235
+--- BLOCK B114 (deferred) <- B108 ---
+  437: HeapConstant[0x5d897481 <Code BUILTIN>]
+  438: Int32Constant[-16]
+  439: Int32Constant[1]
+  440: Word32Shl(2, 439)
+  441: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 438, 440)
+  442: Call[Code:ProxyGetProperty Descriptor:r1s0i5f0t0](437, 76, 34, 24, 36)
+  Goto -> B235
+--- BLOCK B115 (deferred) <- B107 ---
+  443: Int32Constant[11]
+  444: Load[kRepTagged|kTypeAny](76, 443)
+  445: Int32Constant[3]
+  446: Load[kRepTagged|kTypeAny](76, 445)
+  447: Int32Constant[1]
+  448: Word32Sar(446, 447)
+  449: HeapConstant[0x57f84141 <the_hole>]
+  450: Word32Equal(444, 449)
+  451: Branch[None](450) -> B149, B116
+--- BLOCK B116 (deferred) <- B115 ---
+  452: Int32Constant[1]
+  453: Word32And(448, 452)
+  454: Int32Constant[0]
+  455: Word32Equal(453, 454)
+  456: Branch[None](455) -> B147, B117
+--- BLOCK B117 (deferred) <- B116 ---
+  457: Int32Constant[-1]
+  458: Load[kRepTagged|kTypeAny](444, 457)
+  459: HeapConstant[0x5ff84219 <Map(PACKED_SMI_ELEMENTS)>]
+  460: Word32Equal(458, 459)
+  461: Branch[None](460) -> B142, B118
+--- BLOCK B118 (deferred) <- B117 ---
+  488: Int32Constant[-1]
+  489: Load[kRepTagged|kTypeAny](24, 488)
+  490: Int32Constant[7]
+  491: Load[kRepWord8|kTypeUint32](489, 490)
+  492: Int32Constant[197]
+  493: Word32Equal(491, 492)
+  494: Branch[None](493) -> B139, B119
+--- BLOCK B119 (deferred) <- B118 ---
+  495: Int32Constant[255]
+  496: Word32Equal(491, 495)
+  497: Branch[None](496) -> B129, B120
+--- BLOCK B120 (deferred) <- B119 ---
+  498: Int32Constant[188]
+  499: Word32Equal(491, 498)
+  500: Branch[None](499) -> B122, B121
+--- BLOCK B121 (deferred) <- B120 ---
+  Goto -> B233
+--- BLOCK B122 (deferred) <- B120 ---
+  535: Int32Constant[3]
+  536: Load[kRepTagged|kTypeAny](444, 535)
+  537: HeapConstant[0x57f84cd9 <String[6]: length>]
+  538: Word32Equal(536, 537)
+  539: Branch[None](538) -> B124, B123
+--- BLOCK B123 (deferred) <- B122 ---
+  Goto -> B233
+--- BLOCK B124 (deferred) <- B122 ---
+  540: Int32Constant[11]
+  541: Load[kRepTagged|kTypeAny](24, 540)
+  542: Int32Constant[1]
+  543: Word32And(541, 542)
+  544: Int32Constant[0]
+  545: Word32Equal(543, 544)
+  546: Int32Constant[0]
+  547: Word32Equal(545, 546)
+  548: Branch[None](547) -> B126, B125
+--- BLOCK B125 (deferred) <- B124 ---
+  Goto -> B233
+--- BLOCK B126 (deferred) <- B124 ---
+  549: Int32Constant[-1]
+  550: Load[kRepTagged|kTypeAny](541, 549)
+  551: Int32Constant[7]
+  552: Load[kRepWord8|kTypeUint32](550, 551)
+  553: Int32Constant[128]
+  554: Int32LessThan(552, 553)
+  555: Branch[None](554) -> B128, B127
+--- BLOCK B127 (deferred) <- B126 ---
+  Goto -> B233
+--- BLOCK B128 (deferred) <- B126 ---
+  556: Int32Constant[7]
+  557: Load[kRepTagged|kTypeAny](541, 556)
+  Goto -> B148
+--- BLOCK B129 (deferred) <- B119 ---
+  508: Int32Constant[3]
+  509: Load[kRepTagged|kTypeAny](444, 508)
+  510: HeapConstant[0x57f84ff1 <String[9]: prototype>]
+  511: Word32Equal(509, 510)
+  512: Branch[None](511) -> B131, B130
+--- BLOCK B130 (deferred) <- B129 ---
+  Goto -> B233
+--- BLOCK B131 (deferred) <- B129 ---
+  513: Int32Constant[8]
+  514: Load[kRepWord8|kTypeUint32](489, 513)
+  515: Int32Constant[1]
+  516: Word32And(514, 515)
+  517: Int32Constant[0]
+  518: Word32Equal(516, 517)
+  519: Int32Constant[0]
+  520: Word32Equal(518, 519)
+  521: Branch[None](520) -> B138, B132
+--- BLOCK B132 (deferred) <- B131 ---
+  522: Int32Constant[11]
+  523: Load[kRepTagged|kTypeAny](24, 522)
+  524: HeapConstant[0x57f84141 <the_hole>]
+  525: Word32Equal(523, 524)
+  526: Branch[None](525) -> B137, B133
+--- BLOCK B133 (deferred) <- B132 ---
+  527: Int32Constant[-1]
+  528: Load[kRepTagged|kTypeAny](523, 527)
+  529: HeapConstant[0x5ff84101 <Map(PACKED_SMI_ELEMENTS)>]
+  530: Word32Equal(528, 529)
+  531: Branch[None](530) -> B135, B134
+--- BLOCK B134 (deferred) <- B133 ---
+  Goto -> B136
+--- BLOCK B135 (deferred) <- B133 ---
+  532: Int32Constant[15]
+  533: Load[kRepTagged|kTypeAny](523, 532)
+  Goto -> B136
+--- BLOCK B136 (deferred) <- B134, B135 ---
+  534: Phi[kRepTagged](523, 533, 0)
+  Goto -> B148
+--- BLOCK B137 (deferred) <- B132 ---
+  Goto -> B233
+--- BLOCK B138 (deferred) <- B131 ---
+  Goto -> B233
+--- BLOCK B139 (deferred) <- B118 ---
+  501: Int32Constant[3]
+  502: Load[kRepTagged|kTypeAny](444, 501)
+  503: HeapConstant[0x57f84cd9 <String[6]: length>]
+  504: Word32Equal(502, 503)
+  505: Branch[None](504) -> B141, B140
+--- BLOCK B140 (deferred) <- B139 ---
+  Goto -> B233
+--- BLOCK B141 (deferred) <- B139 ---
+  506: Int32Constant[11]
+  507: Load[kRepTagged|kTypeAny](24, 506)
+  Goto -> B148
+--- BLOCK B142 (deferred) <- B117 ---
+  462: Int32Constant[3]
+  463: Load[kRepTagged|kTypeAny](444, 462)
+  464: Int32Constant[-1]
+  465: Load[kRepTagged|kTypeAny](463, 464)
+  466: Int32Constant[7]
+  467: Load[kRepWord8|kTypeUint32](465, 466)
+  468: Int32Constant[154]
+  469: Word32Equal(467, 468)
+  470: Branch[None](469) -> B146, B143
+--- BLOCK B143 (deferred) <- B142 ---
+  471: HeapConstant[0x57f84125 <undefined>]
+  472: Int32Constant[8]
+  473: Load[kRepWord8|kTypeUint32](465, 472)
+  474: Int32Constant[2]
+  475: Word32And(473, 474)
+  476: Int32Constant[0]
+  477: Word32Equal(475, 476)
+  478: Int32Constant[0]
+  479: Word32Equal(477, 478)
+  480: Branch[None](479) -> B145, B144
+--- BLOCK B144 (deferred) <- B143 ---
+  Goto -> B148
+--- BLOCK B145 (deferred) <- B143 ---
+  481: Int32Constant[0]
+  482: HeapConstant[0x58d974a1 <Code BUILTIN>]
+  483: Int32Constant[-16]
+  484: Int32Constant[1]
+  485: Word32Shl(2, 484)
+  486: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 483, 485)
+  487: Call[Code:CallTrampoline Descriptor:r1s1i5f0t0](482, 463, 481, 24, 36)
+  Goto -> B148
+--- BLOCK B146 (deferred) <- B142 ---
+  Goto -> B233
+--- BLOCK B147 (deferred) <- B116 ---
+  Goto -> B148
+--- BLOCK B148 (deferred) <- B147, B144, B145, B141, B136, B128 ---
+  558: Phi[kRepTagged](444, 471, 487, 507, 534, 557, 0)
+  Goto -> B235
+--- BLOCK B149 (deferred) <- B115 ---
+  Goto -> B233
+--- BLOCK B150 (deferred) <- B106 ---
+  411: Int32Constant[-1]
+  412: Load[kRepTagged|kTypeAny](76, 411)
+  413: Int32Constant[27]
+  414: Load[kRepTagged|kTypeAny](412, 413)
+  415: Int32Constant[130944]
+  416: Word32And(79, 415)
+  417: Int32Constant[7]
+  418: Word32Shr(416, 417)
+  419: Int32Constant[3]
+  420: Int32Mul(418, 419)
+  421: Int32Constant[4]
+  422: Int32Add(420, 421)
+  423: Int32Constant[2]
+  424: Word32Shl(422, 423)
+  425: Int32Constant[7]
+  426: Int32Add(425, 424)
+  427: Load[kRepTagged|kTypeAny](414, 426)
+  428: Int32Constant[3]
+  429: Load[kRepTagged|kTypeAny](427, 428)
+  430: Int32Constant[0]
+  431: HeapConstant[0x58d974a1 <Code BUILTIN>]
+  432: Int32Constant[-16]
+  433: Int32Constant[1]
+  434: Word32Shl(2, 433)
+  435: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 432, 434)
+  436: Call[Code:CallTrampoline Descriptor:r1s1i5f0t0](431, 429, 430, 24, 36)
+  Goto -> B235
+--- BLOCK B151 (deferred) <- B105 ---
+  184: Int32Constant[3]
+  185: Load[kRepTagged|kTypeAny](76, 184)
+  186: Int32Constant[1]
+  187: Word32And(185, 186)
+  188: Int32Constant[0]
+  189: Word32Equal(187, 188)
+  190: HeapConstant[0x57f857f9 <HashTable[8]>]
+  191: Branch[None](189) -> B153, B152
+--- BLOCK B152 (deferred) <- B151 ---
+  Goto -> B154
+--- BLOCK B153 (deferred) <- B151 ---
+  Goto -> B154
+--- BLOCK B154 (deferred) <- B153, B152 ---
+  192: Phi[kRepTagged](190, 185, 0)
+  193: Int32Constant[2]
+  194: Int32Constant[15]
+  195: Load[kRepTagged|kTypeAny](192, 194)
+  196: Int32Constant[1]
+  197: Word32Sar(195, 196)
+  198: Int32Constant[1]
+  199: Int32Sub(197, 198)
+  200: Int32Constant[3]
+  201: Load[kRepWord32|kTypeUint32](34, 200)
+  202: Int32Constant[2]
+  203: Word32Shr(201, 202)
+  204: Int32Constant[0]
+  205: Word32And(203, 199)
+  206: HeapConstant[0x57f84125 <undefined>]
+  207: Int32Constant[3]
+  208: Int32Mul(205, 207)
+  209: Int32Constant[5]
+  210: Int32Add(208, 209)
+  211: Int32Constant[2]
+  212: Word32Shl(210, 211)
+  213: Int32Constant[7]
+  214: Int32Add(213, 212)
+  215: Load[kRepTagged|kTypeAny](192, 214)
+  216: Word32Equal(215, 206)
+  217: Branch[None](216) -> B208, B155
+--- BLOCK B155 (deferred) <- B154 ---
+  218: Word32Equal(215, 34)
+  219: Branch[None](218) -> B174, B156
+--- BLOCK B156 (deferred) <- B155 ---
+  220: Int32Constant[1]
+  221: Int32Add(205, 220)
+  222: Word32And(221, 199)
+  223: Int32Constant[3]
+  224: Int32Mul(222, 223)
+  225: Int32Constant[5]
+  226: Int32Add(224, 225)
+  227: Int32Constant[2]
+  228: Word32Shl(226, 227)
+  229: Int32Constant[7]
+  230: Int32Add(229, 228)
+  231: Load[kRepTagged|kTypeAny](192, 230)
+  232: Word32Equal(231, 206)
+  233: Branch[None](232) -> B173, B157
+--- BLOCK B157 (deferred) <- B156 ---
+  234: Word32Equal(231, 34)
+  235: Branch[None](234) -> B172, B158
+--- BLOCK B158 (deferred) <- B157 ---
+  236: Int32Constant[2]
+  237: Int32Add(222, 236)
+  238: Word32And(237, 199)
+  239: Int32Constant[3]
+  240: Int32Mul(238, 239)
+  241: Int32Constant[5]
+  242: Int32Add(240, 241)
+  243: Int32Constant[2]
+  244: Word32Shl(242, 243)
+  245: Int32Constant[7]
+  246: Int32Add(245, 244)
+  247: Load[kRepTagged|kTypeAny](192, 246)
+  248: Word32Equal(247, 206)
+  249: Branch[None](248) -> B171, B159
+--- BLOCK B159 (deferred) <- B158 ---
+  250: Word32Equal(247, 34)
+  251: Branch[None](250) -> B170, B160
+--- BLOCK B160 (deferred) <- B159 ---
+  252: Int32Constant[3]
+  253: Int32Add(238, 252)
+  254: Word32And(253, 199)
+  255: Int32Constant[3]
+  256: Int32Mul(254, 255)
+  257: Int32Constant[5]
+  258: Int32Add(256, 257)
+  259: Int32Constant[2]
+  260: Word32Shl(258, 259)
+  261: Int32Constant[7]
+  262: Int32Add(261, 260)
+  263: Load[kRepTagged|kTypeAny](192, 262)
+  264: Word32Equal(263, 206)
+  265: Branch[None](264) -> B169, B161
+--- BLOCK B161 (deferred) <- B160 ---
+  266: Word32Equal(263, 34)
+  267: Branch[None](266) -> B168, B162
+--- BLOCK B162 (deferred) <- B161 ---
+  268: Int32Constant[4]
+  269: Int32Add(254, 268)
+  270: Word32And(269, 199)
+  Goto -> B163
+--- BLOCK B163 (deferred) <- B162, B165 ---
+  271: Phi[kRepWord32](258, 277, 0)
+  272: Phi[kRepWord32](268, 288, 0)
+  273: Phi[kRepWord32](270, 290, 0)
+  274: Int32Constant[3]
+  275: Int32Mul(273, 274)
+  276: Int32Constant[5]
+  277: Int32Add(275, 276)
+  278: Int32Constant[2]
+  279: Word32Shl(277, 278)
+  280: Int32Constant[7]
+  281: Int32Add(280, 279)
+  282: Load[kRepTagged|kTypeAny](192, 281)
+  283: Word32Equal(282, 206)
+  284: Branch[None](283) -> B167, B164
+--- BLOCK B164 (deferred) <- B163 ---
+  285: Word32Equal(282, 34)
+  286: Branch[None](285) -> B166, B165
+--- BLOCK B165 (deferred) <- B164 ---
+  287: Int32Constant[1]
+  288: Int32Add(272, 287)
+  289: Int32Add(273, 288)
+  290: Word32And(289, 199)
+  Goto -> B163
+--- BLOCK B166 (deferred) <- B164 ---
+  Goto -> B175
+--- BLOCK B167 (deferred) <- B163 ---
+  Goto -> B233
+--- BLOCK B168 (deferred) <- B161 ---
+  Goto -> B175
+--- BLOCK B169 (deferred) <- B160 ---
+  Goto -> B233
+--- BLOCK B170 (deferred) <- B159 ---
+  Goto -> B175
+--- BLOCK B171 (deferred) <- B158 ---
+  Goto -> B233
+--- BLOCK B172 (deferred) <- B157 ---
+  Goto -> B175
+--- BLOCK B173 (deferred) <- B156 ---
+  Goto -> B233
+--- BLOCK B174 (deferred) <- B155 ---
+  Goto -> B175
+--- BLOCK B175 (deferred) <- B174, B172, B170, B168, B166 ---
+  291: Phi[kRepWord32](210, 226, 242, 258, 277, 0)
+  292: Int32Constant[2]
+  293: Word32Shl(291, 292)
+  294: Int32Constant[15]
+  295: Int32Add(294, 293)
+  296: Load[kRepTagged|kTypeAny](192, 295)
+  297: Int32Constant[1]
+  298: Word32Sar(296, 297)
+  299: Int32Constant[2]
+  300: Word32Shl(291, 299)
+  301: Int32Constant[11]
+  302: Int32Add(301, 300)
+  303: Load[kRepTagged|kTypeAny](192, 302)
+  304: Int32Constant[1]
+  305: Word32And(298, 304)
+  306: Int32Constant[0]
+  307: Word32Equal(305, 306)
+  308: Branch[None](307) -> B206, B176
+--- BLOCK B176 (deferred) <- B175 ---
+  309: Int32Constant[-1]
+  310: Load[kRepTagged|kTypeAny](303, 309)
+  311: HeapConstant[0x5ff84219 <Map(PACKED_SMI_ELEMENTS)>]
+  312: Word32Equal(310, 311)
+  313: Branch[None](312) -> B201, B177
+--- BLOCK B177 (deferred) <- B176 ---
+  340: Int32Constant[-1]
+  341: Load[kRepTagged|kTypeAny](24, 340)
+  342: Int32Constant[7]
+  343: Load[kRepWord8|kTypeUint32](341, 342)
+  344: Int32Constant[197]
+  345: Word32Equal(343, 344)
+  346: Branch[None](345) -> B198, B178
+--- BLOCK B178 (deferred) <- B177 ---
+  347: Int32Constant[255]
+  348: Word32Equal(343, 347)
+  349: Branch[None](348) -> B188, B179
+--- BLOCK B179 (deferred) <- B178 ---
+  350: Int32Constant[188]
+  351: Word32Equal(343, 350)
+  352: Branch[None](351) -> B181, B180
+--- BLOCK B180 (deferred) <- B179 ---
+  Goto -> B233
+--- BLOCK B181 (deferred) <- B179 ---
+  387: Int32Constant[3]
+  388: Load[kRepTagged|kTypeAny](303, 387)
+  389: HeapConstant[0x57f84cd9 <String[6]: length>]
+  390: Word32Equal(388, 389)
+  391: Branch[None](390) -> B183, B182
+--- BLOCK B182 (deferred) <- B181 ---
+  Goto -> B233
+--- BLOCK B183 (deferred) <- B181 ---
+  392: Int32Constant[11]
+  393: Load[kRepTagged|kTypeAny](24, 392)
+  394: Int32Constant[1]
+  395: Word32And(393, 394)
+  396: Int32Constant[0]
+  397: Word32Equal(395, 396)
+  398: Int32Constant[0]
+  399: Word32Equal(397, 398)
+  400: Branch[None](399) -> B185, B184
+--- BLOCK B184 (deferred) <- B183 ---
+  Goto -> B233
+--- BLOCK B185 (deferred) <- B183 ---
+  401: Int32Constant[-1]
+  402: Load[kRepTagged|kTypeAny](393, 401)
+  403: Int32Constant[7]
+  404: Load[kRepWord8|kTypeUint32](402, 403)
+  405: Int32Constant[128]
+  406: Int32LessThan(404, 405)
+  407: Branch[None](406) -> B187, B186
+--- BLOCK B186 (deferred) <- B185 ---
+  Goto -> B233
+--- BLOCK B187 (deferred) <- B185 ---
+  408: Int32Constant[7]
+  409: Load[kRepTagged|kTypeAny](393, 408)
+  Goto -> B207
+--- BLOCK B188 (deferred) <- B178 ---
+  360: Int32Constant[3]
+  361: Load[kRepTagged|kTypeAny](303, 360)
+  362: HeapConstant[0x57f84ff1 <String[9]: prototype>]
+  363: Word32Equal(361, 362)
+  364: Branch[None](363) -> B190, B189
+--- BLOCK B189 (deferred) <- B188 ---
+  Goto -> B233
+--- BLOCK B190 (deferred) <- B188 ---
+  365: Int32Constant[8]
+  366: Load[kRepWord8|kTypeUint32](341, 365)
+  367: Int32Constant[1]
+  368: Word32And(366, 367)
+  369: Int32Constant[0]
+  370: Word32Equal(368, 369)
+  371: Int32Constant[0]
+  372: Word32Equal(370, 371)
+  373: Branch[None](372) -> B197, B191
+--- BLOCK B191 (deferred) <- B190 ---
+  374: Int32Constant[11]
+  375: Load[kRepTagged|kTypeAny](24, 374)
+  376: HeapConstant[0x57f84141 <the_hole>]
+  377: Word32Equal(375, 376)
+  378: Branch[None](377) -> B196, B192
+--- BLOCK B192 (deferred) <- B191 ---
+  379: Int32Constant[-1]
+  380: Load[kRepTagged|kTypeAny](375, 379)
+  381: HeapConstant[0x5ff84101 <Map(PACKED_SMI_ELEMENTS)>]
+  382: Word32Equal(380, 381)
+  383: Branch[None](382) -> B194, B193
+--- BLOCK B193 (deferred) <- B192 ---
+  Goto -> B195
+--- BLOCK B194 (deferred) <- B192 ---
+  384: Int32Constant[15]
+  385: Load[kRepTagged|kTypeAny](375, 384)
+  Goto -> B195
+--- BLOCK B195 (deferred) <- B193, B194 ---
+  386: Phi[kRepTagged](375, 385, 0)
+  Goto -> B207
+--- BLOCK B196 (deferred) <- B191 ---
+  Goto -> B233
+--- BLOCK B197 (deferred) <- B190 ---
+  Goto -> B233
+--- BLOCK B198 (deferred) <- B177 ---
+  353: Int32Constant[3]
+  354: Load[kRepTagged|kTypeAny](303, 353)
+  355: HeapConstant[0x57f84cd9 <String[6]: length>]
+  356: Word32Equal(354, 355)
+  357: Branch[None](356) -> B200, B199
+--- BLOCK B199 (deferred) <- B198 ---
+  Goto -> B233
+--- BLOCK B200 (deferred) <- B198 ---
+  358: Int32Constant[11]
+  359: Load[kRepTagged|kTypeAny](24, 358)
+  Goto -> B207
+--- BLOCK B201 (deferred) <- B176 ---
+  314: Int32Constant[3]
+  315: Load[kRepTagged|kTypeAny](303, 314)
+  316: Int32Constant[-1]
+  317: Load[kRepTagged|kTypeAny](315, 316)
+  318: Int32Constant[7]
+  319: Load[kRepWord8|kTypeUint32](317, 318)
+  320: Int32Constant[154]
+  321: Word32Equal(319, 320)
+  322: Branch[None](321) -> B205, B202
+--- BLOCK B202 (deferred) <- B201 ---
+  323: HeapConstant[0x57f84125 <undefined>]
+  324: Int32Constant[8]
+  325: Load[kRepWord8|kTypeUint32](317, 324)
+  326: Int32Constant[2]
+  327: Word32And(325, 326)
+  328: Int32Constant[0]
+  329: Word32Equal(327, 328)
+  330: Int32Constant[0]
+  331: Word32Equal(329, 330)
+  332: Branch[None](331) -> B204, B203
+--- BLOCK B203 (deferred) <- B202 ---
+  Goto -> B207
+--- BLOCK B204 (deferred) <- B202 ---
+  333: Int32Constant[0]
+  334: HeapConstant[0x58d974a1 <Code BUILTIN>]
+  335: Int32Constant[-16]
+  336: Int32Constant[1]
+  337: Word32Shl(2, 336)
+  338: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 335, 337)
+  339: Call[Code:CallTrampoline Descriptor:r1s1i5f0t0](334, 315, 333, 24, 36)
+  Goto -> B207
+--- BLOCK B205 (deferred) <- B201 ---
+  Goto -> B233
+--- BLOCK B206 (deferred) <- B175 ---
+  Goto -> B207
+--- BLOCK B207 (deferred) <- B206, B203, B204, B200, B195, B187 ---
+  410: Phi[kRepTagged](303, 323, 339, 359, 386, 409, 0)
+  Goto -> B235
+--- BLOCK B208 (deferred) <- B154 ---
+  Goto -> B233
+--- BLOCK B209 <- B104 ---
+  153: HeapConstant[0x57f84125 <undefined>]
+  Goto -> B235
+--- BLOCK B210 <- B103 ---
+  154: Int32Constant[-1]
+  155: Load[kRepTagged|kTypeAny](76, 154)
+  156: Int32Constant[27]
+  157: Load[kRepTagged|kTypeAny](155, 156)
+  158: Int32Constant[130944]
+  159: Word32And(79, 158)
+  160: Int32Constant[7]
+  161: Word32Shr(159, 160)
+  162: Int32Constant[3]
+  163: Int32Mul(161, 162)
+  164: Int32Constant[4]
+  165: Int32Add(163, 164)
+  166: Int32Constant[2]
+  167: Word32Shl(165, 166)
+  168: Int32Constant[7]
+  169: Int32Add(168, 167)
+  170: Load[kRepTagged|kTypeAny](157, 169)
+  171: Int32Constant[64]
+  172: Word32And(79, 171)
+  173: Int32Constant[0]
+  174: Word32Equal(172, 173)
+  175: Int32Constant[0]
+  176: Word32Equal(174, 175)
+  177: Branch[None](176) -> B212, B211
+--- BLOCK B211 <- B210 ---
+  Goto -> B235
+--- BLOCK B212 (deferred) <- B210 ---
+  178: HeapConstant[0x58da6961 <Code STUB>]
+  179: Int32Constant[-16]
+  180: Int32Constant[1]
+  181: Word32Shl(2, 180)
+  182: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 179, 181)
+  183: Call[Code:ApiGetter Descriptor:r1s0i5f0t0](178, 24, 76, 170, 36)
+  Goto -> B235
+--- BLOCK B213 <- B102 ---
+  106: Int32Constant[2096896]
+  107: Word32And(79, 106)
+  108: Int32Constant[8]
+  109: Word32Shr(107, 108)
+  110: Int32Constant[64]
+  111: Word32And(79, 110)
+  112: Int32Constant[0]
+  113: Word32Equal(111, 112)
+  114: Int32Constant[0]
+  115: Word32Equal(113, 114)
+  116: Branch[None](115) -> B220, B214
+--- BLOCK B214 <- B213 ---
+  132: Int32Constant[3]
+  133: Load[kRepTagged|kTypeAny](76, 132)
+  134: Int32Constant[1]
+  135: Word32And(133, 134)
+  136: Int32Constant[0]
+  137: Word32Equal(135, 136)
+  138: HeapConstant[0x57f84101 <FixedArray[0]>]
+  139: Branch[None](137) -> B216, B215
+--- BLOCK B215 <- B214 ---
+  Goto -> B217
+--- BLOCK B216 <- B214 ---
+  Goto -> B217
+--- BLOCK B217 <- B216, B215 ---
+  140: Phi[kRepTagged](138, 133, 0)
+  141: Int32Constant[1]
+  142: Int32Sub(109, 141)
+  143: Load[kRepTagged|kTypeAny](140, 142)
+  144: Int32Constant[128]
+  145: Word32And(79, 144)
+  146: Int32Constant[0]
+  147: Word32Equal(145, 146)
+  148: Int32Constant[0]
+  149: Word32Equal(147, 148)
+  150: Branch[None](149) -> B219, B218
+--- BLOCK B218 <- B217 ---
+  Goto -> B235
+--- BLOCK B219 <- B217 ---
+  151: Int32Constant[3]
+  152: Load[kRepFloat64|kTypeNumber](143, 151)
+  Goto -> B223
+--- BLOCK B220 <- B213 ---
+  117: Int32Constant[128]
+  118: Word32And(79, 117)
+  119: Int32Constant[0]
+  120: Word32Equal(118, 119)
+  121: Int32Constant[0]
+  122: Word32Equal(120, 121)
+  123: Branch[None](122) -> B222, B221
+--- BLOCK B221 <- B220 ---
+  124: Int32Constant[1]
+  125: Int32Sub(109, 124)
+  126: Load[kRepTagged|kTypeAny](76, 125)
+  Goto -> B235
+--- BLOCK B222 <- B220 ---
+  127: Int32Constant[1]
+  128: Int32Sub(109, 127)
+  129: Load[kRepTagged|kTypeAny](76, 128)
+  130: Int32Constant[3]
+  131: Load[kRepFloat64|kTypeNumber](129, 130)
+  Goto -> B223
+--- BLOCK B223 <- B222, B219 ---
+  594: Phi[kRepFloat64](131, 152, 0)
+  595: Int32Constant[12]
+  596: ExternalConstant[0x99d1c10]
+  597: Int32Constant[4]
+  598: Int32Add(596, 597)
+  599: Int32Constant[0]
+  600: Load[kRepWord32](596, 599)
+  601: Int32Constant[0]
+  602: Load[kRepWord32](598, 601)
+  603: Int32Add(600, 595)
+  604: Uint32LessThanOrEqual(602, 603)
+  605: Branch[None](604) -> B225, B224
+--- BLOCK B224 <- B223 ---
+  616: Int32Constant[0]
+  617: Store[(kRepWord32 : NoWriteBarrier)](596, 616, 603)
+  618: Int32Constant[1]
+  619: Int32Add(600, 618)
+  620: BitcastWordToTagged(619)
+  Goto -> B226
+--- BLOCK B225 (deferred) <- B223 ---
+  606: Int32Constant[0]
+  607: Int32Constant[24]
+  608: HeapConstant[0x58d86001 <Code STUB>]
+  609: ExternalConstant[0x9a13134]
+  610: Int32Constant[1]
+  611: Int32Constant[-16]
+  612: Int32Constant[1]
+  613: Word32Shl(2, 612)
+  614: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 611, 613)
+  615: Call[Code:AllocateInNewSpace:r1s1i5f0t0](608, 607, 609, 610, 606)
+  Goto -> B226
+--- BLOCK B226 <- B225, B224 ---
+  621: Phi[kRepTagged](615, 620, 0)
+  622: HeapConstant[0x5ff845d9 <Map(HOLEY_ELEMENTS)>]
+  623: Int32Constant[-1]
+  624: Store[(kRepTagged : NoWriteBarrier)](621, 623, 622)
+  625: Int32Constant[3]
+  626: Store[(kRepFloat64 : NoWriteBarrier)](621, 625, 594)
+  Goto -> B235
+--- BLOCK B227 (deferred) <- B22 ---
+  Goto -> B229
+--- BLOCK B228 (deferred) <- B19 ---
+  Goto -> B229
+--- BLOCK B229 (deferred) <- B228, B227 ---
+  1000: Phi[kRepWord32](970, 995, 0)
+  Goto -> B233
+--- BLOCK B230 (deferred) <- B15 ---
+  Goto -> B233
+--- BLOCK B231 (deferred) <- B12 ---
+  Goto -> B233
+--- BLOCK B232 (deferred) <- B3 ---
+  Goto -> B233
+--- BLOCK B233 (deferred) <- B232, B208, B173, B171, B169, B167, B205, B180, B199, B189, B197, B196, B182, B184, B186, B149, B146, B121, B140, B130, B138, B137, B123, B125, B127, B30, B88, B63, B82, B72, B80, B79, B65, B67, B69, B96, B231, B230, B229 ---
+  Goto -> B234
+--- BLOCK B234 (deferred) <- B233 ---
+  1007: HeapConstant[0x58d86001 <Code STUB>]
+  1008: ExternalConstant[0x9a12fe4]
+  1009: Int32Constant[4]
+  1010: Int32Constant[-16]
+  1011: Int32Constant[1]
+  1012: Word32Shl(2, 1011)
+  1013: Store[(kRepTaggedSigned : NoWriteBarrier)](7, 1010, 1012)
+  1014: Call[Code:LoadIC_Miss:r1s4i8f0t0](1007, 24, 34, 18, 13, 1008, 1009, 36)
+  Goto -> B235
+--- BLOCK B235 <- B221, B218, B209, B211, B212, B207, B150, B114, B148, B110, B112, B113, B226, B90, B99, B100, B7, B234 ---
+  1015: Phi[kRepTagged](126, 143, 153, 170, 183, 410, 436, 442, 558, 566, 581, 593, 621, 881, 903, 908, 1006, 1014, 0)
+  1016: Int32Constant[4]
+  1017: Int32Add(2, 1016)
+  1018: Int32Constant[-12]
+  1019: Load[kRepTagged|kTypeAny](7, 1018)
+  1020: Load[kRepWord8|kTypeUint32](1019, 1017)
+  1021: Int32Constant[30]
+  1022: Word32Equal(1020, 1021)
+  1023: Branch[None](1022) -> B237, B236
+--- BLOCK B236 <- B235 ---
+  Goto -> B238
+--- BLOCK B237 <- B235 ---
+  1024: Int32Constant[1]
+  1025: Int32Add(1017, 1024)
+  1026: Load[kRepWord8|kTypeInt32](1019, 1025)
+  1027: Int32Constant[2]
+  1028: Word32Shl(1026, 1027)
+  1029: Store[(kRepTagged : NoWriteBarrier)](7, 1028, 1015)
+  1030: Int32Constant[2]
+  1031: Int32Add(1017, 1030)
+  1032: Load[kRepWord8|kTypeUint32](1019, 1031)
+  Goto -> B238
+--- BLOCK B238 <- B236, B237 ---
+  1033: Phi[kRepWord32](1017, 1031, 0)
+  1034: Phi[kRepWord32](1020, 1032, 0)
+  1035: Int32Constant[2]
+  1036: Word32Shl(1034, 1035)
+  1037: Load[kRepWord32](4, 1036)
+  1038: TailCall[Addr:InterpreterDispatch Descriptor:r0s0i5f0t1](1037, 1015, 1033, 1019, 4) -> B239
+--- BLOCK B239 <- B238 ---

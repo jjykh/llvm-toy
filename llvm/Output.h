@@ -3,6 +3,7 @@
 #include "IntrinsicRepository.h"
 namespace jit {
 struct CompilerState;
+struct PatchDesc;
 class Output {
  public:
   Output(CompilerState& state);

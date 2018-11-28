@@ -8,6 +8,7 @@
       'type': 'none',
       'dependencies': [
           '<(DEPTH)/main.gyp:*',
+          '<(DEPTH)/tf/tests/tests.gyp:*',
       ]
     },
   ],
