@@ -11,29 +11,29 @@ class BasicBlock {
   void startBuild(Output& output);
   void endBuild();
   void addPredecessor(BasicBlock* pred);
-  inline bool started() const { return m_started; }
-  inline bool ended() const { return m_ended; }
-  inline LBasicBlock nativeBB() { return m_bb; }
-  inline void setValue(int nid, LValue value) { m_values[nid] = value; }
+  inline bool started() const { return started_; }
+  inline bool ended() const { return ended_; }
+  inline LBasicBlock nativeBB() { return bb_; }
+  inline void setValue(int nid, LValue value) { values_[nid] = value; }
   inline LValue value(int nid) {
-    auto found = m_values.find(nid);
-    assert(found != m_values.end());
+    auto found = values_.find(nid);
+    assert(found != values_.end());
     return found->second;
   }
   inline const std::vector<BasicBlock*>& predecessors() const {
-    return m_predecessors;
+    return predecessors_;
   }
-  inline std::vector<BasicBlock*>& predecessors() { return m_predecessors; }
+  inline std::vector<BasicBlock*>& predecessors() { return predecessors_; }
 
  private:
   void mergePredecessors(Output* output);
-  std::vector<BasicBlock*> m_predecessors;
-  std::unordered_map<int, LValue> m_values;
-  std::vector<int> m_liveins;
-  LBasicBlock m_bb;
-  int m_id;
-  bool m_started;
-  bool m_ended;
+  std::vector<BasicBlock*> predecessors_;
+  std::unordered_map<int, LValue> values_;
+  std::vector<int> liveins_;
+  LBasicBlock bb_;
+  int id_;
+  bool started_;
+  bool ended_;
 };
 }  // namespace jit
 #endif  // BASIC_BLOCK_H

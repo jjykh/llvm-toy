@@ -4,10 +4,10 @@
 
 namespace jit {
 BasicBlock::BasicBlock(int id, Output& output)
-    : m_bb(nullptr), m_id(id), m_started(false), m_ended(false) {
+    : bb_(nullptr), id_(id), started_(false), ended_(false) {
   char buf[256];
-  snprintf(buf, 256, "B%d\n", m_id);
-  m_bb = output.appendBasicBlock(buf);
+  snprintf(buf, 256, "B%d\n", id_);
+  bb_ = output.appendBasicBlock(buf);
 }
 
 BasicBlock::~BasicBlock() {}
@@ -16,15 +16,15 @@ void BasicBlock::startBuild(Output& output) {
   assert(!started());
   assert(!nativeBB());
   assert(!ended());
-  m_started = true;
-  output.positionToBBEnd(m_bb);
+  started_ = true;
+  output.positionToBBEnd(bb_);
   mergePredecessors(output);
 }
 
 void BasicBlock::endBuild() {
   assert(!started());
   assert(!ended());
-  m_ended = true;
+  ended_ = true;
 }
 
 void BasicBlock::addPredecessor(BasicBlock* pred) {
@@ -36,17 +36,17 @@ void BasicBlock::mergePredecessors(Output& output) {
   if (predecessors().empty()) return;
   // just direct derive from the single predecessor
   if (predecessors().size() == 1) {
-    m_values = predecessors()[0]->m_values;
+    values_ = predecessors()[0]->values_;
   }
   struct ValueDesc {
     LValue v;
-    int from_index;
+    int froindex_;
   };
   std::vector<int> unioned_values;
   std::unordered_map<int, std::vector<ValueDesc>> to_phi;
   // build unioned_values from the first predecessor
   auto predecessor_iterator = predecessors().begin();
-  for (auto& item : predecessor_iterator->m_values) {
+  for (auto& item : predecessor_iterator->values_) {
     unioned_values.push_back(item.first);
   }
   std::sort(unioned_values.begin(), unioned_values.end());
@@ -54,7 +54,7 @@ void BasicBlock::mergePredecessors(Output& output) {
   for (; predecessor_iterator != predecessors().end(); ++predecessor_iterator) {
     std::vector<int> result;
     std::vector<int> to_union;
-    for (auto& item : predecessor_iterator->m_values) {
+    for (auto& item : predecessor_iterator->values_) {
       to_union.push_back(item.first);
     }
     std::sort(to_union.begin(), to_union.end());
@@ -66,13 +66,13 @@ void BasicBlock::mergePredecessors(Output& output) {
   // build lives
   for (int value : unioned_values) {
     for (auto& predecessor : predecessors()) {
-      auto found = m_values.find(value);
-      if (found == m_values.end()) {
-        m_values[value] = predecessor->m_values[value];
+      auto found = values_.find(value);
+      if (found == values_.end()) {
+        values_[value] = predecessor->values_[value];
         continue;
       }
-      auto predecessor_found = predecessor->m_values.find(value);
-      assert(predecessor_found != predecessor->m_values.end());
+      auto predecessor_found = predecessor->values_.find(value);
+      assert(predecessor_found != predecessor->values_.end());
       // ignore the equivalent case.
       if (found->second == predecessor_found->second) continue;
       if (phi_set.find(value) != phi_set.end()) {
@@ -82,10 +82,10 @@ void BasicBlock::mergePredecessors(Output& output) {
         // build a new phi
         LValue phi = output.buildPhi(output.taggedType());
         assert(typeof(found->second) == output.taggedType());
-        assert(found->second == predecessors()[0]->m_values[value]);
+        assert(found->second == predecessors()[0]->values_[value]);
         addIncoming(phi, found->second, predecessors()[0]->nativeBB(), 1);
         addIncoming(phi, predecessor_found->second, predecessor->nativeBB(), 1);
-        m_values[value] = phi;
+        values_[value] = phi;
         phi_set.insert(value);
       }
     }

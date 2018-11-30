@@ -29,7 +29,7 @@ int main() {
   using namespace jit;
   State state("test");
   buildIR(state);
-  dumpModule(state.m_module);
+  dumpModule(state.module_);
   compile(state);
   return 0;
 }

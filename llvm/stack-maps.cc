@@ -3,7 +3,7 @@ namespace jit {
 
 Reg DWARFRegister::reg() const {
 #if __x86_64__
-  if (m_dwarfRegNum >= 0 && m_dwarfRegNum < 16) {
+  if (dwarfRegNum_ >= 0 && dwarfRegNum_ < 16) {
     switch (dwarfRegNum()) {
       case 0:
         return AMD64::RAX;
@@ -23,11 +23,11 @@ Reg DWARFRegister::reg() const {
         return AMD64::RSP;
       default:
         // Registers r8..r15 are numbered sensibly.
-        return static_cast<Reg>(m_dwarfRegNum);
+        return static_cast<Reg>(dwarfRegNum_);
     }
   }
-  if (m_dwarfRegNum >= 17 && m_dwarfRegNum <= 32)
-    return static_cast<FPRReg>(m_dwarfRegNum - 17);
+  if (dwarfRegNum_ >= 17 && dwarfRegNum_ <= 32)
+    return static_cast<FPRReg>(dwarfRegNum_ - 17);
   return Reg();
 #else
 #error unsupported arch.

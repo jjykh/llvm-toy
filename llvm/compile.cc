@@ -53,7 +53,7 @@ void compile(State& state) {
   using namespace llvm;
   // Load the module to be compiled...
   SMDiagnostic Err;
-  Module* M = unwrap(state.m_module);
+  Module* M = unwrap(state.module_);
   Triple TheTriple;
 
   // If user just wants to list available options, skip module loading

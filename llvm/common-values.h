@@ -10,7 +10,7 @@ class CommonValues {
   CommonValues(const CommonValues&) = delete;
   const CommonValues& operator=(const CommonValues&) = delete;
 
-  void initialize(LModule module) { m_module = module; }
+  void initialize(LModule module) { module_ = module; }
 
   const LType voidType;
   const LType boolean;
@@ -48,8 +48,8 @@ class CommonValues {
   const unsigned profKind;
   const LValue branchWeights;
 
-  LContext const m_context;
-  LModule m_module;
+  LContext const context_;
+  LModule module_;
 };
 }  // namespace jit
 #endif  // COMMON_VALUES_H

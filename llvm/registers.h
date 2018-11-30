@@ -21,36 +21,36 @@ enum AMD64 {
 
 class Reg {
  public:
-  Reg(void) : m_val(invalid()) {}
-  Reg(int val) : m_val(val) {}
-  Reg(AMD64 val) : m_val(val) {}
-  int val() const { return m_val; }
-  bool isFloat() const { return m_isFloat; }
+  Reg(void) : val_(invalid()) {}
+  Reg(int val) : val_(val) {}
+  Reg(AMD64 val) : val_(val) {}
+  int val() const { return val_; }
+  bool isFloat() const { return isFloat_; }
   static inline int invalid() { return -1; }
 
  private:
-  int m_val;
+  int val_;
 
  protected:
-  bool m_isFloat = false;
+  bool isFloat_ = false;
 };
 
 class FPRReg : public Reg {
  public:
-  FPRReg(int val) : Reg(val) { m_isFloat = true; }
+  FPRReg(int val) : Reg(val) { isFloat_ = true; }
 };
 
 class DWARFRegister {
  public:
-  DWARFRegister() : m_dwarfRegNum(-1) {}
+  DWARFRegister() : dwarfRegNum_(-1) {}
 
-  explicit DWARFRegister(int16_t dwarfRegNum) : m_dwarfRegNum(dwarfRegNum) {}
+  explicit DWARFRegister(int16_t dwarfRegNum) : dwarfRegNum_(dwarfRegNum) {}
 
-  int16_t dwarfRegNum() const { return m_dwarfRegNum; }
+  int16_t dwarfRegNum() const { return dwarfRegNum_; }
   Reg reg() const;
 
  private:
-  int16_t m_dwarfRegNum;
+  int16_t dwarfRegNum_;
 };
 }  // namespace jit
 #endif /* REGISTERS_H */

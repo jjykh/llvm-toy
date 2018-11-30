@@ -18,11 +18,11 @@ class LLVMTFBuilder final : public TFVisitor {
 #define DECL_METHOD(name, signature) void Visit##name signature override;
   INSTRUCTIONS(DECL_METHOD)
 #undef DECL_METHOD
-  inline Output& output() { return *m_output; }
-  inline BasicBlockManager& basicBlockManager() { return *m_basicBlockManager; }
-  Output* m_output;
-  BasicBlockManager* m_basicBlockManager;
-  BasicBlock* m_currentBB;
+  inline Output& output() { return *output_; }
+  inline BasicBlockManager& basicBlockManager() { return *basicBlockManager_; }
+  Output* output_;
+  BasicBlockManager* basicBlockManager_;
+  BasicBlock* currentBB_;
 };
 }  // namespace jit
 #endif  // LLVM_TF_BUILDER_H

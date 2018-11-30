@@ -37,6 +37,6 @@ CommonValues::CommonValues(LContext context)
       rangeKind(mdKindID(context, "range")),
       profKind(mdKindID(context, "prof")),
       branchWeights(mdString(context, "branch_weights")),
-      m_context(context),
-      m_module(0) {}
+      context_(context),
+      module_(0) {}
 }  // namespace jit

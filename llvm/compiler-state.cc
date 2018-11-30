@@ -3,19 +3,19 @@
 namespace jit {
 
 CompilerState::CompilerState(const char* moduleName)
-    : m_stackMapsSection(nullptr),
-      m_module(nullptr),
-      m_function(nullptr),
-      m_context(nullptr),
-      m_entryPoint(nullptr) {
-  m_context = LLVMContextCreate();
-  m_module = LLVMModuleCreateWithNameInContext("test", m_context);
+    : stackMapsSection_(nullptr),
+      module_(nullptr),
+      function_(nullptr),
+      context_(nullptr),
+      entryPoint_(nullptr) {
+  context_ = LLVMContextCreate();
+  module_ = LLVMModuleCreateWithNameInContext("test", context_);
 #if 0
-    LLVMSetTarget(m_module, "x86_64-unknown-linux-gnu");
+    LLVMSetTarget(module_, "x86_64-unknown-linux-gnu");
 #else
-  LLVMSetTarget(m_module, "armv7-linux-android");
+  LLVMSetTarget(module_, "armv7-linux-android");
 #endif
 }
 
-CompilerState::~CompilerState() { LLVMContextDispose(m_context); }
+CompilerState::~CompilerState() { LLVMContextDispose(context_); }
 }  // namespace jit

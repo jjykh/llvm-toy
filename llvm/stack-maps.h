@@ -10,17 +10,17 @@ namespace jit {
 
 class DataView {
  public:
-  DataView(const uint8_t* data) : m_data(data) {}
+  DataView(const uint8_t* data) : data_(data) {}
   template <typename T>
   T read(unsigned& off, bool littenEndian) {
     assert(littenEndian == true);
-    T t = *reinterpret_cast<const T*>(m_data + off);
+    T t = *reinterpret_cast<const T*>(data_ + off);
     off += sizeof(T);
     return t;
   }
 
  private:
-  const uint8_t* m_data;
+  const uint8_t* data_;
 };
 
 // lower 32 for gerneral purpose register

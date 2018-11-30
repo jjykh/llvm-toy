@@ -15,7 +15,7 @@ enum class PatchType {
 };
 
 struct PatchDesc {
-  PatchType m_type;
+  PatchType type_;
 };
 
 typedef std::vector<uint8_t> ByteBuffer;
@@ -24,17 +24,17 @@ typedef std::list<std::string> StringList;
 typedef std::unordered_map<unsigned /* stackmaps id */, PatchDesc> PatchMap;
 
 struct CompilerState {
-  BufferList m_codeSectionList;
-  BufferList m_dataSectionList;
-  StringList m_codeSectionNames;
-  StringList m_dataSectionNames;
-  ByteBuffer* m_stackMapsSection;
-  PatchMap m_patchMap;
-  LLVMModuleRef m_module;
-  LLVMValueRef m_function;
-  LLVMContextRef m_context;
-  void* m_entryPoint;
-  struct PlatformDesc m_platformDesc;
+  BufferList codeSectionList_;
+  BufferList dataSectionList_;
+  StringList codeSectionNames_;
+  StringList dataSectionNames_;
+  ByteBuffer* stackMapsSection_;
+  PatchMap patchMap_;
+  LLVMModuleRef module_;
+  LLVMValueRef function_;
+  LLVMContextRef context_;
+  void* entryPoint_;
+  struct PlatformDesc platformDesc_;
   CompilerState(const char* moduleName);
   ~CompilerState();
   CompilerState(const CompilerState&) = delete;

@@ -47,8 +47,8 @@ class Output {
 
   inline LValue buildCall(LValue function, const LValue* args,
                           unsigned numArgs) {
-    return LLVMBuildCall(m_builder, function, const_cast<LValue*>(args),
-                         numArgs, "");
+    return LLVMBuildCall(builder_, function, const_cast<LValue*>(args), numArgs,
+                         "");
   }
 
   template <typename VectorType>
@@ -75,26 +75,26 @@ class Output {
   void buildAssistPatch(LValue where);
   LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
 
-  inline IntrinsicRepository& repo() { return m_repo; }
-  inline LBasicBlock prologue() const { return m_prologue; }
-  inline LType taggedType() const { return m_taggedType; }
-  inline LValue registerParameter(int i) { return m_registerParameters[i]; }
-  inline LValue root() { return m_root; }
-  inline LValue fp() { return m_fp; }
+  inline IntrinsicRepository& repo() { return repo_; }
+  inline LBasicBlock prologue() const { return prologue_; }
+  inline LType taggedType() const { return taggedType_; }
+  inline LValue registerParameter(int i) { return registerParameters_[i]; }
+  inline LValue root() { return root_; }
+  inline LValue fp() { return fp_; }
 
  private:
   void buildGetArg();
   void buildPatchCommon(LValue where, const PatchDesc& desc, size_t patchSize);
 
-  CompilerState& m_state;
-  IntrinsicRepository m_repo;
-  LBuilder m_builder;
-  LBasicBlock m_prologue;
-  LType m_taggedType;
-  LValue m_root;
-  LValue m_fp;
-  std::vector<LValue> m_registerParameters;
-  uint32_t m_stackMapsId;
+  CompilerState& state_;
+  IntrinsicRepository repo_;
+  LBuilder builder_;
+  LBasicBlock prologue_;
+  LType taggedType_;
+  LValue root_;
+  LValue fp_;
+  std::vector<LValue> registerParameters_;
+  uint32_t stackMapsId_;
 };
 }  // namespace jit
 #endif /* OUTPUT_H */
