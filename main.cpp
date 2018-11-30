@@ -1,11 +1,11 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "Compile.h"
-#include "CompilerState.h"
-#include "InitializeLLVM.h"
-#include "Output.h"
-#include "Registers.h"
+#include "compile.h"
+#include "compiler-state.h"
+#include "initialize-llvm.h"
+#include "output.h"
+#include "registers.h"
 #include "log.h"
 typedef jit::CompilerState State;
 

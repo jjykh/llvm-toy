@@ -1,8 +1,8 @@
-#include "InitializeLLVM.h"
+#include "initialize-llvm.h"
 #include <assert.h>
 #include <llvm/Support/CommandLine.h>
 #include <stdio.h>
-#include "LLVMHeaders.h"
+#include "llvm-headers.h"
 
 template <typename... Args>
 void initCommandLine(Args... args) {

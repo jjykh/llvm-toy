@@ -1,7 +1,7 @@
-#include "Compile.h"
+#include "compile.h"
 #include <assert.h>
 #include <string.h>
-#include "CompilerState.h"
+#include "compiler-state.h"
 #include "log.h"
 
 #include <memory>

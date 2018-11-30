@@ -1,11 +1,11 @@
-#ifndef STACKMAPS_H
-#define STACKMAPS_H
+#ifndef STACK_MAPS_H
+#define STACK_MAPS_H
 #include <assert.h>
 #include <stdint.h>
 #include <bitset>
 #include <unordered_map>
 #include <vector>
-#include "Registers.h"
+#include "registers.h"
 namespace jit {
 
 class DataView {
@@ -108,4 +108,4 @@ struct StackMaps {
   unsigned stackSize() const;
 };
 }  // namespace jit
-#endif /* STACKMAPS_H */
+#endif  // STACK_MAPS_H

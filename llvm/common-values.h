@@ -1,7 +1,6 @@
-#ifndef COMMONVALUES_H
-#define COMMONVALUES_H
-
-#include "Abbreviations.h"
+#ifndef COMMON_VALUES_H
+#define COMMON_VALUES_H
+#include "abbreviations.h"
 
 namespace jit {
 
@@ -53,4 +52,4 @@ class CommonValues {
   LModule m_module;
 };
 }  // namespace jit
-#endif /* COMMONVALUES_H */
+#endif  // COMMON_VALUES_H

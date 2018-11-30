@@ -1,6 +1,6 @@
-#ifndef ABBREVIATEDTYPES_H
-#define ABBREVIATEDTYPES_H
-#include "LLVMHeaders.h"
+#ifndef ABBREVIATED_TYPES_H
+#define ABBREVIATED_TYPES_H
+#include "llvm-headers.h"
 namespace jit {
 typedef LLVMAtomicOrdering LAtomicOrdering;
 typedef LLVMBasicBlockRef LBasicBlock;
@@ -15,4 +15,4 @@ typedef LLVMTypeRef LType;
 typedef LLVMValueRef LValue;
 typedef LLVMMemoryBufferRef LMemoryBuffer;
 }  // namespace jit
-#endif /* ABBREVIATEDTYPES_H */
+#endif  // ABBREVIATED_TYPES_H

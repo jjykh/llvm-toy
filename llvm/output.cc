@@ -1,6 +1,6 @@
-#include "Output.h"
+#include "output.h"
 #include <assert.h>
-#include "CompilerState.h"
+#include "compiler-state.h"
 
 namespace jit {
 Output::Output(CompilerState& state)

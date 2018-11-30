@@ -1,4 +1,4 @@
-#include "StackMaps.h"
+#include "stack-maps.h"
 namespace jit {
 
 Reg DWARFRegister::reg() const {

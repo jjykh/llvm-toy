@@ -1,5 +1,5 @@
-#ifndef LLVMHEADERS_H
-#define LLVMHEADERS_H
+#ifndef LLVM_HEADERS_H
+#define LLVM_HEADERS_H
 #pragma once
 #include <llvm-c/Analysis.h>
 #include <llvm-c/BitReader.h>
@@ -14,4 +14,4 @@
 #include <llvm-c/Transforms/PassManagerBuilder.h>
 #include <llvm-c/Transforms/Scalar.h>
 
-#endif /* LLVMHEADERS_H */
+#endif  // LLVM_HEADERS_H

@@ -1,6 +1,6 @@
-#ifndef INTRINSICREPOSITORY_H
-#define INTRINSICREPOSITORY_H
-#include "CommonValues.h"
+#ifndef INTRINSIC_REPOSITORY_H
+#define INTRINSIC_REPOSITORY_H
+#include "common-values.h"
 
 // clang-format off
 #define FOR_EACH_FTL_INTRINSIC(macro) \
@@ -54,4 +54,4 @@ class IntrinsicRepository : public CommonValues {
   LContext m_context;
 };
 }  // namespace jit
-#endif /* INTRINSICREPOSITORY_H */
+#endif  // INTRINSIC_REPOSITORY_H

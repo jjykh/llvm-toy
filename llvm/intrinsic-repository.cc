@@ -1,4 +1,4 @@
-#include "IntrinsicRepository.h"
+#include "intrinsic-repository.h"
 
 namespace jit {
 

@@ -1,11 +1,11 @@
-#ifndef COMPILERSTATE_H
-#define COMPILERSTATE_H
+#ifndef COMPILER_STATE_H
+#define COMPILER_STATE_H
 #include <stdint.h>
 #include <list>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "LLVMHeaders.h"
+#include "llvm-headers.h"
 #include "PlatformDesc.h"
 namespace jit {
 enum class PatchType {
@@ -41,5 +41,4 @@ struct CompilerState {
   const CompilerState& operator=(const CompilerState&) = delete;
 };
 }  // namespace jit
-
-#endif /* COMPILERSTATE_H */
+#endif  // COMPILER_STATE_H

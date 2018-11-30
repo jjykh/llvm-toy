@@ -2,7 +2,7 @@
 #define OUTPUT_H
 #include <string>
 #include <vector>
-#include "IntrinsicRepository.h"
+#include "intrinsic-repository.h"
 namespace jit {
 struct CompilerState;
 struct PatchDesc;

@@ -1,5 +1,5 @@
-#ifndef LLVMTFBUILDER_H
-#define LLVMTFBUILDER_H
+#ifndef LLVM_TF_BUILDER_H
+#define LLVM_TF_BUILDER_H
 #include <unordered_map>
 #include "tf-visitor.h"
 namespace jit {
@@ -25,4 +25,4 @@ class LLVMTFBuilder final : public TFVisitor {
   BasicBlock* m_currentBB;
 };
 }  // namespace jit
-#endif  // LLVMTFBUILDER_H
+#endif  // LLVM_TF_BUILDER_H

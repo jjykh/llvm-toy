@@ -1,8 +1,8 @@
-#ifndef BASICBLOCK_H
-#define BASICBLOCK_H
+#ifndef BASIC_BLOCK_H
+#define BASIC_BLOCK_H
 #include <unordered_map>
 #include <vector>
-#include "Output.h"
+#include "output.h"
 namespace jit {
 class BasicBlock {
  public:
@@ -36,4 +36,4 @@ class BasicBlock {
   bool m_ended;
 };
 }  // namespace jit
-#endif  // BASICBLOCK_H
+#endif  // BASIC_BLOCK_H

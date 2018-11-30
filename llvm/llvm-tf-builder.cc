@@ -1,5 +1,5 @@
-#include "LLVMTFBuilder.h"
-#include "BasicBlock.h"
+#include "llvm-tf-builder.h"
+#include "basic-block.h"
 namespace jit {
 LLVMTFBuilder::LLVMTFBuilder(Output& output,
                              BasicBlockManager& _basicBlockManager)
