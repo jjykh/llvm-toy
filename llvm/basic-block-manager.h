@@ -24,5 +24,12 @@ class BasicBlockManager {
   std::vector<int> rpo_;
   BasicBlockMap bbs_;
 };
+
+template <class T, class Y>
+static inline void ResetImpls(Y& bbm) {
+  for (auto& bb : bbm) {
+    bb.second->template ResetImpl<T>();
+  }
+}
 }  // namespace jit
 #endif  // BASIC_BLOCK_MANAGER_H

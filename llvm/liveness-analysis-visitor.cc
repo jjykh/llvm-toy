@@ -5,6 +5,20 @@
 #include "basic-block.h"
 
 namespace jit {
+namespace {
+struct PhiDesc {
+  int from;
+  int value;
+};
+
+struct LivenessBasicBlockImpl {
+  std::vector<PhiDesc> phis;
+  std::set<int> defines;
+};
+static inline LivenessBasicBlockImpl* GetImpl(BasicBlock* bb) {
+  return bb->GetImpl<LivenessBasicBlockImpl>();
+}
+}  // namespace
 LivenessAnalysisVisitor::LivenessAnalysisVisitor(BasicBlockManager& bbm)
     : basic_block_manager_(&bbm), current_basic_block_(nullptr) {}
 
@@ -20,7 +34,7 @@ void LivenessAnalysisVisitor::Define(int id) { current_defines_.insert(id); }
 void LivenessAnalysisVisitor::EndBlock() {
   std::copy(current_references_.begin(), current_references_.end(),
             std::back_inserter(current_basic_block_->liveins()));
-  current_basic_block_->defines().swap(current_defines_);
+  GetImpl(current_basic_block_)->defines.swap(current_defines_);
   current_basic_block_ = nullptr;
   current_references_.clear();
 }
@@ -36,12 +50,14 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
       std::set_union(liveins.begin(), liveins.end(),
                      successor->liveins().begin(), successor->liveins().end(),
                      std::back_inserter(result));
-      auto& phis = successor->phis();
+      auto& phis = GetImpl(successor)->phis;
       for (auto& phi : phis) {
         if (phi.from == now->id()) {
           auto insert_point =
               std::lower_bound(result.begin(), result.end(), phi.value);
-          if (*insert_point != phi.value) {
+          if (insert_point == result.end()) {
+            result.push_back(phi.value);
+          } else if (*insert_point != phi.value) {
             result.insert(insert_point, phi.value);
           }
         }
@@ -50,28 +66,32 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
     }
     // clear those defined in this basic block.
     std::vector<int> result;
-    std::copy_if(liveins.begin(), liveins.end(), std::back_inserter(result),
-                 [&](int value) {
-                   if (now->defines().end() == now->defines().find(value))
-                     return true;
-                   return false;
-                 });
+    std::copy_if(
+        liveins.begin(), liveins.end(), std::back_inserter(result),
+        [&](int value) {
+          if (GetImpl(now)->defines.end() == GetImpl(now)->defines.find(value))
+            return true;
+          return false;
+        });
     now->liveins().swap(result);
   }
   // add back the use of phi in this pass
   for (auto it = basicBlockManager().rpo().begin();
        it != basicBlockManager().rpo().end(); ++it) {
     BasicBlock* now = basicBlockManager().findBB(*it);
-    auto& phis = now->phis();
+    auto& phis = GetImpl(now)->phis;
     auto& liveins = now->liveins();
     for (auto& phi : phis) {
       auto insert_point =
           std::lower_bound(liveins.begin(), liveins.end(), phi.value);
-      if (*insert_point != phi.value) {
+      if (insert_point == liveins.end()) {
+        liveins.push_back(phi.value);
+      } else if (*insert_point != phi.value) {
         liveins.insert(insert_point, phi.value);
       }
     }
   }
+  ResetImpls<LivenessBasicBlockImpl>(basicBlockManager());
 }
 
 void LivenessAnalysisVisitor::VisitBlock(int id,
@@ -84,6 +104,8 @@ void LivenessAnalysisVisitor::VisitBlock(int id,
   }
   current_basic_block_ = bb;
   basicBlockManager().rpo().push_back(id);
+  std::unique_ptr<LivenessBasicBlockImpl> bb_impl(new LivenessBasicBlockImpl);
+  bb->SetImpl(bb_impl.release());
 }
 
 void LivenessAnalysisVisitor::VisitGoto(int bid) {
@@ -215,7 +237,7 @@ void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
   int i = 0;
   for (BasicBlock* pred : current_basic_block_->predecessors()) {
     int value = operands[i++];
-    current_basic_block_->phis().push_back({pred->id(), value});
+    GetImpl(current_basic_block_)->phis.push_back({pred->id(), value});
   }
 }
 void LivenessAnalysisVisitor::VisitCall(

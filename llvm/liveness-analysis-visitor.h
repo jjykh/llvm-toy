@@ -8,6 +8,7 @@ class BasicBlock;
 class LivenessAnalysisVisitor final : public TFVisitor {
  public:
   explicit LivenessAnalysisVisitor(BasicBlockManager& bbm);
+  ~LivenessAnalysisVisitor() override = default;
   void CalculateLivesIns();
 
  private:

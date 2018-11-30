@@ -149,14 +149,15 @@ void TFParser::ParseInstructions(const char* line) {
     if (line[0] != ',' || line[1] != ' ') ParserError("unexpected for input");
     line += 2;
   } while (true);
-  if (line != line_end) {
+  if (line != line_end && mnemonic != "TailCall") {
     // try branch
     static const char kBranchTag[] = " -> ";
     if (memcmp(line, kBranchTag, sizeof(kBranchTag) - 1))
       ParserError("unexpected for branch");
     line += sizeof(kBranchTag) - 1;
     int btrue, bfalse;
-    sscanf(line, "B%d, B%d", &btrue, &bfalse);
+    if (2 != sscanf(line, "B%d, B%d", &btrue, &bfalse))
+      ParserError("expect 2 element for a branch");
     visitor_->VisitBranch(id, operands[0], btrue, bfalse);
     state_ = State::ParsingBlockHeader;
     return;
@@ -405,6 +406,7 @@ void TFParser::HandleTailCall(int id, const std::string& properties,
   if (memcmp(properties.c_str(), kAddr, sizeof(kAddr) - 1))
     ParserError("unexpected property for call: %s\n", properties.c_str());
   visitor_->VisitTailCall(id, is_code, registers_for_operands, operands);
+  state_ = State::ParsingBlockHeader;
 }
 
 void TFParser::ParserError(const char* fmt, ...) {

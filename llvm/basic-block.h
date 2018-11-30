@@ -40,9 +40,17 @@ class BasicBlock {
 
   inline std::vector<int>& rpo() { return rpo_; }
   inline std::vector<int>& liveins() { return liveins_; }
-  inline std::set<int>& defines() { return defines_; }
   inline int id() const { return id_; }
-  inline std::vector<PhiDesc>& phis() { return phis_; }
+  template <class T>
+  inline T* GetImpl() {
+    return static_cast<T*>(impl_);
+  }
+  inline void SetImpl(void* impl) { impl_ = impl; }
+  template <class T>
+  inline void ResetImpl() {
+    delete GetImpl<T>();
+    impl_ = nullptr;
+  }
 
  private:
   void mergePredecessors(Output& output);
@@ -50,9 +58,9 @@ class BasicBlock {
   std::vector<BasicBlock*> successors_;
   std::unordered_map<int, LValue> values_;
   std::vector<int> liveins_;
-  std::vector<PhiDesc> phis_;
-  std::set<int> defines_;
   std::vector<int> rpo_;
+
+  void* impl_;
   LBasicBlock bb_;
   int id_;
   bool started_;
