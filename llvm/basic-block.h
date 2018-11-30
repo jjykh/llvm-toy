@@ -25,11 +25,14 @@ class BasicBlock {
   }
   inline std::vector<BasicBlock*>& predecessors() { return predecessors_; }
 
+  inline std::vector<int>& rpo() { return rpo_;}
+
  private:
   void mergePredecessors(Output* output);
   std::vector<BasicBlock*> predecessors_;
   std::unordered_map<int, LValue> values_;
   std::vector<int> liveins_;
+  std::vector<int> rpo_;
   LBasicBlock bb_;
   int id_;
   bool started_;
