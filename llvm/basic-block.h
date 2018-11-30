@@ -1,9 +1,15 @@
 #ifndef BASIC_BLOCK_H
 #define BASIC_BLOCK_H
+#include <assert.h>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include "output.h"
 namespace jit {
+struct PhiDesc {
+  int from;
+  int value;
+};
 class BasicBlock {
  public:
   explicit BasicBlock(int id, Output& output);
@@ -23,15 +29,29 @@ class BasicBlock {
   inline const std::vector<BasicBlock*>& predecessors() const {
     return predecessors_;
   }
+
   inline std::vector<BasicBlock*>& predecessors() { return predecessors_; }
 
-  inline std::vector<int>& rpo() { return rpo_;}
+  inline const std::vector<BasicBlock*>& successors() const {
+    return successors_;
+  }
+
+  inline std::vector<BasicBlock*>& successors() { return successors_; }
+
+  inline std::vector<int>& rpo() { return rpo_; }
+  inline std::vector<int>& liveins() { return liveins_; }
+  inline std::set<int>& defines() { return defines_; }
+  inline int id() const { return id_; }
+  inline std::vector<PhiDesc>& phis() { return phis_; }
 
  private:
-  void mergePredecessors(Output* output);
+  void mergePredecessors(Output& output);
   std::vector<BasicBlock*> predecessors_;
+  std::vector<BasicBlock*> successors_;
   std::unordered_map<int, LValue> values_;
   std::vector<int> liveins_;
+  std::vector<PhiDesc> phis_;
+  std::set<int> defines_;
   std::vector<int> rpo_;
   LBasicBlock bb_;
   int id_;

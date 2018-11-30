@@ -5,8 +5,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "llvm-headers.h"
 #include "PlatformDesc.h"
+#include "llvm-headers.h"
 namespace jit {
 enum class PatchType {
   Direct,

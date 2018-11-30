@@ -13,12 +13,6 @@ void LLVMTFBuilder::end() {
 }
 
 void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
-  BasicBlock* bb = basicBlockManager().ensureBB(id);
-  for (int predecessor : predecessors) {
-    BasicBlock* pred_bb = basicBlockManager().findBB(predecessor);
-    assert(!!pred_bb);
-    bb.addPredecessor(pred_bb);
-  }
   bb.startBuild(output());
   currentBB_ = bb;
 }

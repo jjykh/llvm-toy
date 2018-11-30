@@ -1,25 +1,24 @@
 #include "basic-block-manager.h"
+#include <memory>
 #include "basic-block.h"
 #include "output.h"
 
 namespace jit {
 
-BasicBlockManager::BasicBlockManager(Output& output) :output_(&output){
-}
+BasicBlockManager::BasicBlockManager(Output& output) : output_(&output) {}
 
-BasicBlockManager::~BasicBlockManager() {
-}
+BasicBlockManager::~BasicBlockManager() {}
 BasicBlock* BasicBlockManager::createBB(int bid) {
   BasicBlock* bb;
   auto newBB = std::make_unique<BasicBlock>(bid, output());
   bb = newBB.get();
-  auto inserted = bbs_.insert(bid, std::move(newBB));
-  assert(insert.second);
+  auto inserted = bbs_.emplace(bid, std::move(newBB));
+  assert(inserted.second);
   return bb;
 }
 
 BasicBlock* BasicBlockManager::findBB(int bid) {
-  auto found = bbs_.find(id);
+  auto found = bbs_.find(bid);
   if (found != bbs_.end()) {
     return found->second.get();
   }
@@ -33,4 +32,4 @@ BasicBlock* BasicBlockManager::ensureBB(int bid) {
   return bb;
 }
 
-}
+}  // namespace jit

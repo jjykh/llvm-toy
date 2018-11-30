@@ -13,6 +13,9 @@
             'defines': [
                 'LLVMLOG_LEVEL=<(llvmlog_level)',
             ],
+            'dependencies': [
+                '<(DEPTH)/tf/tf.gyp:libtf',
+            ],
             'direct_dependent_settings': {
                 'include_dirs': [
                     '.',

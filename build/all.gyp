@@ -9,6 +9,7 @@
       'dependencies': [
           '<(DEPTH)/main.gyp:*',
           '<(DEPTH)/tf/tests/tests.gyp:*',
+          '<(DEPTH)/llvm/tests/tests.gyp:*',
       ]
     },
   ],
