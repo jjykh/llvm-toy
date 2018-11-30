@@ -1,7 +1,7 @@
 #ifndef ABBREVIATIONS_H
 #define ABBREVIATIONS_H
 #include <cstring>
-#include "AbbreviatedTypes.h"
+#include "abbreviated-types.h"
 
 // This file contains short-form calls into the LLVM C API. It is meant to
 // save typing and make the lowering code clearer. If we ever call an LLVM C API

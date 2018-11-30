@@ -68,7 +68,7 @@ class Output {
   }
 
   LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
-  LValue buildBitcast(LValue val, LType type);
+  LValue buildBitCast(LValue val, LType type);
 
   void buildDirectPatch(uintptr_t where);
   void buildIndirectPatch(LValue where);

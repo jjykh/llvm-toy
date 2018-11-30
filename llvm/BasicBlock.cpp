@@ -36,7 +36,7 @@ void BasicBlock::mergePredecessors(Output& output) {
   if (predecessors().empty()) return;
   // just direct derive from the single predecessor
   if (predecessors().size() == 1) {
-    m_liveOuts = predecessors()[0]->m_liveOuts;
+    m_values = predecessors()[0]->m_values;
   }
   struct ValueDesc {
     LValue v;
@@ -46,7 +46,7 @@ void BasicBlock::mergePredecessors(Output& output) {
   std::unordered_map<int, std::vector<ValueDesc>> to_phi;
   // build unioned_values from the first predecessor
   auto predecessor_iterator = predecessors().begin();
-  for (auto& item : predecessor_iterator->m_liveOuts) {
+  for (auto& item : predecessor_iterator->m_values) {
     unioned_values.push_back(item.first);
   }
   std::sort(unioned_values.begin(), unioned_values.end());
@@ -54,7 +54,7 @@ void BasicBlock::mergePredecessors(Output& output) {
   for (; predecessor_iterator != predecessors().end(); ++predecessor_iterator) {
     std::vector<int> result;
     std::vector<int> to_union;
-    for (auto& item : predecessor_iterator->m_liveOuts) {
+    for (auto& item : predecessor_iterator->m_values) {
       to_union.push_back(item.first);
     }
     std::sort(to_union.begin(), to_union.end());
@@ -66,13 +66,13 @@ void BasicBlock::mergePredecessors(Output& output) {
   // build lives
   for (int value : unioned_values) {
     for (auto& predecessor : predecessors()) {
-      auto found = m_liveOuts.find(value);
-      if (found == m_liveOuts.end()) {
-        m_liveOuts[value] = predecessor->m_liveOuts[value];
+      auto found = m_values.find(value);
+      if (found == m_values.end()) {
+        m_values[value] = predecessor->m_values[value];
         continue;
       }
-      auto predecessor_found = predecessor->m_liveOuts.find(value);
-      assert(predecessor_found != predecessor->m_liveOuts.end());
+      auto predecessor_found = predecessor->m_values.find(value);
+      assert(predecessor_found != predecessor->m_values.end());
       // ignore the equivalent case.
       if (found->second == predecessor_found->second) continue;
       if (phi_set.find(value) != phi_set.end()) {
@@ -82,10 +82,10 @@ void BasicBlock::mergePredecessors(Output& output) {
         // build a new phi
         LValue phi = output.buildPhi(output.taggedType());
         assert(typeof(found->second) == output.taggedType());
-        assert(found->second == predecessors()[0]->m_liveOuts[value]);
+        assert(found->second == predecessors()[0]->m_values[value]);
         addIncoming(phi, found->second, predecessors()[0]->nativeBB(), 1);
         addIncoming(phi, predecessor_found->second, predecessor->nativeBB(), 1);
-        m_liveOuts[value] = phi;
+        m_values[value] = phi;
         phi_set.insert(value);
       }
     }

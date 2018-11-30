@@ -39,9 +39,9 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
   int len = snprintf(constraint, 256, "={%s}", "r10");
   m_root = buildInlineAsm(functionType(pointerType(taggedType())), empty, 0,
                           constraint, len, true);
-  int len = snprintf(constraint, 256, "={%s}", "r11");
-  fp = buildInlineAsm(functionType(pointerType(pointerType(repo.voidType))),
-                      empty, 0, constraint, len, true);
+  len = snprintf(constraint, 256, "={%s}", "r11");
+  m_fp = buildInlineAsm(functionType(pointerType(pointerType(repo().voidType))),
+                        empty, 0, constraint, len, true);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -174,16 +174,16 @@ LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
   return buildCall(func);
 }
 
-LValue Output::buildPhi(LType type) { jit::buildPhi(m_builder, type); }
+LValue Output::buildPhi(LType type) { return jit::buildPhi(m_builder, type); }
 
 LValue Output::buildGEPWithByteOffset(LValue base, int offset, LType dstType) {
-  LValue base_ref8 = buildBitCast(base, repo().ref8());
-  LValue offset_value = constIntPtr(offset) LValue dst_ref8 =
-      LLVMBuildGEP(m_builder, base_ref8, offset_value, 1, "");
+  LValue base_ref8 = buildBitCast(base, repo().ref8);
+  LValue offset_value = constIntPtr(offset);
+  LValue dst_ref8 = LLVMBuildGEP(m_builder, base_ref8, &offset_value, 1, "");
   return buildBitCast(dst_ref8, dstType);
 }
 
-LValue Output::buildBitcast(LValue val, LType type) {
-  return buildBitCast(m_builder, val, type);
+LValue Output::buildBitCast(LValue val, LType type) {
+  return jit::buildBitCast(m_builder, val, type);
 }
 }  // namespace jit

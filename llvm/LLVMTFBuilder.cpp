@@ -1,42 +1,21 @@
 #include "LLVMTFBuilder.h"
 #include "BasicBlock.h"
 namespace jit {
-LLVMTFBuilder::LLVMTFBuilder(Output& output)
-    : m_output(&output), m_currentBB(nullptr) {}
+LLVMTFBuilder::LLVMTFBuilder(Output& output,
+                             BasicBlockManager& _basicBlockManager)
+    : m_output(&output),
+      m_basicBlockManager(&_basicBlockManager),
+      m_currentBB(nullptr) {}
 
 void LLVMTFBuilder::end() {
   assert(!!m_currentBB);
   m_currentBB->end();
 }
 
-BasicBlock* LLVMTFBuilder::createBB(int bid) {
-  BasicBlock* bb;
-  auto newBB = std::make_unique<BasicBlock>(bid, output());
-  bb = newBB.get();
-  auto inserted = m_bbs.insert(bid, std::move(newBB));
-  assert(insert.second);
-  return bb;
-}
-
-BasicBlock* LLVMTFBuilder::findBB(int bid) {
-  auto found = m_bbs.find(id);
-  if (found != m_bbs.end()) {
-    return found->second.get();
-  }
-  return nullptr;
-}
-
-BasicBlock* LLVMTFBuilder::ensureBB(int bid) {
-  BasicBlock* bb = findBB(bid);
-  if (!!bb) return bb;
-  bb = createBB(bid);
-  return bb;
-}
-
 void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
-  BasicBlock* bb = ensureBB(id);
+  BasicBlock* bb = basicBlockManager().ensureBB(id);
   for (int predecessor : predecessors) {
-    BasicBlock* pred_bb = findBB(predecessor);
+    BasicBlock* pred_bb = basicBlockManager().findBB(predecessor);
     assert(!!pred_bb);
     bb.addPredecessor(pred_bb);
   }
@@ -45,7 +24,7 @@ void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
 }
 
 void LLVMTFBuilder::VisitGoto(int bid) {
-  BasicBlock* succ = ensureBB(bid);
+  BasicBlock* succ = basicBlockManager().ensureBB(bid);
   assert(!succ->started());
   output().buildBr(succ->nativeBB());
   m_currentBB->end();
@@ -252,8 +231,8 @@ void LLVMTFBuilder::VisitInt32LessThan(int id, int e1, int e2) {
 
 void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   LValue cmp_value = m_currentBB->value(cmp);
-  BasicBlock* bbTrue = ensureBB(btrue);
-  BasicBlock* bbFalse = ensureBB(bfalse);
+  BasicBlock* bbTrue = basicBlockManager().ensureBB(btrue);
+  BasicBlock* bbFalse = basicBlockManager().ensureBB(bfalse);
   output().buildCondBr(cmp, bbTrue->nativeBB(), bbFalse->nativeBB());
   m_currentBB->end();
   m_currentBB = nullptr;

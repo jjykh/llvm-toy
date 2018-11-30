@@ -14,10 +14,10 @@ class BasicBlock {
   inline bool started() const { return m_started; }
   inline bool ended() const { return m_ended; }
   inline LBasicBlock nativeBB() { return m_bb; }
-  inline void setValue(int nid, LValue value) { m_liveOuts[nid] = value; }
+  inline void setValue(int nid, LValue value) { m_values[nid] = value; }
   inline LValue value(int nid) {
-    auto found = m_liveOuts.find(nid);
-    assert(found != m_liveOuts.end());
+    auto found = m_values.find(nid);
+    assert(found != m_values.end());
     return found->second;
   }
   inline const std::vector<BasicBlock*>& predecessors() const {
@@ -28,7 +28,8 @@ class BasicBlock {
  private:
   void mergePredecessors(Output* output);
   std::vector<BasicBlock*> m_predecessors;
-  std::unordered_map<int, LValue> m_liveOuts;
+  std::unordered_map<int, LValue> m_values;
+  std::vector<int> m_liveins;
   LBasicBlock m_bb;
   int m_id;
   bool m_started;
