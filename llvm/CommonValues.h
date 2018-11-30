@@ -22,6 +22,7 @@ class CommonValues {
   const LType intPtr;
   const LType floatType;
   const LType doubleType;
+  const LType tokenType;
   const LType ref8;
   const LType ref16;
   const LType ref32;

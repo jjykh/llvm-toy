@@ -7,18 +7,42 @@ Output::Output(CompilerState& state)
     : m_state(state),
       m_repo(state.m_context, state.m_module),
       m_builder(nullptr),
+      m_prologue(nullptr),
+      m_taggedType(nullptr),
+      m_root(nullptr),
       m_stackMapsId(1) {
-  m_argType = pointerType(arrayType(
-      repo().intPtr, state.m_platformDesc.m_contextSize / sizeof(intptr_t)));
-  state.m_function = addFunction(state.m_module, "main",
-                                 functionType(repo().int64, m_argType));
-  m_builder = LLVMCreateBuilderInContext(state.m_context);
+  m_taggedType =
+      pointerType(LLVMStructCreateNamed(state.m_context, "TaggedStruct"));
+  state.m_function =
+      addFunction(state.m_module, "main", functionType(taggedType()));
+  setFunctionCallingConv(state.m_function, LLVMAnyRegCallConv);
+}
+Output::~Output() { LLVMDisposeBuilder(m_builder); }
+
+void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
+  assert(!m_builder);
+  assert(!m_prologue);
+  m_builder = LLVMCreateBuilderInContext(m_state.m_context);
 
   m_prologue = appendBasicBlock("Prologue");
   positionToBBEnd(m_prologue);
-  buildGetArg();
+  // build parameters
+  char empty[] = "\0";
+  char constraint[256];
+  for (auto& registerParameter : registerParameters) {
+    int len =
+        snprintf(constraint, 256, "={%s}", registerParameter.name.c_str());
+    LValue rvalue = buildInlineAsm(functionType(registerParameter.type), empty,
+                                   0, constraint, len, true);
+    m_registerParameters.push_back(rvalue);
+  }
+  int len = snprintf(constraint, 256, "={%s}", "r10");
+  m_root = buildInlineAsm(functionType(pointerType(taggedType())), empty, 0,
+                          constraint, len, true);
+  int len = snprintf(constraint, 256, "={%s}", "r11");
+  fp = buildInlineAsm(functionType(pointerType(pointerType(repo.voidType))),
+                      empty, 0, constraint, len, true);
 }
-Output::~Output() { LLVMDisposeBuilder(m_builder); }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
   return jit::appendBasicBlock(m_state.m_context, m_state.m_function, name);
@@ -54,7 +78,48 @@ LValue Output::buildAdd(LValue lhs, LValue rhs) {
   return jit::buildAdd(m_builder, lhs, rhs);
 }
 
+LValue Output::buildNSWAdd(LValue lhs, LValue rhs) {
+  return LLVMBuildNSWAdd(m_builder, lhs, rhs, "");
+}
+
+LValue Output::buildSub(LValue lhs, LValue rhs) {
+  return jit::buildSub(m_builder, lhs, rhs);
+}
+
+LValue Output::buildNSWSub(LValue lhs, LValue rhs) {
+  return LLVMBuildNSWSub(m_builder, lhs, rhs, "");
+}
+
+LValue Output::buildMul(LValue lhs, LValue rhs) {
+  return jit::buildMul(m_builder, lhs, rhs);
+}
+
+LValue Output::buildNSWMul(LValue lhs, LValue rhs) {
+  return LLVMBuildNSWMul(m_builder, lhs, rhs, "");
+}
+
+LValue Output::buildShl(LValue lhs, LValue rhs) {
+  return jit::buildShl(m_builder, lhs, rhs);
+}
+
+LValue Output::buildShr(LValue lhs, LValue rhs) {
+  return jit::buildLShr(m_builder, lhs, rhs);
+}
+
+LValue Output::buildSar(LValue lhs, LValue rhs) {
+  return jit::buildAShr(m_builder, lhs, rhs);
+}
+
+LValue Output::buildAnd(LValue lhs, LValue rhs) {
+  return jit::buildAnd(m_builder, lhs, rhs);
+}
+
 LValue Output::buildBr(LBasicBlock bb) { return jit::buildBr(m_builder, bb); }
+
+LValue Output::buildCondBr(LValue condition, LBasicBlock taken,
+                           LBasicBlock notTaken) {
+  return jit::buildCondBr(m_builder, condition, taken, notTaken);
+}
 
 LValue Output::buildRet(LValue ret) { return jit::buildRet(m_builder, ret); }
 
@@ -63,8 +128,6 @@ LValue Output::buildRetVoid(void) { return jit::buildRetVoid(m_builder); }
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
   return LLVMBuildCast(m_builder, Op, Val, DestTy, "");
 }
-
-void Output::buildGetArg() { m_arg = LLVMGetParam(m_state.m_function, 0); }
 
 void Output::buildDirectPatch(uintptr_t where) {
   PatchDesc desc = {PatchType::Direct};
@@ -84,10 +147,6 @@ void Output::buildAssistPatch(LValue where) {
 
 void Output::buildPatchCommon(LValue where, const PatchDesc& desc,
                               size_t patchSize) {
-  LValue constIndex[] = {
-      constInt32(0),
-      constInt32(m_state.m_platformDesc.m_pcFieldOffset / sizeof(intptr_t))};
-  buildStore(where, LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
   LValue call = buildCall(repo().patchpointVoidIntrinsic(),
                           constIntPtr(m_stackMapsId), constInt32(patchSize),
                           constIntToPtr(constInt32(patchSize), repo().ref8),
@@ -98,22 +157,33 @@ void Output::buildPatchCommon(LValue where, const PatchDesc& desc,
   m_state.m_patchMap.insert(std::make_pair(m_stackMapsId++, desc));
 }
 
-LValue Output::buildLoadArgIndex(int index) {
-  LValue constIndex[] = {constInt32(0), constInt32(index)};
-  return buildLoad(LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-}
-
-LValue Output::buildStoreArgIndex(LValue val, int index) {
-  LValue constIndex[] = {constInt32(0), constInt32(index)};
-  return buildStore(val,
-                    LLVMBuildInBoundsGEP(m_builder, m_arg, constIndex, 2, ""));
-}
-
 LValue Output::buildSelect(LValue condition, LValue taken, LValue notTaken) {
   return jit::buildSelect(m_builder, condition, taken, notTaken);
 }
 
 LValue Output::buildICmp(LIntPredicate cond, LValue left, LValue right) {
   return jit::buildICmp(m_builder, cond, left, right);
+}
+
+LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
+                              char* constraintString,
+                              size_t constraintStringSize, bool sideEffect) {
+  LValue func = LLVMGetInlineAsm(type, asmString, asmStringSize,
+                                 constraintString, constraintStringSize,
+                                 sideEffect, false, LLVMInlineAsmDialectATT);
+  return buildCall(func);
+}
+
+LValue Output::buildPhi(LType type) { jit::buildPhi(m_builder, type); }
+
+LValue Output::buildGEPWithByteOffset(LValue base, int offset, LType dstType) {
+  LValue base_ref8 = buildBitCast(base, repo().ref8());
+  LValue offset_value = constIntPtr(offset) LValue dst_ref8 =
+      LLVMBuildGEP(m_builder, base_ref8, offset_value, 1, "");
+  return buildBitCast(dst_ref8, dstType);
+}
+
+LValue Output::buildBitcast(LValue val, LType type) {
+  return buildBitCast(m_builder, val, type);
 }
 }  // namespace jit

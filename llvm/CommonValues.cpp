@@ -12,6 +12,7 @@ CommonValues::CommonValues(LContext context)
       intPtr(intPtrType(context)),
       floatType(jit::floatType(context)),
       doubleType(jit::doubleType(context)),
+      tokenType(LLVMTokenTypeInContext(context)),
       ref8(pointerType(int8)),
       ref16(pointerType(int16)),
       ref32(pointerType(int32)),

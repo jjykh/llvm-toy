@@ -35,7 +35,7 @@ struct CompilerState {
   LLVMContextRef m_context;
   void* m_entryPoint;
   struct PlatformDesc m_platformDesc;
-  CompilerState(const char* moduleName, const PlatformDesc& desc);
+  CompilerState(const char* moduleName);
   ~CompilerState();
   CompilerState(const CompilerState&) = delete;
   const CompilerState& operator=(const CompilerState&) = delete;

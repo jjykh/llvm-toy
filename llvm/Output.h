@@ -1,29 +1,49 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
+#include <string>
+#include <vector>
 #include "IntrinsicRepository.h"
 namespace jit {
 struct CompilerState;
 struct PatchDesc;
+struct RegisterParameter {
+  std::string name;
+  LType type;
+};
+
+using RegisterParameterDesc = std::vector<RegisterParameter>;
+
 class Output {
  public:
   Output(CompilerState& state);
   ~Output();
+  void initializeBuild(const RegisterParameterDesc&);
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
   LValue constInt32(int);
   LValue constIntPtr(intptr_t);
   LValue constInt64(long long);
   LValue buildStructGEP(LValue structVal, unsigned field);
+  LValue buildGEPWithByteOffset(LValue base, int offset, LType dstType);
   LValue buildLoad(LValue toLoad);
   LValue buildStore(LValue val, LValue pointer);
   LValue buildAdd(LValue lhs, LValue rhs);
+  LValue buildNSWAdd(LValue lhs, LValue rhs);
+  LValue buildSub(LValue lhs, LValue rhs);
+  LValue buildNSWSub(LValue lhs, LValue rhs);
+  LValue buildMul(LValue lhs, LValue rhs);
+  LValue buildNSWMul(LValue lhs, LValue rhs);
+  LValue buildShl(LValue lhs, LValue rhs);
+  LValue buildShr(LValue lhs, LValue rhs);
+  LValue buildSar(LValue lhs, LValue rhs);
+  LValue buildAnd(LValue lhs, LValue rhs);
   LValue buildBr(LBasicBlock bb);
+  LValue buildCondBr(LValue condition, LBasicBlock taken, LBasicBlock notTaken);
   LValue buildRet(LValue ret);
   LValue buildRetVoid(void);
-  LValue buildLoadArgIndex(int index);
-  LValue buildStoreArgIndex(LValue val, int index);
   LValue buildSelect(LValue condition, LValue taken, LValue notTaken);
   LValue buildICmp(LIntPredicate cond, LValue left, LValue right);
+  LValue buildPhi(LType type);
 
   inline LValue buildCall(LValue function, const LValue* args,
                           unsigned numArgs) {
@@ -48,15 +68,19 @@ class Output {
   }
 
   LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
+  LValue buildBitcast(LValue val, LType type);
 
   void buildDirectPatch(uintptr_t where);
   void buildIndirectPatch(LValue where);
   void buildAssistPatch(LValue where);
+  LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
 
   inline IntrinsicRepository& repo() { return m_repo; }
-  inline LType argType() const { return m_argType; }
   inline LBasicBlock prologue() const { return m_prologue; }
-  inline LValue arg() const { return m_arg; }
+  inline LType taggedType() const { return m_taggedType; }
+  inline LValue registerParameter(int i) { return m_registerParameters[i]; }
+  inline LValue root() { return m_root; }
+  inline LValue fp() { return m_fp; }
 
  private:
   void buildGetArg();
@@ -65,9 +89,11 @@ class Output {
   CompilerState& m_state;
   IntrinsicRepository m_repo;
   LBuilder m_builder;
-  LType m_argType;
   LBasicBlock m_prologue;
-  LValue m_arg;
+  LType m_taggedType;
+  LValue m_root;
+  LValue m_fp;
+  std::vector<LValue> m_registerParameters;
   uint32_t m_stackMapsId;
 };
 }  // namespace jit

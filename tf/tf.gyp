@@ -10,9 +10,6 @@
             'include_dirs': [
                 '.',
             ],
-            'dependencies': [
-                '<(DEPTH)/llvm/llvm.gyp:libllvm',
-            ],
             'direct_dependent_settings': {
                 'include_dirs': [
                     '.',
