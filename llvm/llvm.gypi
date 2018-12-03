@@ -15,6 +15,7 @@
             'basic-block.cc',
             'basic-block-manager.cc',
             'liveness-analysis-visitor.cc',
+            'llvm-tf-builder.cc',
         ],
         'llvmlog_level': 0,
     },

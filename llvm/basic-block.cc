@@ -4,37 +4,26 @@
 #include <unordered_set>
 
 namespace jit {
-BasicBlock::BasicBlock(int id, Output& output)
-    : bb_(nullptr), id_(id), started_(false), ended_(false) {
-  char buf[256];
-  snprintf(buf, 256, "B%d\n", id_);
-  bb_ = output.appendBasicBlock(buf);
-}
+BasicBlock::BasicBlock(int id)
+    : bb_(nullptr), id_(id), started_(false), ended_(false) {}
 
 BasicBlock::~BasicBlock() {}
 
-void BasicBlock::startBuild(Output& output) {
+void BasicBlock::StartBuild() {
   assert(!started());
-  assert(!nativeBB());
+  assert(!!native_bb());
   assert(!ended());
   started_ = true;
-  output.positionToBBEnd(bb_);
-  mergePredecessors(output);
 }
 
-void BasicBlock::endBuild() {
+void BasicBlock::EndBuild() {
   assert(!started());
   assert(!ended());
   ended_ = true;
 }
 
-void BasicBlock::addPredecessor(BasicBlock* pred) {
+void BasicBlock::AddPredecessor(BasicBlock* pred) {
   assert(!pred->started());
   predecessors().push_back(pred);
-}
-
-void BasicBlock::mergePredecessors(Output& output) {
-  if (predecessors().empty()) return;
-  // FIXME: implement merge.
 }
 }  // namespace jit

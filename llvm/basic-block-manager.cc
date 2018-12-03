@@ -5,12 +5,13 @@
 
 namespace jit {
 
-BasicBlockManager::BasicBlockManager(Output& output) : output_(&output) {}
+BasicBlockManager::BasicBlockManager() {}
 
 BasicBlockManager::~BasicBlockManager() {}
+
 BasicBlock* BasicBlockManager::createBB(int bid) {
   BasicBlock* bb;
-  auto newBB = std::make_unique<BasicBlock>(bid, output());
+  auto newBB = std::make_unique<BasicBlock>(bid);
   bb = newBB.get();
   auto inserted = bbs_.emplace(bid, std::move(newBB));
   assert(inserted.second);

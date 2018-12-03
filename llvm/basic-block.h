@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include "output.h"
+
 namespace jit {
 struct PhiDesc {
   int from;
@@ -12,20 +13,23 @@ struct PhiDesc {
 };
 class BasicBlock {
  public:
-  explicit BasicBlock(int id, Output& output);
+  explicit BasicBlock(int id);
   ~BasicBlock();
-  void startBuild(Output& output);
-  void endBuild();
-  void addPredecessor(BasicBlock* pred);
+  void StartBuild();
+  void EndBuild();
+  void AddPredecessor(BasicBlock* pred);
   inline bool started() const { return started_; }
   inline bool ended() const { return ended_; }
-  inline LBasicBlock nativeBB() { return bb_; }
-  inline void setValue(int nid, LValue value) { values_[nid] = value; }
+  inline LBasicBlock native_bb() { return bb_; }
+  // FIXME: move to tf builder
+  inline void set_value(int nid, LValue value) { values_[nid] = value; }
   inline LValue value(int nid) {
     auto found = values_.find(nid);
     assert(found != values_.end());
     return found->second;
   }
+  inline std::unordered_map<int, LValue>& values() { return values_; }
+
   inline const std::vector<BasicBlock*>& predecessors() const {
     return predecessors_;
   }
@@ -39,21 +43,29 @@ class BasicBlock {
   inline std::vector<BasicBlock*>& successors() { return successors_; }
 
   inline std::vector<int>& rpo() { return rpo_; }
+
   inline std::vector<int>& liveins() { return liveins_; }
+
   inline int id() const { return id_; }
+
   template <class T>
   inline T* GetImpl() {
     return static_cast<T*>(impl_);
   }
+
   inline void SetImpl(void* impl) { impl_ = impl; }
+
   template <class T>
   inline void ResetImpl() {
-    delete GetImpl<T>();
-    impl_ = nullptr;
+    if (impl_) {
+      delete GetImpl<T>();
+      impl_ = nullptr;
+    }
   }
 
+  void AssignNativeBB(LBasicBlock native) { bb_ = native; }
+
  private:
-  void mergePredecessors(Output& output);
   std::vector<BasicBlock*> predecessors_;
   std::vector<BasicBlock*> successors_;
   std::unordered_map<int, LValue> values_;

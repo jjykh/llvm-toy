@@ -8,7 +8,7 @@ class Output;
 class BasicBlock;
 class BasicBlockManager {
  public:
-  explicit BasicBlockManager(Output& output);
+  BasicBlockManager();
   ~BasicBlockManager();
   BasicBlock* createBB(int);
   BasicBlock* findBB(int);
@@ -19,8 +19,6 @@ class BasicBlockManager {
   inline BasicBlockMap::iterator end() { return bbs_.end(); }
 
  private:
-  inline Output& output() { return *output_; }
-  Output* output_;
   std::vector<int> rpo_;
   BasicBlockMap bbs_;
 };

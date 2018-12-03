@@ -74,11 +74,15 @@ class Output {
   void buildIndirectPatch(LValue where);
   void buildAssistPatch(LValue where);
   LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
+  void buildUnreachable();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
   inline LType taggedType() const { return taggedType_; }
   inline LValue registerParameter(int i) { return registerParameters_[i]; }
+  inline LValue context() {
+    return registerParameters_[registerParameters_.size() - 1];
+  }
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
 

@@ -100,7 +100,7 @@ void LivenessAnalysisVisitor::VisitBlock(int id,
   BasicBlock* bb = basicBlockManager().ensureBB(id);
   for (int predecessor : predecessors) {
     BasicBlock* pred_bb = basicBlockManager().ensureBB(predecessor);
-    bb->addPredecessor(pred_bb);
+    bb->AddPredecessor(pred_bb);
   }
   current_basic_block_ = bb;
   basicBlockManager().rpo().push_back(id);

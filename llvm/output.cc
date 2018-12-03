@@ -149,7 +149,7 @@ void Output::buildPatchCommon(LValue where, const PatchDesc& desc,
                           constIntToPtr(constInt32(patchSize), repo().ref8),
                           constInt32(1), constIntToPtr(where, repo().ref8));
   LLVMSetInstructionCallConv(call, LLVMAnyRegCallConv);
-  buildUnreachable(builder_);
+  buildUnreachable();
   // record the stack map info
   state_.patchMap_.insert(std::make_pair(stackMapsId_++, desc));
 }
@@ -183,4 +183,6 @@ LValue Output::buildGEPWithByteOffset(LValue base, int offset, LType dstType) {
 LValue Output::buildBitCast(LValue val, LType type) {
   return jit::buildBitCast(builder_, val, type);
 }
+
+void Output::buildUnreachable() { jit::buildUnreachable(builder_); }
 }  // namespace jit

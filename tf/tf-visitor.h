@@ -1,6 +1,7 @@
 #ifndef TFVISITOR_H
 #define TFVISITOR_H
 #include <stdint.h>
+#include <string>
 #include <vector>
 enum class MachineRepresentation {
   kNone,
@@ -39,7 +40,7 @@ enum WriteBarrierKind : uint8_t {
 };
 
 using OperandsVector = std::vector<int>;
-using RegistersForOperands = std::vector<int>;
+using RegistersForOperands = std::vector<std::string>;
 
 #define INSTRUCTIONS(V)                                                       \
   V(Parameter, (int id, int pid))                                             \

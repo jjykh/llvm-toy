@@ -1,6 +1,7 @@
 #ifndef LLVM_TF_BUILDER_H
 #define LLVM_TF_BUILDER_H
 #include <unordered_map>
+#include <vector>
 #include "tf-visitor.h"
 namespace jit {
 class Output;
@@ -9,8 +10,8 @@ class BasicBlockManager;
 
 class LLVMTFBuilder final : public TFVisitor {
  public:
-  explicit LLVMTFBuilder(Output& output, BasicBlockManager& _basicBlockManager);
-  void end();
+  explicit LLVMTFBuilder(Output&, BasicBlockManager&);
+  void End();
 
  private:
   void VisitBlock(int id, const OperandsVector& predecessors) override;
@@ -19,10 +20,21 @@ class LLVMTFBuilder final : public TFVisitor {
   INSTRUCTIONS(DECL_METHOD)
 #undef DECL_METHOD
   inline Output& output() { return *output_; }
-  inline BasicBlockManager& basicBlockManager() { return *basicBlockManager_; }
+  inline BasicBlockManager& basic_block_manager() {
+    return *basic_block_manager_;
+  }
+  void MergePredecessors(BasicBlock* bb);
+  bool AllPredecessorStarted(BasicBlock* bb, BasicBlock** ref_pred);
+  void BuildPhiAndPushToWorkList(BasicBlock* bb, BasicBlock* ref_pred);
+  void ProcessPhiWorkList();
+  void DoCommonCall(int id, bool code,
+                    const RegistersForOperands& registers_for_operands,
+                    const OperandsVector& operands, bool tailcall);
   Output* output_;
-  BasicBlockManager* basicBlockManager_;
-  BasicBlock* currentBB_;
+  BasicBlockManager* basic_block_manager_;
+  BasicBlock* current_bb_;
+  std::vector<BasicBlock*> phi_rebuild_worklist_;
+  int64_t state_point_id_next_;
 };
 }  // namespace jit
 #endif  // LLVM_TF_BUILDER_H
