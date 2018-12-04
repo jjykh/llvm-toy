@@ -8,11 +8,8 @@ Output::Output(CompilerState& state)
       repo_(state.context_, state.module_),
       builder_(nullptr),
       prologue_(nullptr),
-      taggedType_(nullptr),
       root_(nullptr),
       stackMapsId_(1) {
-  taggedType_ =
-      pointerType(LLVMStructCreateNamed(state.context_, "TaggedStruct"));
   state.function_ =
       addFunction(state.module_, "main", functionType(taggedType()));
   setFunctionCallingConv(state.function_, LLVMAnyRegCallConv);
@@ -40,8 +37,8 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
   root_ = buildInlineAsm(functionType(pointerType(taggedType())), empty, 0,
                          constraint, len, true);
   len = snprintf(constraint, 256, "={%s}", "r11");
-  fp_ = buildInlineAsm(functionType(pointerType(pointerType(repo().voidType))),
-                       empty, 0, constraint, len, true);
+  fp_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
+                       constraint, len, true);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -125,6 +122,10 @@ LValue Output::buildRetVoid(void) { return jit::buildRetVoid(builder_); }
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
   return LLVMBuildCast(builder_, Op, Val, DestTy, "");
+}
+
+LValue Output::buildPointerCast(LValue val, LType type) {
+  return LLVMBuildPointerCast(builder_, val, type, "");
 }
 
 void Output::buildDirectPatch(uintptr_t where) {

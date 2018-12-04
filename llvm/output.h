@@ -69,6 +69,7 @@ class Output {
 
   LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
   LValue buildBitCast(LValue val, LType type);
+  LValue buildPointerCast(LValue val, LType type);
 
   void buildDirectPatch(uintptr_t where);
   void buildIndirectPatch(LValue where);
@@ -78,7 +79,7 @@ class Output {
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
-  inline LType taggedType() const { return taggedType_; }
+  inline LType taggedType() const { return repo_.taggedType; }
   inline LValue registerParameter(int i) { return registerParameters_[i]; }
   inline LValue context() {
     return registerParameters_[registerParameters_.size() - 1];
@@ -94,7 +95,6 @@ class Output {
   IntrinsicRepository repo_;
   LBuilder builder_;
   LBasicBlock prologue_;
-  LType taggedType_;
   LValue root_;
   LValue fp_;
   std::vector<LValue> registerParameters_;

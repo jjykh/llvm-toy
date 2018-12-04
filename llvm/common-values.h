@@ -14,6 +14,7 @@ class CommonValues {
 
   const LType voidType;
   const LType boolean;
+  const LType int1;
   const LType int8;
   const LType int16;
   const LType int32;
@@ -29,6 +30,7 @@ class CommonValues {
   const LType refPtr;
   const LType refFloat;
   const LType refDouble;
+  const LType taggedType;
   const LValue booleanTrue;
   const LValue booleanFalse;
   const LValue int8Zero;

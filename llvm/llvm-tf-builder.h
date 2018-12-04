@@ -2,6 +2,7 @@
 #define LLVM_TF_BUILDER_H
 #include <unordered_map>
 #include <vector>
+#include "abbreviated-types.h"
 #include "tf-visitor.h"
 namespace jit {
 class Output;
@@ -30,10 +31,13 @@ class LLVMTFBuilder final : public TFVisitor {
   void DoCommonCall(int id, bool code,
                     const RegistersForOperands& registers_for_operands,
                     const OperandsVector& operands, bool tailcall);
+  void EndCurrentBlock();
+  LValue EnsureWord32(LValue);
   Output* output_;
   BasicBlockManager* basic_block_manager_;
   BasicBlock* current_bb_;
   std::vector<BasicBlock*> phi_rebuild_worklist_;
+  std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
   int64_t state_point_id_next_;
 };
 }  // namespace jit

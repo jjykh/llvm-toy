@@ -1,8 +1,11 @@
 #include "liveness-analysis-visitor.h"
 #include <algorithm>
+#include <deque>
 #include <iterator>
+#include <unordered_set>
 #include "basic-block-manager.h"
 #include "basic-block.h"
+#include "log.h"
 
 namespace jit {
 namespace {
@@ -15,8 +18,20 @@ struct LivenessBasicBlockImpl {
   std::vector<PhiDesc> phis;
   std::set<int> defines;
 };
+
 static inline LivenessBasicBlockImpl* GetImpl(BasicBlock* bb) {
   return bb->GetImpl<LivenessBasicBlockImpl>();
+}
+
+static bool CompareLiveins(const std::vector<int>& left,
+                           const std::vector<int>& right) {
+  if (left.size() != right.size()) return true;
+  auto left_iterator = left.begin();
+  auto right_iterator = right.begin();
+  for (; left_iterator != left.end(); ++left_iterator, ++right_iterator) {
+    if (*left_iterator != *right_iterator) return true;
+  }
+  return false;
 }
 }  // namespace
 LivenessAnalysisVisitor::LivenessAnalysisVisitor(BasicBlockManager& bbm)
@@ -40,11 +55,14 @@ void LivenessAnalysisVisitor::EndBlock() {
 }
 
 void LivenessAnalysisVisitor::CalculateLivesIns() {
-  for (auto it = basicBlockManager().rpo().rbegin();
-       it != basicBlockManager().rpo().rend(); ++it) {
-    BasicBlock* now = basicBlockManager().findBB(*it);
-    std::vector<int> liveins(std::move(now->liveins()));
-    // merge those from successors.
+  std::deque<int> worklist;
+  std::copy(basicBlockManager().rpo().rbegin(),
+            basicBlockManager().rpo().rend(), std::back_inserter(worklist));
+  while (!worklist.empty()) {
+    int id = worklist.front();
+    worklist.pop_front();
+    BasicBlock* now = basicBlockManager().findBB(id);
+    std::vector<int> liveins(now->liveins());
     for (auto successor : now->successors()) {
       std::vector<int> result;
       std::set_union(liveins.begin(), liveins.end(),
@@ -73,9 +91,17 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
             return true;
           return false;
         });
+
+    if (CompareLiveins(now->liveins(), result)) {
+      // FIXME: use marker to optimize.
+      for (auto pred : now->predecessors()) {
+        worklist.push_back(pred->id());
+      }
+    }
     now->liveins().swap(result);
   }
   // add back the use of phi in this pass
+#if 0
   for (auto it = basicBlockManager().rpo().begin();
        it != basicBlockManager().rpo().end(); ++it) {
     BasicBlock* now = basicBlockManager().findBB(*it);
@@ -91,6 +117,7 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
       }
     }
   }
+#endif
   ResetImpls<LivenessBasicBlockImpl>(basicBlockManager());
 }
 

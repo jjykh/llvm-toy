@@ -17,7 +17,7 @@ void BasicBlock::StartBuild() {
 }
 
 void BasicBlock::EndBuild() {
-  assert(!started());
+  assert(started());
   assert(!ended());
   ended_ = true;
 }

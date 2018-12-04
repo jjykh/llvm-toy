@@ -28,7 +28,7 @@ static inline LType int64Type(LContext context) {
   return LLVMInt64TypeInContext(context);
 }
 static inline LType intPtrType(LContext context) {
-  return LLVMInt64TypeInContext(context);
+  return LLVMInt32TypeInContext(context);
 }
 static inline LType floatType(LContext context) {
   return LLVMFloatTypeInContext(context);

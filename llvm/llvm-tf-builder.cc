@@ -6,15 +6,20 @@
 
 namespace jit {
 namespace {
+struct NotMergedPhiDesc {
+  BasicBlock* pred;
+  int value;
+  LValue phi;
+};
+
 struct LLVMTFBuilderBasicBlockImpl {
-  std::vector<BasicBlock*> not_merged_pred;
-  std::vector<LValue> phis;
+  std::vector<NotMergedPhiDesc> not_merged_phis;
 };
 
 void EnsureNativeBB(BasicBlock* bb, Output& output) {
   if (bb->native_bb()) return;
   char buf[256];
-  snprintf(buf, 256, "B%d\n", bb->id());
+  snprintf(buf, 256, "B%d", bb->id());
   LBasicBlock native_bb = output.appendBasicBlock(buf);
   bb->AssignNativeBB(native_bb);
 }
@@ -23,6 +28,27 @@ void StartBuild(BasicBlock* bb, Output& output) {
   EnsureNativeBB(bb, output);
   bb->StartBuild();
   output.positionToBBEnd(bb->native_bb());
+}
+
+std::string ConstraintsToString(const std::vector<std::string>& constraints) {
+  std::ostringstream oss;
+  auto iterator = constraints.begin();
+  if (iterator == constraints.end()) return oss.str();
+  oss << *(iterator++);
+  if (iterator == constraints.end()) return oss.str();
+  for (; iterator != constraints.end(); ++iterator) {
+    oss << "," << *(iterator);
+  }
+  return oss.str();
+}
+
+LLVMTFBuilderBasicBlockImpl* EnsureImpl(BasicBlock* bb) {
+  if (bb->GetImpl<LLVMTFBuilderBasicBlockImpl>())
+    return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
+  std::unique_ptr<LLVMTFBuilderBasicBlockImpl> impl(
+      new LLVMTFBuilderBasicBlockImpl);
+  bb->SetImpl(impl.release());
+  return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
 }
 }  // namespace
 
@@ -35,10 +61,13 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
 
 void LLVMTFBuilder::End() {
   assert(!!current_bb_);
-  current_bb_->EndBuild();
-  current_bb_ = nullptr;
+  EndCurrentBlock();
   ProcessPhiWorkList();
   jit::ResetImpls<LLVMTFBuilderBasicBlockImpl>(basic_block_manager());
+  output().positionToBBEnd(output().prologue());
+  output().buildBr(basic_block_manager()
+                       .findBB(*basic_block_manager().rpo().begin())
+                       ->native_bb());
 }
 
 void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
@@ -56,17 +85,17 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
   BasicBlock* ref_pred = nullptr;
   if (!AllPredecessorStarted(bb, &ref_pred)) {
     assert(!!ref_pred);
-    std::unique_ptr<LLVMTFBuilderBasicBlockImpl> impl(
-        new LLVMTFBuilderBasicBlockImpl);
-    bb->SetImpl(impl.release());
     BuildPhiAndPushToWorkList(bb, ref_pred);
+    return;
   }
   // Use phi.
   for (int live : bb->liveins()) {
     LValue ref_value = ref_pred->value(live);
     LType ref_type = typeOf(ref_value);
-    // FIXME: Should ignore those are not tagged type.
     if (ref_type != output().taggedType()) {
+      // FIXME: Should add assert that all values are the same.
+      bb->set_value(live, ref_value);
+      continue;
     }
     LValue phi = output().buildPhi(ref_type);
     for (BasicBlock* pred : bb->predecessors()) {
@@ -74,6 +103,7 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
       LBasicBlock native = pred->native_bb();
       addIncoming(phi, &value, &native, 1);
     }
+    bb->set_value(live, phi);
   }
 }
 
@@ -92,19 +122,23 @@ bool LLVMTFBuilder::AllPredecessorStarted(BasicBlock* bb,
 
 void LLVMTFBuilder::BuildPhiAndPushToWorkList(BasicBlock* bb,
                                               BasicBlock* ref_pred) {
-  auto impl = bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
+  auto impl = EnsureImpl(bb);
   for (int live : bb->liveins()) {
     LValue ref_value = ref_pred->value(live);
     LType ref_type = typeOf(ref_value);
-    // FIXME: Should ignore those are not tagged type.
     if (ref_type != output().taggedType()) {
+      bb->set_value(live, ref_value);
+      continue;
     }
     LValue phi = output().buildPhi(ref_type);
     bb->set_value(live, phi);
-    impl->phis.push_back(phi);
     for (BasicBlock* pred : bb->predecessors()) {
       if (!pred->started()) {
-        impl->not_merged_pred.push_back(pred);
+        impl->not_merged_phis.emplace_back();
+        NotMergedPhiDesc& not_merged_phi = impl->not_merged_phis.back();
+        not_merged_phi.phi = phi;
+        not_merged_phi.value = live;
+        not_merged_phi.pred = pred;
         continue;
       }
 
@@ -119,16 +153,14 @@ void LLVMTFBuilder::BuildPhiAndPushToWorkList(BasicBlock* bb,
 void LLVMTFBuilder::ProcessPhiWorkList() {
   for (BasicBlock* bb : phi_rebuild_worklist_) {
     auto impl = bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
-    auto phi_iterator = impl->phis.begin();
-    for (int live : bb->liveins()) {
-      for (auto pred : impl->not_merged_pred) {
-        assert(pred->started());
-        LValue value = pred->value(live);
-        LBasicBlock native = pred->native_bb();
-        addIncoming(*phi_iterator, &value, &native, 1);
-      }
-      ++phi_iterator;
+    for (auto& e : impl->not_merged_phis) {
+      BasicBlock* pred = e.pred;
+      assert(pred->started());
+      LValue value = pred->value(e.value);
+      LBasicBlock native = pred->native_bb();
+      addIncoming(e.phi, &value, &native, 1);
     }
+    impl->not_merged_phis.clear();
   }
   phi_rebuild_worklist_.clear();
 }
@@ -137,14 +169,18 @@ void LLVMTFBuilder::DoCommonCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands, bool tailcall) {
   // 1. generate call asm
-  std::ostringstream constraints;
-  if (!tailcall) constraints << "={r0},";
+  std::vector<std::string> constraints;
+  constraints.push_back("={r0}");
   for (auto& rname : registers_for_operands) {
-    constraints << "{" << rname << "},";
+    std::string constraint;
+    constraint.append("{");
+    constraint.append(rname);
+    constraint.append("}");
+    constraints.push_back(constraint);
   }
   auto operands_iterator = operands.begin();
   LValue ret;
-  int operand_index_start = (tailcall ? 0 : 1);
+  int operand_index_start = 1;
   LValue target;
   if (code) {
     // layout
@@ -167,7 +203,7 @@ void LLVMTFBuilder::DoCommonCall(
   size_t stack_parameter_size =
       operands.size() - 1 - registers_for_operands.size();
   for (size_t i = 0; i < stack_parameter_size; ++i) {
-    constraints << "r";
+    constraints.push_back("r");
     instructions << "push {$" << stack_operands_index++ << "}\n";
   }
   // artifact operands
@@ -177,22 +213,35 @@ void LLVMTFBuilder::DoCommonCall(
   }
   instructions << (tailcall ? "bx" : "blx") << " $"
                << artifact_target_operand_index << "\n";
-  constraints << ",r, {r7}, {r10}, {r11}";
+  constraints.push_back("r");
+  constraints.push_back("{r7}");
+  constraints.push_back("{r10}");
+  constraints.push_back("{r11}");
   std::string instruction_string = instructions.str();
-  std::string constraints_string = constraints.str();
-  LValue func = LLVMGetInlineAsm(
-      output().taggedType(), const_cast<char*>(instruction_string.data()),
-      instruction_string.size(), const_cast<char*>(constraints_string.data()),
-      constraints_string.size(), true, false, LLVMInlineAsmDialectATT);
+  std::string constraints_string = ConstraintsToString(constraints);
   std::vector<LValue> operand_values;
+  std::vector<LType> operand_value_types;
   for (; operands_iterator != operands.end(); ++operands_iterator) {
-    operand_values.push_back(current_bb_->value(*operands_iterator));
+    LValue llvm_val = current_bb_->value(*operands_iterator);
+    operand_values.push_back(llvm_val);
+    operand_value_types.push_back(typeOf(llvm_val));
   }
   // push artifact operands' value
   operand_values.push_back(target);
+  operand_value_types.push_back(typeOf(target));
   operand_values.push_back(output().context());
+  operand_value_types.push_back(typeOf(output().context()));
   operand_values.push_back(output().root());
+  operand_value_types.push_back(typeOf(output().root()));
   operand_values.push_back(output().fp());
+  operand_value_types.push_back(typeOf(output().fp()));
+
+  LValue func = LLVMGetInlineAsm(
+      functionType(output().taggedType(), operand_value_types.data(),
+                   operand_value_types.size(), NotVariadic),
+      const_cast<char*>(instruction_string.data()), instruction_string.size(),
+      const_cast<char*>(constraints_string.data()), constraints_string.size(),
+      true, false, LLVMInlineAsmDialectATT);
   int gc_paramter_start = 0;
   if (tailcall) {
     ret =
@@ -200,16 +249,19 @@ void LLVMTFBuilder::DoCommonCall(
   } else {
     std::vector<LValue> statepoint_operands;
     statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
-    statepoint_operands.push_back(func);
-    statepoint_operands.push_back(output().constInt64(operand_values.size()));
-    statepoint_operands.push_back(output().constInt64(0));  // flags
+    statepoint_operands.push_back(output().repo().int32Zero);
+    statepoint_operands.push_back(
+        output().buildPointerCast(func, output().repo().ref8));
+    statepoint_operands.push_back(output().constInt32(operand_values.size()));
+    statepoint_operands.push_back(output().constInt32(0));  // flags
     for (auto value : operand_values) statepoint_operands.push_back(value);
-    statepoint_operands.push_back(output().constInt64(0));  // # transition args
-    statepoint_operands.push_back(output().constInt64(0));  // # deopt arguments
+    statepoint_operands.push_back(output().constInt32(0));  // # transition args
+    statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
     gc_paramter_start = statepoint_operands.size();
     // push current defines
     for (auto& items : current_bb_->values()) {
       LValue to_gc = items.second;
+      if (typeOf(to_gc) != output().taggedType()) continue;
       statepoint_operands.push_back(to_gc);
     }
     ret = output().buildCall(output().repo().statepointIntrinsic(),
@@ -221,8 +273,9 @@ void LLVMTFBuilder::DoCommonCall(
     LValue real_ret =
         output().buildCall(output().repo().gcResultIntrinsic(), ret);
     for (auto& items : current_bb_->values()) {
+      if (typeOf(items.second) != output().taggedType()) continue;
       LValue relocated =
-          output().buildCall(output().repo().gcRelocateIntrinsic(),
+          output().buildCall(output().repo().gcRelocateIntrinsic(), ret,
                              output().constInt32(gc_paramter_start),
                              output().constInt32(gc_paramter_start));
       items.second = relocated;
@@ -230,6 +283,25 @@ void LLVMTFBuilder::DoCommonCall(
     }
     current_bb_->set_value(id, real_ret);
   }
+}
+
+LValue LLVMTFBuilder::EnsureWord32(LValue v) {
+  LType type = typeOf(v);
+  LLVMTypeKind kind = LLVMGetTypeKind(type);
+  if (kind == LLVMPointerTypeKind) {
+    return output().buildCast(LLVMPtrToInt, v, output().repo().int32);
+  }
+  if (type == output().repo().int1) {
+    return output().buildCast(LLVMZExt, v, output().repo().int32);
+  }
+  assert(type == output().repo().int32);
+  return v;
+}
+
+void LLVMTFBuilder::EndCurrentBlock() {
+  if (current_bb_->values().empty()) output().buildUnreachable();
+  current_bb_->EndBuild();
+  current_bb_ = nullptr;
 }
 
 void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
@@ -242,10 +314,8 @@ void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
 void LLVMTFBuilder::VisitGoto(int bid) {
   BasicBlock* succ = basic_block_manager().ensureBB(bid);
   EnsureNativeBB(succ, output());
-  assert(!succ->started());
   output().buildBr(succ->native_bb());
-  current_bb_->EndBuild();
-  current_bb_ = nullptr;
+  EndCurrentBlock();
 }
 
 void LLVMTFBuilder::VisitParameter(int id, int pid) {
@@ -297,8 +367,12 @@ static LType getMachineRepresentationType(Output& output,
 
 static LValue buildAccessPointer(Output& output, LValue value, int offset,
                                  MachineRepresentation rep) {
+  LLVMTypeKind kind = LLVMGetTypeKind(typeOf(value));
+  if (kind == LLVMIntegerTypeKind) {
+    value = output.buildCast(LLVMIntToPtr, value, output.repo().ref8);
+  }
   LValue pointer = output.buildGEPWithByteOffset(
-      value, offset, getMachineRepresentationType(output, rep));
+      value, offset, pointerType(getMachineRepresentationType(output, rep)));
   return pointer;
 }
 
@@ -341,7 +415,7 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
           LLVM_BUILTIN_TRAP;
       }
     default:
-      LLVM_BUILTIN_TRAP;
+      break;
   }
   if (castType) value = output().buildCast(opcode, value, castType);
   current_bb_->set_value(id, value);
@@ -354,96 +428,104 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
       buildAccessPointer(output(), current_bb_->value(base), offset, rep);
   // FIXME: emit write barrier accordingly.
   assert(barrier == kNoWriteBarrier);
-  LValue val = output().buildStore(current_bb_->value(value), pointer);
+  LValue llvm_val = current_bb_->value(value);
+  LType value_type = typeOf(llvm_val);
+  LType pointer_element_type = getElementType(typeOf(pointer));
+  if (pointer_element_type != value_type) {
+    assert(value_type = output().repo().intPtr);
+    llvm_val = output().buildCast(LLVMIntToPtr, llvm_val, pointer_element_type);
+  }
+  LValue val = output().buildStore(llvm_val, pointer);
   // store should not be recorded, whatever.
   current_bb_->set_value(id, val);
 }
 
 void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
-  current_bb_->set_value(
-      id, output().buildBitCast(current_bb_->value(e), output().taggedType()));
+  current_bb_->set_value(id,
+                         output().buildCast(LLVMIntToPtr, current_bb_->value(e),
+                                            output().taggedType()));
 }
 
 void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildNSWAdd(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32Sub(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildNSWSub(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildNSWMul(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32Shl(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildShl(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32Shr(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildShr(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32Sar(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildSar(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32Mul(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildMul(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32And(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildAnd(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitWord32Equal(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildICmp(LLVMIntEQ, e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32LessThanOrEqual(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildICmp(LLVMIntSLE, e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitUint32LessThanOrEqual(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildICmp(LLVMIntULE, e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32LessThan(int id, int e1, int e2) {
-  LValue e1_value = current_bb_->value(e1);
-  LValue e2_value = current_bb_->value(e2);
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildICmp(LLVMIntSLT, e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
@@ -455,17 +537,17 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   EnsureNativeBB(bbFalse, output());
   output().buildCondBr(current_bb_->value(cmp), bbTrue->native_bb(),
                        bbFalse->native_bb());
-  current_bb_->EndBuild();
-  current_bb_ = nullptr;
+  EndCurrentBlock();
 }
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   char buf[256];
   int len = snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic));
   char kConstraint[] = "=r";
+  // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, false);
+                              kConstraint, sizeof(kConstraint) - 1, true);
   current_bb_->set_value(id, value);
 }
 
@@ -473,9 +555,10 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   char buf[256];
   int len = snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic));
   char kConstraint[] = "=r";
+  // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, false);
+                              kConstraint, sizeof(kConstraint) - 1, true);
   current_bb_->set_value(id, value);
 }
 
@@ -483,13 +566,25 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
                              const OperandsVector& operands) {
   LValue phi = output().buildPhi(getMachineRepresentationType(output(), rep));
   auto operands_iterator = operands.cbegin();
+  bool should_add_to_tf_phi_worklist = false;
   for (BasicBlock* pred : current_bb_->predecessors()) {
-    assert(pred->started());
-    LValue value = pred->value(*operands_iterator);
-    LBasicBlock llvbb_ = pred->native_bb();
-    addIncoming(phi, &value, &llvbb_, 1);
+    if (pred->started()) {
+      LValue value = pred->value(*operands_iterator);
+      LBasicBlock llvbb_ = pred->native_bb();
+      addIncoming(phi, &value, &llvbb_, 1);
+    } else {
+      should_add_to_tf_phi_worklist = true;
+      LLVMTFBuilderBasicBlockImpl* impl = EnsureImpl(current_bb_);
+      impl->not_merged_phis.emplace_back();
+      auto& not_merged_phi = impl->not_merged_phis.back();
+      not_merged_phi.phi = phi;
+      not_merged_phi.pred = pred;
+      not_merged_phi.value = *operands_iterator;
+    }
     ++operands_iterator;
   }
+  if (should_add_to_tf_phi_worklist)
+    phi_rebuild_worklist_.push_back(current_bb_);
   current_bb_->set_value(id, phi);
 }
 

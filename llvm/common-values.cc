@@ -5,6 +5,7 @@ namespace jit {
 CommonValues::CommonValues(LContext context)
     : voidType(jit::voidType(context)),
       boolean(int1Type(context)),
+      int1(int1Type(context)),
       int8(int8Type(context)),
       int16(int16Type(context)),
       int32(int32Type(context)),
@@ -20,6 +21,7 @@ CommonValues::CommonValues(LContext context)
       refPtr(pointerType(intPtr)),
       refFloat(pointerType(floatType)),
       refDouble(pointerType(doubleType)),
+      taggedType(pointerType(LLVMStructCreateNamed(context, "TaggedStruct"))),
       booleanTrue(constInt(boolean, true, ZeroExtend)),
       booleanFalse(constInt(boolean, false, ZeroExtend)),
       int8Zero(constInt(int8, 0, SignExtend)),
