@@ -1,0 +1,287 @@
+Index: lib/MC/MCAsmStreamer.cpp
+===================================================================
+--- lib/MC/MCAsmStreamer.cpp	(revision 347537)
++++ lib/MC/MCAsmStreamer.cpp	(working copy)
+@@ -914,7 +914,7 @@
+   if (!Directive) {
+     int64_t IntValue;
+     if (!Value->evaluateAsAbsolute(IntValue))
+-      report_fatal_error("Don't know how to emit this value.");
++      IntValue = -1;
+ 
+     // We couldn't handle the requested integer size so we fallback by breaking
+     // the request down into several, smaller, integers.
+Index: lib/Target/ARM/ARMAsmPrinter.cpp
+===================================================================
+--- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 347537)
++++ lib/Target/ARM/ARMAsmPrinter.cpp	(working copy)
+@@ -55,7 +55,7 @@
+ ARMAsmPrinter::ARMAsmPrinter(TargetMachine &TM,
+                              std::unique_ptr<MCStreamer> Streamer)
+     : AsmPrinter(TM, std::move(Streamer)), AFI(nullptr), MCP(nullptr),
+-      InConstantPool(false), OptimizationGoals(-1) {}
++      InConstantPool(false), OptimizationGoals(-1), SM(*this) {}
+ 
+ void ARMAsmPrinter::EmitFunctionBodyEnd() {
+   // Make sure to terminate any constant pools that were at the end
+@@ -547,6 +547,7 @@
+       OutStreamer->AddBlankLine();
+     }
+ 
++    SM.serializeToStackMapSection();
+     // Funny Darwin hack: This flag tells the linker that no global symbols
+     // contain code that falls through to other global symbols (e.g. the obvious
+     // implementation of multiple entry points).  If this doesn't occur, the
+@@ -566,6 +567,15 @@
+   OptimizationGoals = -1;
+ 
+   ATS.finishAttributeSection();
++  if (TT.isOSBinFormatCOFF()) {
++    SM.serializeToStackMapSection();
++    return;
++  }
++
++  if (TT.isOSBinFormatELF()) {
++    SM.serializeToStackMapSection();
++    return;
++  }
+ }
+ 
+ //===----------------------------------------------------------------------===//
+@@ -2032,6 +2042,12 @@
+   case ARM::PATCHABLE_TAIL_CALL:
+     LowerPATCHABLE_TAIL_CALL(*MI);
+     return;
++  case TargetOpcode::STACKMAP:
++    return LowerSTACKMAP(*OutStreamer, SM, *MI);
++  case TargetOpcode::PATCHPOINT:
++    return LowerPATCHPOINT(*OutStreamer, SM, *MI);
++  case TargetOpcode::STATEPOINT:
++    return LowerSTATEPOINT(*OutStreamer, SM, *MI);
+   }
+ 
+   MCInst TmpInst;
+@@ -2040,6 +2056,106 @@
+   EmitToStreamer(*OutStreamer, TmpInst);
+ }
+ 
++static unsigned roundUpTo4ByteAligned(unsigned n) {
++  unsigned mask = 3;
++  unsigned rev = ~3;
++  n = (n & rev) + (((n & mask) + mask) & rev);
++  return n;
++}
++
++void ARMAsmPrinter::LowerSTACKMAP(MCStreamer &OutStreamer, StackMaps &SM,
++                                  const MachineInstr &MI) {
++  assert(!AFI->isThumbFunction());
++  unsigned NumNOPBytes =
++      roundUpTo4ByteAligned(StackMapOpers(&MI).getNumPatchBytes());
++
++  SM.recordStackMap(MI);
++  assert(NumNOPBytes % 4 == 0 && "Invalid number of NOP bytes requested!");
++
++  // Scan ahead to trim the shadow.
++  const MachineBasicBlock &MBB = *MI.getParent();
++  MachineBasicBlock::const_iterator MII(MI);
++  ++MII;
++  while (NumNOPBytes > 0) {
++    if (MII == MBB.end() || MII->isCall() ||
++        MII->getOpcode() == ARM::DBG_VALUE ||
++        MII->getOpcode() == TargetOpcode::PATCHPOINT ||
++        MII->getOpcode() == TargetOpcode::STACKMAP)
++      break;
++    ++MII;
++    NumNOPBytes -= 4;
++  }
++
++  // Emit nops.
++  MCInst Noop;
++  Subtarget->getInstrInfo()->getNoop(Noop);
++  for (unsigned i = 0; i < NumNOPBytes; i += 4)
++    EmitToStreamer(OutStreamer, Noop);
++}
++
++// Lower a patchpoint of the form:
++// [<def>], <id>, <numBytes>, <target>, <numArgs>
++void ARMAsmPrinter::LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                                    const MachineInstr &MI) {
++  assert(!AFI->isThumbFunction());
++  SM.recordPatchPoint(MI);
++
++  PatchPointOpers Opers(&MI);
++
++  int64_t CallTarget = Opers.getCallTarget().getImm();
++  unsigned EncodedBytes = 0;
++  if (CallTarget) {
++    assert((CallTarget & 0xFFFFFFFFLL) == CallTarget &&
++           "High 32 bits of call target should be zero.");
++    unsigned ScratchReg = MI.getOperand(Opers.getNextScratchIdx()).getReg();
++    EncodedBytes = 16;
++    EmitToStreamer(OutStreamer, MCInstBuilder(ARM::MOVTi16)
++                                    .addReg(ScratchReg)
++                                    .addReg(ScratchReg)
++                                    .addImm((CallTarget >> 16) & 0xFFFF)
++                                    .addImm(ARMCC::AL)
++                                    .addImm(0));
++    EmitToStreamer(OutStreamer, MCInstBuilder(ARM::MOVi16)
++                                    .addReg(ScratchReg)
++                                    .addImm(CallTarget & 0xFFFF)
++                                    .addImm(ARMCC::AL)
++                                    .addImm(0));
++    EmitToStreamer(OutStreamer, MCInstBuilder(ARM::BLX).addReg(ScratchReg));
++  }
++  // Emit padding.
++  unsigned NumBytes = roundUpTo4ByteAligned(Opers.getNumPatchBytes());
++  assert(NumBytes >= EncodedBytes &&
++         "Patchpoint can't request size less than the length of a call.");
++  assert((NumBytes - EncodedBytes) % 4 == 0 &&
++         "Invalid number of NOP bytes requested!");
++  MCInst Noop;
++  Subtarget->getInstrInfo()->getNoop(Noop);
++  for (unsigned i = EncodedBytes; i < NumBytes; i += 4)
++    EmitToStreamer(OutStreamer, Noop);
++}
++
++void ARMAsmPrinter::LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                                    const MachineInstr &MI) {
++  assert(!AFI->isThumbFunction());
++  SM.recordStatepoint(MI);
++
++  StatepointOpers SOpers(&MI);
++  MCInst Noop;
++  Subtarget->getInstrInfo()->getNoop(Noop);
++  if (unsigned PatchBytes = SOpers.getNumPatchBytes()) {
++    unsigned NumBytes = roundUpTo4ByteAligned(PatchBytes);
++    unsigned EncodedBytes = 0;
++    assert(NumBytes >= EncodedBytes &&
++           "Patchpoint can't request size less than the length of a call.");
++    assert((NumBytes - EncodedBytes) % 4 == 0 &&
++           "Invalid number of NOP bytes requested!");
++    MCInst Noop;
++    Subtarget->getInstrInfo()->getNoop(Noop);
++    for (unsigned i = EncodedBytes; i < NumBytes; i += 4)
++      EmitToStreamer(OutStreamer, Noop);
++  }
++}
++
+ //===----------------------------------------------------------------------===//
+ // Target Registry Stuff
+ //===----------------------------------------------------------------------===//
+Index: lib/Target/ARM/ARMAsmPrinter.h
+===================================================================
+--- lib/Target/ARM/ARMAsmPrinter.h	(revision 347537)
++++ lib/Target/ARM/ARMAsmPrinter.h	(working copy)
+@@ -12,6 +12,7 @@
+ 
+ #include "ARMSubtarget.h"
+ #include "llvm/CodeGen/AsmPrinter.h"
++#include "llvm/CodeGen/StackMaps.h"
+ #include "llvm/Target/TargetMachine.h"
+ 
+ namespace llvm {
+@@ -64,8 +65,10 @@
+   /// Set of globals in PromotedGlobals that we've emitted labels for.
+   /// We need to emit labels even for promoted globals so that DWARF
+   /// debug info can link properly.
+-  SmallPtrSet<const GlobalVariable*,2> EmittedPromotedGlobalLabels;
++  SmallPtrSet<const GlobalVariable *, 2> EmittedPromotedGlobalLabels;
+ 
++  StackMaps SM;
++
+ public:
+   explicit ARMAsmPrinter(TargetMachine &TM,
+                          std::unique_ptr<MCStreamer> Streamer);
+@@ -131,6 +134,15 @@
+   bool emitPseudoExpansionLowering(MCStreamer &OutStreamer,
+                                    const MachineInstr *MI);
+ 
++  void LowerSTACKMAP(MCStreamer &OutStreamer, StackMaps &SM,
++                     const MachineInstr &MI);
++
++  void LowerPATCHPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                       const MachineInstr &MI);
++
++  void LowerSTATEPOINT(MCStreamer &OutStreamer, StackMaps &SM,
++                       const MachineInstr &MI);
++
+ public:
+   unsigned getISAEncoding() override {
+     // ARM/Darwin adds ISA to the DWARF info for each function.
+Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
+===================================================================
+--- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 347537)
++++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
+@@ -90,6 +90,8 @@
+       // exception handling.
+       return CSR_GenericInt_SaveList;
+     }
++  } else if (F.getCallingConv() == CallingConv::AnyReg) {
++    return CSR_NoRegs_SaveList;
+   }
+ 
+   if (STI.getTargetLowering()->supportSwiftError() &&
+Index: lib/Target/ARM/ARMISelLowering.cpp
+===================================================================
+--- lib/Target/ARM/ARMISelLowering.cpp	(revision 347537)
++++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
+@@ -1578,6 +1578,8 @@
+   switch (CC) {
+   default:
+     report_fatal_error("Unsupported calling convention");
++  case CallingConv::AnyReg:
++    return CallingConv::AnyReg;
+   case CallingConv::ARM_AAPCS:
+   case CallingConv::ARM_APCS:
+   case CallingConv::GHC:
+@@ -1627,6 +1629,8 @@
+   switch (getEffectiveCallingConv(CC, isVarArg)) {
+   default:
+     report_fatal_error("Unsupported calling convention");
++  case CallingConv::AnyReg:
++    return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
+   case CallingConv::ARM_APCS:
+     return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
+   case CallingConv::ARM_AAPCS:
+@@ -9256,6 +9260,15 @@
+     llvm_unreachable("Unexpected instr type to insert");
+   }
+ 
++  case TargetOpcode::STATEPOINT:
++    // As an implementation detail, STATEPOINT shares the STACKMAP format at
++    // this point in the process.  We diverge later.
++    return emitPatchPoint(MI, BB);
++
++  case TargetOpcode::STACKMAP:
++  case TargetOpcode::PATCHPOINT:
++    return emitPatchPoint(MI, BB);
++
+   // Thumb1 post-indexed loads are really just single-register LDMs.
+   case ARM::tLDR_postidx: {
+     MachineOperand Def(MI.getOperand(1));
+@@ -13061,6 +13074,11 @@
+   return -1;
+ }
+ 
++const MCPhysReg *ARMTargetLowering::getScratchRegisters(CallingConv::ID) const {
++  static const MCPhysReg ScratchRegs[] = {ARM::R12, 0};
++  return ScratchRegs;
++}
++
+ static bool isLegalT1AddressImmediate(int64_t V, EVT VT) {
+   if (V < 0)
+     return false;
+Index: lib/Target/ARM/ARMISelLowering.h
+===================================================================
+--- lib/Target/ARM/ARMISelLowering.h	(revision 347537)
++++ lib/Target/ARM/ARMISelLowering.h	(working copy)
+@@ -696,6 +696,8 @@
+     /// correctness bugs.
+     bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return false; }
+ 
++    const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
++
+     SDValue ReconstructShuffle(SDValue Op, SelectionDAG &DAG) const;
+ 
+     SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
+

@@ -21,7 +21,9 @@ CommonValues::CommonValues(LContext context)
       refPtr(pointerType(intPtr)),
       refFloat(pointerType(floatType)),
       refDouble(pointerType(doubleType)),
-      taggedType(pointerType(LLVMStructCreateNamed(context, "TaggedStruct"))),
+      // address space 1 means gc recognizable.
+      taggedType(
+          LLVMPointerType(LLVMStructCreateNamed(context, "TaggedStruct"), 1)),
       booleanTrue(constInt(boolean, true, ZeroExtend)),
       booleanFalse(constInt(boolean, false, ZeroExtend)),
       int8Zero(constInt(int8, 0, SignExtend)),

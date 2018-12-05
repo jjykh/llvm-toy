@@ -195,13 +195,15 @@ void LLVMTFBuilder::DoCommonCall(
   }
 
   std::ostringstream instructions;
+  static const size_t kTargetSize = 1;
   int stack_operands_index =
       operand_index_start + registers_for_operands.size();
-  int artifact_operands_index_start = operand_index_start + operands.size();
+  int artifact_operands_index_start =
+      operand_index_start + operands.size() - kTargetSize;
   int artifact_target_operand_index = artifact_operands_index_start + 0;
   int artifact_fp_operand_index = artifact_operands_index_start + 3;
   size_t stack_parameter_size =
-      operands.size() - 1 - registers_for_operands.size();
+      operands.size() - kTargetSize - registers_for_operands.size();
   for (size_t i = 0; i < stack_parameter_size; ++i) {
     constraints.push_back("r");
     instructions << "push {$" << stack_operands_index++ << "}\n";
@@ -243,46 +245,41 @@ void LLVMTFBuilder::DoCommonCall(
       const_cast<char*>(constraints_string.data()), constraints_string.size(),
       true, false, LLVMInlineAsmDialectATT);
   int gc_paramter_start = 0;
+  ret = output().buildCall(func, operand_values.data(), operand_values.size());
   if (tailcall) {
-    ret =
-        output().buildCall(func, operand_values.data(), operand_values.size());
-  } else {
-    std::vector<LValue> statepoint_operands;
-    statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
-    statepoint_operands.push_back(output().repo().int32Zero);
-    statepoint_operands.push_back(
-        output().buildPointerCast(func, output().repo().ref8));
-    statepoint_operands.push_back(output().constInt32(operand_values.size()));
-    statepoint_operands.push_back(output().constInt32(0));  // flags
-    for (auto value : operand_values) statepoint_operands.push_back(value);
-    statepoint_operands.push_back(output().constInt32(0));  // # transition args
-    statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
-    gc_paramter_start = statepoint_operands.size();
-    // push current defines
-    for (auto& items : current_bb_->values()) {
-      LValue to_gc = items.second;
-      if (typeOf(to_gc) != output().taggedType()) continue;
-      statepoint_operands.push_back(to_gc);
-    }
-    ret = output().buildCall(output().repo().statepointIntrinsic(),
-                             statepoint_operands.data(),
-                             statepoint_operands.size());
+    current_bb_->set_value(id, ret);
+    return;
   }
+  std::vector<LValue> statepoint_operands;
+  statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
+  statepoint_operands.push_back(output().repo().int32Zero);
+  statepoint_operands.push_back(
+      constNull(pointerType(functionType(output().repo().voidType))));
+  statepoint_operands.push_back(output().constInt32(0));  // # call params
+  statepoint_operands.push_back(output().constInt32(0));  // flags
+  statepoint_operands.push_back(output().constInt32(0));  // # transition args
+  statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
+  gc_paramter_start = statepoint_operands.size();
+  // push current defines
+  for (auto& items : current_bb_->values()) {
+    LValue to_gc = items.second;
+    if (typeOf(to_gc) != output().taggedType()) continue;
+    statepoint_operands.push_back(to_gc);
+  }
+  LValue statepoint_ret = output().buildCall(
+      output().repo().statepointIntrinsic(), statepoint_operands.data(),
+      statepoint_operands.size());
   // 2. rebuild value if not tailcall
-  if (!tailcall) {
-    LValue real_ret =
-        output().buildCall(output().repo().gcResultIntrinsic(), ret);
-    for (auto& items : current_bb_->values()) {
-      if (typeOf(items.second) != output().taggedType()) continue;
-      LValue relocated =
-          output().buildCall(output().repo().gcRelocateIntrinsic(), ret,
-                             output().constInt32(gc_paramter_start),
-                             output().constInt32(gc_paramter_start));
-      items.second = relocated;
-      gc_paramter_start++;
-    }
-    current_bb_->set_value(id, real_ret);
+  for (auto& items : current_bb_->values()) {
+    if (typeOf(items.second) != output().taggedType()) continue;
+    LValue relocated = output().buildCall(
+        output().repo().gcRelocateIntrinsic(), statepoint_ret,
+        output().constInt32(gc_paramter_start),
+        output().constInt32(gc_paramter_start));
+    items.second = relocated;
+    gc_paramter_start++;
   }
+  current_bb_->set_value(id, ret);
 }
 
 LValue LLVMTFBuilder::EnsureWord32(LValue v) {

@@ -13,6 +13,8 @@ Output::Output(CompilerState& state)
   state.function_ =
       addFunction(state.module_, "main", functionType(taggedType()));
   setFunctionCallingConv(state.function_, LLVMAnyRegCallConv);
+  // FIXME: Add V8 to LLVM.
+  LLVMSetGC(state.function_, "coreclr");
 }
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
@@ -175,9 +177,17 @@ LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
 LValue Output::buildPhi(LType type) { return jit::buildPhi(builder_, type); }
 
 LValue Output::buildGEPWithByteOffset(LValue base, int offset, LType dstType) {
-  LValue base_ref8 = buildBitCast(base, repo().ref8);
+  LType base_type = typeOf(base);
+  unsigned base_type_address_space = LLVMGetPointerAddressSpace(base_type);
+  unsigned dst_type_address_space = LLVMGetPointerAddressSpace(dstType);
+  LValue base_ref8 =
+      buildBitCast(base, LLVMPointerType(repo().int8, base_type_address_space));
   LValue offset_value = constIntPtr(offset);
   LValue dst_ref8 = LLVMBuildGEP(builder_, base_ref8, &offset_value, 1, "");
+  if (base_type_address_space != dst_type_address_space) {
+    dst_ref8 = buildCast(LLVMAddrSpaceCast, dst_ref8,
+                         LLVMPointerType(repo().int8, dst_type_address_space));
+  }
   return buildBitCast(dst_ref8, dstType);
 }
 

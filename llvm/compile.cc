@@ -55,6 +55,10 @@ void compile(State& state) {
   SMDiagnostic Err;
   Module* M = unwrap(state.module_);
   Triple TheTriple;
+  std::unique_ptr<raw_svector_ostream> BOS;
+  SmallVector<char, 0> Buffer;
+  BOS = make_unique<raw_svector_ostream>(Buffer);
+  raw_pwrite_stream* OS = BOS.get();
 
   // If user just wants to list available options, skip module loading
   TheTriple = Triple(Triple::normalize(M->getTargetTriple()));
@@ -112,10 +116,6 @@ void compile(State& state) {
   setFunctionAttributes(CPUStr, FeaturesStr, *M);
 
   {
-    SmallVector<char, 0> Buffer;
-    std::unique_ptr<raw_svector_ostream> BOS;
-    BOS = make_unique<raw_svector_ostream>(Buffer);
-    raw_pwrite_stream* OS = BOS.get();
 
     LLVMTargetMachine& LLVMTM = static_cast<LLVMTargetMachine&>(*Target);
     MachineModuleInfo* MMI = new MachineModuleInfo(&LLVMTM);
