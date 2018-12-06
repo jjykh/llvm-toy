@@ -288,7 +288,7 @@ void LLVMTFBuilder::DoCall(int id, bool code,
                    operand_value_types.size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
   statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
-  statepoint_operands.push_back(output().constInt32(8));
+  statepoint_operands.push_back(output().constInt32(4));
   statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(
       output().constInt32(operand_values.size()));        // # call params

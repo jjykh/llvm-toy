@@ -17,7 +17,7 @@ Output::Output(CompilerState& state)
       stackMapsId_(1) {
   state.function_ =
       addFunction(state.module_, "main", functionType(taggedType()));
-  setFunctionCallingConv(state.function_, LLVMAnyRegCallConv);
+  setFunctionCallingConv(state.function_, LLVMV8CallConv);
   // FIXME: Add V8 to LLVM.
   LLVMSetGC(state.function_, "coreclr");
 }

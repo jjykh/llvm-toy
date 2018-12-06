@@ -318,10 +318,10 @@ Index: lib/Target/ARM/ARMCallingConv.td
 +  // (and the same is true for f64 if VFP is not enabled)
 +  CCIfType<[i32], CCIfAlign<"8", CCAssignToRegWithShadow<[R0, R2], [R0, R1]>>>,
 +  CCIfType<[i32], CCIf<"ArgFlags.getOrigAlign() != 8",
-+                       CCAssignToReg<[R0, R1, R2, R3, R4]>>>,
++                       CCAssignToReg<[R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10]>>>,
 +
-+  CCIfType<[i32], CCIfAlign<"8", CCAssignToStackWithShadow<4, 8, [R0, R1, R2, R3, R4]>>>,
-+  CCIfType<[i32], CCAssignToStackWithShadow<4, 4, [R0, R1, R2, R3, R4]>>,
++  CCIfType<[i32], CCIfAlign<"8", CCAssignToStackWithShadow<4, 8, [R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10]>>>,
++  CCIfType<[i32], CCAssignToStackWithShadow<4, 4, [R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10]>>,
 +  CCIfType<[f32], CCAssignToStackWithShadow<4, 4, [Q0, Q1, Q2, Q3]>>,
 +  CCIfType<[f64], CCAssignToStackWithShadow<8, 8, [Q0, Q1, Q2, Q3]>>,
 +  CCIfType<[v2f64], CCIfAlign<"16",
@@ -338,6 +338,19 @@ Index: lib/Target/ARM/ARMCallingConv.td
 +//===----------------------------------------------------------------------===//
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
+ 
+Index: lib/Target/ARM/ARMFastISel.cpp
+===================================================================
+--- lib/Target/ARM/ARMFastISel.cpp	(revision 347537)
++++ lib/Target/ARM/ARMFastISel.cpp	(working copy)
+@@ -1890,6 +1890,8 @@
+       report_fatal_error("Can't return in GHC call convention");
+     else
+       return CC_ARM_APCS_GHC;
++  case CallingConv::V8CC:
++    return (Return ? RetCC_ARM_V8: CC_ARM_V8);
+   }
+ }
  
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
