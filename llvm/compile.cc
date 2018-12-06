@@ -130,6 +130,7 @@ void compile(State& state) {
     }
 
     PM.run(*M);
+    Buffer.push_back('\0');
     printf("%s\n", Buffer.data());
   }
 }

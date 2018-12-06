@@ -187,7 +187,7 @@ void LLVMTFBuilder::DoCommonCall(
     // return value | register operands | stack operands | artifact operands
     int code_value = *(operands_iterator++);
     target = output().buildGEPWithByteOffset(current_bb_->value(code_value),
-                                             63 /* Code::kHeaderSize */,
+                                             output().constInt32(63) /* Code::kHeaderSize */,
                                              output().repo().ref8);
   } else {
     int addr_value = *(operands_iterator++);
@@ -221,6 +221,7 @@ void LLVMTFBuilder::DoCommonCall(
   constraints.push_back("{r11}");
   std::string instruction_string = instructions.str();
   std::string constraints_string = ConstraintsToString(constraints);
+
   std::vector<LValue> operand_values;
   std::vector<LType> operand_value_types;
   for (; operands_iterator != operands.end(); ++operands_iterator) {
@@ -362,7 +363,7 @@ static LType getMachineRepresentationType(Output& output,
   return dstType;
 }
 
-static LValue buildAccessPointer(Output& output, LValue value, int offset,
+static LValue buildAccessPointer(Output& output, LValue value, LValue offset,
                                  MachineRepresentation rep) {
   LLVMTypeKind kind = LLVMGetTypeKind(typeOf(value));
   if (kind == LLVMIntegerTypeKind) {
@@ -376,7 +377,7 @@ static LValue buildAccessPointer(Output& output, LValue value, int offset,
 void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
                               MachineSemantic semantic, int base, int offset) {
   LValue pointer =
-      buildAccessPointer(output(), current_bb_->value(base), offset, rep);
+      buildAccessPointer(output(), current_bb_->value(base), current_bb_->value(offset), rep);
   LValue value = output().buildLoad(pointer);
   LType castType = nullptr;
   LLVMOpcode opcode;
@@ -422,7 +423,7 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
                                WriteBarrierKind barrier, int base, int offset,
                                int value) {
   LValue pointer =
-      buildAccessPointer(output(), current_bb_->value(base), offset, rep);
+      buildAccessPointer(output(), current_bb_->value(base), current_bb_->value(offset), rep);
   // FIXME: emit write barrier accordingly.
   assert(barrier == kNoWriteBarrier);
   LValue llvm_val = current_bb_->value(value);
@@ -544,7 +545,7 @@ void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, true);
+                              kConstraint, sizeof(kConstraint) - 1, false);
   current_bb_->set_value(id, value);
 }
 
@@ -555,7 +556,7 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, true);
+                              kConstraint, sizeof(kConstraint) - 1, false);
   current_bb_->set_value(id, value);
 }
 
