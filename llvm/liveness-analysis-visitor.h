@@ -12,7 +12,7 @@ class LivenessAnalysisVisitor final : public TFVisitor {
   void CalculateLivesIns();
 
  private:
-  void VisitBlock(int id, const OperandsVector& predecessors) override;
+  void VisitBlock(int id, bool, const OperandsVector& predecessors) override;
   void VisitGoto(int bid) override;
 #define DECL_METHOD(name, signature) void Visit##name signature override;
   INSTRUCTIONS(DECL_METHOD)

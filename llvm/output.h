@@ -21,6 +21,7 @@ class Output {
   void initializeBuild(const RegisterParameterDesc&);
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
+  LValue constInt1(int);
   LValue constInt32(int);
   LValue constIntPtr(intptr_t);
   LValue constInt64(long long);

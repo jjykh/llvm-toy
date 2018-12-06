@@ -61,6 +61,7 @@ void Output::positionToBBEnd(LBasicBlock bb) {
 }
 
 LValue Output::constInt32(int i) { return jit::constInt(repo_.int32, i); }
+LValue Output::constInt1(int i) { return jit::constInt(repo_.int1, i); }
 
 LValue Output::constInt64(long long l) { return jit::constInt(repo_.int64, l); }
 

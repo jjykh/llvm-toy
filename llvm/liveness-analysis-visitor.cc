@@ -121,7 +121,7 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
   ResetImpls<LivenessBasicBlockImpl>(basicBlockManager());
 }
 
-void LivenessAnalysisVisitor::VisitBlock(int id,
+void LivenessAnalysisVisitor::VisitBlock(int id, bool is_deferred,
                                          const OperandsVector& predecessors) {
   assert(!current_basic_block_);
   BasicBlock* bb = basicBlockManager().ensureBB(id);
@@ -130,6 +130,7 @@ void LivenessAnalysisVisitor::VisitBlock(int id,
     bb->AddPredecessor(pred_bb);
   }
   current_basic_block_ = bb;
+  current_basic_block_->set_deffered(true);
   basicBlockManager().rpo().push_back(id);
   std::unique_ptr<LivenessBasicBlockImpl> bb_impl(new LivenessBasicBlockImpl);
   bb->SetImpl(bb_impl.release());

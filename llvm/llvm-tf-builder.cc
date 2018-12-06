@@ -341,7 +341,8 @@ void LLVMTFBuilder::EndCurrentBlock() {
   current_bb_ = nullptr;
 }
 
-void LLVMTFBuilder::VisitBlock(int id, const OperandsVector& predecessors) {
+void LLVMTFBuilder::VisitBlock(int id, bool,
+                               const OperandsVector& predecessors) {
   BasicBlock* bb = basic_block_manager().findBB(id);
   current_bb_ = bb;
   StartBuild(bb, output());
@@ -572,8 +573,19 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   BasicBlock* bbFalse = basic_block_manager().ensureBB(bfalse);
   EnsureNativeBB(bbTrue, output());
   EnsureNativeBB(bbFalse, output());
-  output().buildCondBr(current_bb_->value(cmp), bbTrue->native_bb(),
-                       bbFalse->native_bb());
+  int expected_value = -1;
+  if (bbTrue->is_deferred()) {
+    if (!bbFalse->is_deferred())
+      expected_value = 0;
+  } else if (bbFalse->is_deferred()) {
+    expected_value = 1;
+  }
+  LValue cmp_val = current_bb_->value(cmp);
+  if (expected_value != -1) {
+    cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
+                                 output().constInt1(expected_value));
+  }
+  output().buildCondBr(cmp_val, bbTrue->native_bb(), bbFalse->native_bb());
   EndCurrentBlock();
 }
 

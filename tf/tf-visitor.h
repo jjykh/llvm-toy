@@ -77,7 +77,8 @@ using RegistersForOperands = std::vector<std::string>;
 class TFVisitor {
  public:
   virtual ~TFVisitor() = default;
-  virtual void VisitBlock(int id, const OperandsVector& predecessors) = 0;
+  virtual void VisitBlock(int id, bool is_deferred,
+                          const OperandsVector& predecessors) = 0;
   virtual void VisitGoto(int bid) = 0;
 #define DECL_METHOD(name, signature) virtual void Visit##name signature = 0;
 

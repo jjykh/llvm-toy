@@ -4,7 +4,8 @@
 #define UNREACHABLE() __builtin_unreachable()
 
 class TestParserVisitor : public TFVisitor {
-  void VisitBlock(int id, const OperandsVector& predecessors) override;
+  void VisitBlock(int id, bool is_deferred,
+                  const OperandsVector& predecessors) override;
   void VisitGoto(int bid) override;
   void VisitParameter(int id, int pid) override;
   void VisitLoadParentFramePointer(int id) override;
@@ -116,9 +117,11 @@ inline std::ostream& operator<<(std::ostream& os,
 }
 
 using namespace std;
-void TestParserVisitor::VisitBlock(int id, const OperandsVector& predecessors) {
+void TestParserVisitor::VisitBlock(int id, bool is_deferred,
+                                   const OperandsVector& predecessors) {
   cout << id << ":"
-       << "VisitBlock: " << id << "; predecessors: " << predecessors << endl;
+       << "VisitBlock: " << id << "; is_deferred" << is_deferred
+       << "; predecessors: " << predecessors << endl;
 }
 
 void TestParserVisitor::VisitGoto(int bid) {

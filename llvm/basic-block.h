@@ -65,6 +65,9 @@ class BasicBlock {
 
   void AssignNativeBB(LBasicBlock native) { bb_ = native; }
 
+  bool is_deferred() const { return deferred_; }
+  void set_deffered(bool is_deferred) { deferred_ = is_deferred; }
+
  private:
   std::vector<BasicBlock*> predecessors_;
   std::vector<BasicBlock*> successors_;
@@ -77,6 +80,7 @@ class BasicBlock {
   int id_;
   bool started_;
   bool ended_;
+  bool deferred_;
 };
 }  // namespace jit
 #endif  // BASIC_BLOCK_H

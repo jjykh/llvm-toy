@@ -5,7 +5,7 @@
 
 namespace jit {
 BasicBlock::BasicBlock(int id)
-    : bb_(nullptr), id_(id), started_(false), ended_(false) {}
+    : bb_(nullptr), id_(id), started_(false), ended_(false), deferred_(false) {}
 
 BasicBlock::~BasicBlock() {}
 

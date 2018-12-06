@@ -79,7 +79,8 @@ void TFParser::ParseBlockHeader(const char* line) {
   line += scanned;
   // parse for predecessors
   static const char kDeferred[] = " (deferred)";
-  SkipPattern(line, kDeferred, sizeof(kDeferred) - 1);
+  bool is_deferred = false;
+  if (SkipPattern(line, kDeferred, sizeof(kDeferred) - 1)) is_deferred = true;
   static const char kArrow[] = " <- ";
   if (SkipPattern(line, kArrow, sizeof(kArrow) - 1)) {
     do {
@@ -94,7 +95,7 @@ void TFParser::ParseBlockHeader(const char* line) {
         break;
     } while (true);
   }
-  visitor_->VisitBlock(bid, predecessors);
+  visitor_->VisitBlock(bid, is_deferred, predecessors);
   state_ = State::ParsingInstructions;
 }
 
