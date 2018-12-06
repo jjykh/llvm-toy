@@ -307,6 +307,7 @@ void LLVMTFBuilder::DoCall(int id, bool code,
   LValue statepoint_ret = output().buildCall(
       output().getStatePointFunction(callee_type), statepoint_operands.data(),
       statepoint_operands.size());
+  LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
   // 2. rebuild value if not tailcall
   for (auto& items : current_bb_->values()) {
     if (typeOf(items.second) != output().taggedType()) continue;

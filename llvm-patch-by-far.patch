@@ -1,3 +1,79 @@
+Index: include/llvm/IR/CallingConv.h
+===================================================================
+--- include/llvm/IR/CallingConv.h	(revision 347537)
++++ include/llvm/IR/CallingConv.h	(working copy)
+@@ -220,6 +220,9 @@
+     /// shader if tessellation is in use, or otherwise the vertex shader.
+     AMDGPU_ES = 96,
+ 
++    // Calling convention for v8
++    V8CC = 97,
++
+     /// The highest possible calling convention ID. Must be some 2^k - 1.
+     MaxID = 1023
+   };
+Index: include/llvm-c/Core.h
+===================================================================
+--- include/llvm-c/Core.h	(revision 347537)
++++ include/llvm-c/Core.h	(working copy)
+@@ -240,7 +240,8 @@
+   LLVMAMDGPUHSCallConv      = 93,
+   LLVMMSP430BUILTINCallConv = 94,
+   LLVMAMDGPULSCallConv      = 95,
+-  LLVMAMDGPUESCallConv      = 96
++  LLVMAMDGPUESCallConv      = 96,
++  LLVMV8CallConv            = 97
+ } LLVMCallConv;
+ 
+ typedef enum {
+Index: lib/AsmParser/LLLexer.cpp
+===================================================================
+--- lib/AsmParser/LLLexer.cpp	(revision 347537)
++++ lib/AsmParser/LLLexer.cpp	(working copy)
+@@ -606,6 +606,7 @@
+   KEYWORD(webkit_jscc);
+   KEYWORD(swiftcc);
+   KEYWORD(anyregcc);
++  KEYWORD(v8cc);
+   KEYWORD(preserve_mostcc);
+   KEYWORD(preserve_allcc);
+   KEYWORD(ghccc);
+Index: lib/AsmParser/LLParser.cpp
+===================================================================
+--- lib/AsmParser/LLParser.cpp	(revision 347537)
++++ lib/AsmParser/LLParser.cpp	(working copy)
+@@ -1906,6 +1906,7 @@
+   case lltok::kw_win64cc:        CC = CallingConv::Win64; break;
+   case lltok::kw_webkit_jscc:    CC = CallingConv::WebKit_JS; break;
+   case lltok::kw_anyregcc:       CC = CallingConv::AnyReg; break;
++  case lltok::kw_v8cc:           CC = CallingConv::V8CC; break;
+   case lltok::kw_preserve_mostcc:CC = CallingConv::PreserveMost; break;
+   case lltok::kw_preserve_allcc: CC = CallingConv::PreserveAll; break;
+   case lltok::kw_ghccc:          CC = CallingConv::GHC; break;
+Index: lib/AsmParser/LLToken.h
+===================================================================
+--- lib/AsmParser/LLToken.h	(revision 347537)
++++ lib/AsmParser/LLToken.h	(working copy)
+@@ -150,6 +150,7 @@
+   kw_win64cc,
+   kw_webkit_jscc,
+   kw_anyregcc,
++  kw_v8cc,
+   kw_swiftcc,
+   kw_preserve_mostcc,
+   kw_preserve_allcc,
+Index: lib/IR/AsmWriter.cpp
+===================================================================
+--- lib/IR/AsmWriter.cpp	(revision 347537)
++++ lib/IR/AsmWriter.cpp	(working copy)
+@@ -350,6 +350,7 @@
+   case CallingConv::Cold:          Out << "coldcc"; break;
+   case CallingConv::WebKit_JS:     Out << "webkit_jscc"; break;
+   case CallingConv::AnyReg:        Out << "anyregcc"; break;
++  case CallingConv::V8CC:          Out << "v8cc"; break;
+   case CallingConv::PreserveMost:  Out << "preserve_mostcc"; break;
+   case CallingConv::PreserveAll:   Out << "preserve_allcc"; break;
+   case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
 --- lib/MC/MCAsmStreamer.cpp	(revision 347537)
@@ -212,38 +288,84 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 347537)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
-@@ -90,6 +90,8 @@
+@@ -90,6 +90,10 @@
        // exception handling.
        return CSR_GenericInt_SaveList;
      }
 +  } else if (F.getCallingConv() == CallingConv::AnyReg) {
 +    return CSR_NoRegs_SaveList;
++  } else if (F.getCallingConv() == CallingConv::V8CC) {
++    return CSR_NoRegs_SaveList;
    }
  
    if (STI.getTargetLowering()->supportSwiftError() &&
+Index: lib/Target/ARM/ARMCallingConv.td
+===================================================================
+--- lib/Target/ARM/ARMCallingConv.td	(revision 347537)
++++ lib/Target/ARM/ARMCallingConv.td	(working copy)
+@@ -239,6 +239,35 @@
+ ]>;
+ 
+ //===----------------------------------------------------------------------===//
++// V8 Calling Conventions
++//===----------------------------------------------------------------------===//
++
++def CC_ARM_V8: CallingConv<[
++  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
++
++  // i64/f64 is passed in even pairs of GPRs
++  // i64 is 8-aligned i32 here, so we may need to eat R1 as a pad register
++  // (and the same is true for f64 if VFP is not enabled)
++  CCIfType<[i32], CCIfAlign<"8", CCAssignToRegWithShadow<[R0, R2], [R0, R1]>>>,
++  CCIfType<[i32], CCIf<"ArgFlags.getOrigAlign() != 8",
++                       CCAssignToReg<[R0, R1, R2, R3, R4]>>>,
++
++  CCIfType<[i32], CCIfAlign<"8", CCAssignToStackWithShadow<4, 8, [R0, R1, R2, R3, R4]>>>,
++  CCIfType<[i32], CCAssignToStackWithShadow<4, 4, [R0, R1, R2, R3, R4]>>,
++  CCIfType<[f32], CCAssignToStackWithShadow<4, 4, [Q0, Q1, Q2, Q3]>>,
++  CCIfType<[f64], CCAssignToStackWithShadow<8, 8, [Q0, Q1, Q2, Q3]>>,
++  CCIfType<[v2f64], CCIfAlign<"16",
++           CCAssignToStackWithShadow<16, 16, [Q0, Q1, Q2, Q3]>>>,
++  CCIfType<[v2f64], CCAssignToStackWithShadow<16, 8, [Q0, Q1, Q2, Q3]>>
++]>;
++
++def RetCC_ARM_V8: CallingConv<[
++  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
++  CCIfType<[i32], CCAssignToReg<[R0, R1, R2, R3]>>,
++  CCIfType<[i64], CCAssignToRegWithShadow<[R0, R2], [R1, R3]>>
++]>;
++
++//===----------------------------------------------------------------------===//
+ // Callee-saved register lists.
+ //===----------------------------------------------------------------------===//
+ 
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMISelLowering.cpp	(revision 347537)
 +++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
-@@ -1578,6 +1578,8 @@
+@@ -1578,6 +1578,10 @@
    switch (CC) {
    default:
      report_fatal_error("Unsupported calling convention");
 +  case CallingConv::AnyReg:
 +    return CallingConv::AnyReg;
++  case CallingConv::V8CC:
++    return CallingConv::V8CC;
    case CallingConv::ARM_AAPCS:
    case CallingConv::ARM_APCS:
    case CallingConv::GHC:
-@@ -1627,6 +1629,8 @@
+@@ -1627,6 +1631,10 @@
    switch (getEffectiveCallingConv(CC, isVarArg)) {
    default:
      report_fatal_error("Unsupported calling convention");
 +  case CallingConv::AnyReg:
 +    return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
++  case CallingConv::V8CC:
++    return (Return ? RetCC_ARM_V8: CC_ARM_V8);
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -9256,6 +9260,15 @@
+@@ -9256,6 +9264,15 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -259,7 +381,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13074,11 @@
+@@ -13061,6 +13078,11 @@
    return -1;
  }
  
@@ -284,4 +406,3 @@ Index: lib/Target/ARM/ARMISelLowering.h
      SDValue ReconstructShuffle(SDValue Op, SelectionDAG &DAG) const;
  
      SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
-
