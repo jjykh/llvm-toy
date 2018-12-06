@@ -165,9 +165,9 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
   phi_rebuild_worklist_.clear();
 }
 
-void LLVMTFBuilder::DoCommonCall(
+void LLVMTFBuilder::DoTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands, bool tailcall) {
+    const OperandsVector& operands) {
   // 1. generate call asm
   std::vector<std::string> constraints;
   constraints.push_back("={r0}");
@@ -186,9 +186,9 @@ void LLVMTFBuilder::DoCommonCall(
     // layout
     // return value | register operands | stack operands | artifact operands
     int code_value = *(operands_iterator++);
-    target = output().buildGEPWithByteOffset(current_bb_->value(code_value),
-                                             output().constInt32(63) /* Code::kHeaderSize */,
-                                             output().repo().ref8);
+    target = output().buildGEPWithByteOffset(
+        current_bb_->value(code_value),
+        output().constInt32(63) /* Code::kHeaderSize */, output().repo().ref8);
   } else {
     int addr_value = *(operands_iterator++);
     target = current_bb_->value(addr_value);
@@ -208,13 +208,10 @@ void LLVMTFBuilder::DoCommonCall(
     constraints.push_back("r");
     instructions << "push {$" << stack_operands_index++ << "}\n";
   }
-  // artifact operands
-  if (tailcall) {
-    instructions << "add sp, $" << artifact_fp_operand_index << ", #8\n"
-                 << "pop {r11, lr}\n";
-  }
-  instructions << (tailcall ? "bx" : "blx") << " $"
-               << artifact_target_operand_index << "\n";
+  instructions << "add sp, $" << artifact_fp_operand_index << ", #8\n"
+               << "pop {r11, lr}\n";
+  instructions << "bx"
+               << " $" << artifact_target_operand_index << "\n";
   constraints.push_back("r");
   constraints.push_back("{r7}");
   constraints.push_back("{r10}");
@@ -245,22 +242,62 @@ void LLVMTFBuilder::DoCommonCall(
       const_cast<char*>(instruction_string.data()), instruction_string.size(),
       const_cast<char*>(constraints_string.data()), constraints_string.size(),
       true, false, LLVMInlineAsmDialectATT);
-  int gc_paramter_start = 0;
   ret = output().buildCall(func, operand_values.data(), operand_values.size());
-  if (tailcall) {
-    current_bb_->set_value(id, ret);
-    return;
+  current_bb_->set_value(id, ret);
+  output().buildUnreachable();
+}
+
+void LLVMTFBuilder::DoCall(int id, bool code,
+                           const RegistersForOperands& registers_for_operands,
+                           const OperandsVector& operands) {
+  auto operands_iterator = operands.begin();
+  LValue ret;
+  LValue target;
+  if (code) {
+    // layout
+    // return value | register operands | stack operands | artifact operands
+    int code_value = *(operands_iterator++);
+    target = output().buildGEPWithByteOffset(
+        current_bb_->value(code_value),
+        output().constInt32(63) /* Code::kHeaderSize */, output().repo().ref8);
+  } else {
+    int addr_value = *(operands_iterator++);
+    target = current_bb_->value(addr_value);
   }
+  std::vector<LValue> operand_values;
+  std::vector<LType> operand_value_types;
+  for (; operands_iterator != operands.end(); ++operands_iterator) {
+    LValue llvm_val = current_bb_->value(*operands_iterator);
+    LType llvm_val_type = typeOf(llvm_val);
+    operand_values.push_back(llvm_val);
+    operand_value_types.push_back(llvm_val_type);
+  }
+  // push artifact operands' value
+  operand_values.push_back(target);
+  operand_value_types.push_back(typeOf(target));
+  operand_values.push_back(output().context());
+  operand_value_types.push_back(typeOf(output().context()));
+  operand_values.push_back(output().root());
+  operand_value_types.push_back(typeOf(output().root()));
+  operand_values.push_back(output().fp());
+  operand_value_types.push_back(typeOf(output().fp()));
+
   std::vector<LValue> statepoint_operands;
+  LType callee_function_type =
+      functionType(output().repo().taggedType, operand_value_types.data(),
+                   operand_value_types.size(), NotVariadic);
+  LType callee_type = pointerType(callee_function_type);
   statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
-  statepoint_operands.push_back(output().repo().int32Zero);
+  statepoint_operands.push_back(output().constInt32(8));
+  statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(
-      constNull(pointerType(functionType(output().repo().voidType))));
-  statepoint_operands.push_back(output().constInt32(0));  // # call params
+      output().constInt32(operand_values.size()));        // # call params
   statepoint_operands.push_back(output().constInt32(0));  // flags
+  for (LValue operand_value : operand_values)
+    statepoint_operands.push_back(operand_value);
   statepoint_operands.push_back(output().constInt32(0));  // # transition args
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
-  gc_paramter_start = statepoint_operands.size();
+  int gc_paramter_start = statepoint_operands.size();
   // push current defines
   for (auto& items : current_bb_->values()) {
     LValue to_gc = items.second;
@@ -268,7 +305,7 @@ void LLVMTFBuilder::DoCommonCall(
     statepoint_operands.push_back(to_gc);
   }
   LValue statepoint_ret = output().buildCall(
-      output().repo().statepointIntrinsic(), statepoint_operands.data(),
+      output().getStatePointFunction(callee_type), statepoint_operands.data(),
       statepoint_operands.size());
   // 2. rebuild value if not tailcall
   for (auto& items : current_bb_->values()) {
@@ -280,6 +317,7 @@ void LLVMTFBuilder::DoCommonCall(
     items.second = relocated;
     gc_paramter_start++;
   }
+  ret = output().buildCall(output().repo().gcResultIntrinsic(), statepoint_ret);
   current_bb_->set_value(id, ret);
 }
 
@@ -376,8 +414,8 @@ static LValue buildAccessPointer(Output& output, LValue value, LValue offset,
 
 void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
                               MachineSemantic semantic, int base, int offset) {
-  LValue pointer =
-      buildAccessPointer(output(), current_bb_->value(base), current_bb_->value(offset), rep);
+  LValue pointer = buildAccessPointer(output(), current_bb_->value(base),
+                                      current_bb_->value(offset), rep);
   LValue value = output().buildLoad(pointer);
   LType castType = nullptr;
   LLVMOpcode opcode;
@@ -422,8 +460,8 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
 void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
                                WriteBarrierKind barrier, int base, int offset,
                                int value) {
-  LValue pointer =
-      buildAccessPointer(output(), current_bb_->value(base), current_bb_->value(offset), rep);
+  LValue pointer = buildAccessPointer(output(), current_bb_->value(base),
+                                      current_bb_->value(offset), rep);
   // FIXME: emit write barrier accordingly.
   assert(barrier == kNoWriteBarrier);
   LValue llvm_val = current_bb_->value(value);
@@ -589,13 +627,12 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
 void LLVMTFBuilder::VisitCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
-  DoCommonCall(id, code, registers_for_operands, operands, false);
+  DoCall(id, code, registers_for_operands, operands);
 }
 
 void LLVMTFBuilder::VisitTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
-  DoCommonCall(id, code, registers_for_operands, operands, true);
-  output().buildUnreachable();
+  DoTailCall(id, code, registers_for_operands, operands);
 }
 }  // namespace jit

@@ -28,9 +28,12 @@ class LLVMTFBuilder final : public TFVisitor {
   bool AllPredecessorStarted(BasicBlock* bb, BasicBlock** ref_pred);
   void BuildPhiAndPushToWorkList(BasicBlock* bb, BasicBlock* ref_pred);
   void ProcessPhiWorkList();
-  void DoCommonCall(int id, bool code,
-                    const RegistersForOperands& registers_for_operands,
-                    const OperandsVector& operands, bool tailcall);
+  void DoCall(int id, bool code,
+              const RegistersForOperands& registers_for_operands,
+              const OperandsVector& operands);
+  void DoTailCall(int id, bool code,
+                  const RegistersForOperands& registers_for_operands,
+                  const OperandsVector& operands);
   void EndCurrentBlock();
   LValue EnsureWord32(LValue);
   Output* output_;

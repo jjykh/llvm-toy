@@ -1,9 +1,9 @@
 #include "output.h"
 #include <assert.h>
-#include "compiler-state.h"
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Type.h>
-#include <llvm/IR/DerivedTypes.h>
+#include "compiler-state.h"
 
 namespace jit {
 Output::Output(CompilerState& state)
@@ -48,8 +48,8 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
                        constraint, len, true);
   char clobberList[] = "~{r1},~{r2},~{r3},~{r4},~{r5},~{r6},~{r8},~{r9}";
   clobber_func_ = LLVMGetInlineAsm(functionType(repo().voidType), empty, 0,
-                                 clobberList, sizeof(clobberList) - 1,
-                                 true, false, LLVMInlineAsmDialectATT);
+                                   clobberList, sizeof(clobberList) - 1, true,
+                                   false, LLVMInlineAsmDialectATT);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -185,7 +185,8 @@ LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
 
 LValue Output::buildPhi(LType type) { return jit::buildPhi(builder_, type); }
 
-LValue Output::buildGEPWithByteOffset(LValue base, LValue offset, LType dstType) {
+LValue Output::buildGEPWithByteOffset(LValue base, LValue offset,
+                                      LType dstType) {
   LType base_type = typeOf(base);
   unsigned base_type_address_space = LLVMGetPointerAddressSpace(base_type);
   unsigned dst_type_address_space = LLVMGetPointerAddressSpace(dstType);
@@ -206,27 +207,29 @@ LValue Output::buildBitCast(LValue val, LType type) {
 
 void Output::buildUnreachable() { jit::buildUnreachable(builder_); }
 
-void Output::buildClobberRegister() {
-  buildCall(clobber_func_);
-}
+void Output::buildClobberRegister() { buildCall(clobber_func_); }
 
 LValue Output::getStatePointFunction(LType callee_type) {
   auto found = statepoint_function_map_.find(callee_type);
-  if (found != statepoint_function_map_.end())
-    return found->second;
+  if (found != statepoint_function_map_.end()) return found->second;
   std::vector<LType> wrapped_argument_types;
   wrapped_argument_types.push_back(repo().int64);
   wrapped_argument_types.push_back(repo().int32);
   wrapped_argument_types.push_back(callee_type);
   wrapped_argument_types.push_back(repo().int32);
   wrapped_argument_types.push_back(repo().int32);
-  LType function_type = functionType(repo().tokenType, wrapped_argument_types.data(), wrapped_argument_types.size(), Variadic);
+  LType function_type =
+      functionType(repo().tokenType, wrapped_argument_types.data(),
+                   wrapped_argument_types.size(), Variadic);
   std::vector<llvm::Type*> unwrapped_argument_types;
   unwrapped_argument_types.push_back(llvm::unwrap(callee_type));
-  llvm::ArrayRef<llvm::Type*> param_ref(unwrapped_argument_types.data(), unwrapped_argument_types.size());
+  llvm::ArrayRef<llvm::Type*> param_ref(unwrapped_argument_types.data(),
+                                        unwrapped_argument_types.size());
 
-  std::string name = llvm::Intrinsic::getName(llvm::Intrinsic::experimental_gc_statepoint, param_ref);
-  LValue function = addExternFunction(state_.module_, name.c_str(), function_type);
+  std::string name = llvm::Intrinsic::getName(
+      llvm::Intrinsic::experimental_gc_statepoint, param_ref);
+  LValue function =
+      addExternFunction(state_.module_, name.c_str(), function_type);
   statepoint_function_map_[callee_type] = function;
   return function;
 }

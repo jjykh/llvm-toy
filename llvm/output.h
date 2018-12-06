@@ -1,8 +1,8 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 #include "intrinsic-repository.h"
 namespace jit {
 struct CompilerState;

@@ -116,7 +116,6 @@ void compile(State& state) {
   setFunctionAttributes(CPUStr, FeaturesStr, *M);
 
   {
-
     LLVMTargetMachine& LLVMTM = static_cast<LLVMTargetMachine&>(*Target);
     MachineModuleInfo* MMI = new MachineModuleInfo(&LLVMTM);
 
