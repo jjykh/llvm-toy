@@ -31,6 +31,9 @@
       'configurations': {
           'Common_Base': {
               'abstract': 1,
+              'include_dirs': [
+                  '<(DEPTH)',
+              ],
           },
           'Debug_Base': {
               'abstract': 1,
