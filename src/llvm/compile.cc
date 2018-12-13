@@ -59,7 +59,7 @@ void compile(State& state) {
   Triple TheTriple;
   std::unique_ptr<raw_svector_ostream> BOS;
   SmallVector<char, 0> Buffer;
-  BOS = make_unique<raw_svector_ostream>(Buffer);
+  BOS.reset(new raw_svector_ostream(Buffer));
   raw_pwrite_stream* OS = BOS.get();
 
   // If user just wants to list available options, skip module loading
