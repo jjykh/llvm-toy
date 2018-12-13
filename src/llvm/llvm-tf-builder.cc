@@ -1,6 +1,6 @@
+#include "src/llvm/llvm-tf-builder.h"
 #include <llvm/Support/Compiler.h>
 #include <sstream>
-#include "src/llvm/llvm-tf-builder.h"
 #include "src/llvm/basic-block-manager.h"
 #include "src/llvm/basic-block.h"
 
@@ -65,7 +65,8 @@ void LLVMTFBuilder::End() {
   assert(!!current_bb_);
   EndCurrentBlock();
   ProcessPhiWorkList();
-  v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(basic_block_manager());
+  v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
+      basic_block_manager());
   output().positionToBBEnd(output().prologue());
   output().buildBr(basic_block_manager()
                        .findBB(*basic_block_manager().rpo().begin())
@@ -577,8 +578,7 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   EnsureNativeBB(bbFalse, output());
   int expected_value = -1;
   if (bbTrue->is_deferred()) {
-    if (!bbFalse->is_deferred())
-      expected_value = 0;
+    if (!bbFalse->is_deferred()) expected_value = 0;
   } else if (bbFalse->is_deferred()) {
     expected_value = 1;
   }
@@ -650,6 +650,6 @@ void LLVMTFBuilder::VisitTailCall(
     const OperandsVector& operands) {
   DoTailCall(id, code, registers_for_operands, operands);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

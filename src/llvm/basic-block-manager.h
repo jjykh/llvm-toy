@@ -31,7 +31,7 @@ static inline void ResetImpls(Y& bbm) {
     bb.second->template ResetImpl<T>();
   }
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // BASIC_BLOCK_MANAGER_H

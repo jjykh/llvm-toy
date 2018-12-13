@@ -84,7 +84,7 @@ class BasicBlock {
   bool ended_;
   bool deferred_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // BASIC_BLOCK_H

@@ -53,7 +53,7 @@ class TFVisitor {
   INSTRUCTIONS(DECL_METHOD)
 #undef DECL_METHOD
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // TFVISITOR_H

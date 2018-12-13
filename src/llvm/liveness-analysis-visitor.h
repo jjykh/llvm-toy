@@ -33,7 +33,7 @@ class LivenessAnalysisVisitor final : public TFVisitor {
   std::set<int> current_defines_;
   BasicBlock* current_basic_block_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // LIVENESS_ANALYSIS_VISITOR_H

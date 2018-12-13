@@ -38,6 +38,6 @@ enum WriteBarrierKind : uint8_t {
   kPointerWriteBarrier,
   kFullWriteBarrier
 };
-}
-}
+}  // namespace internal
+}  // namespace v8
 #endif  // MACHINE_TYPE_H

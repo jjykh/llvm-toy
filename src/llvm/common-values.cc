@@ -45,6 +45,6 @@ CommonValues::CommonValues(LContext context)
       branchWeights(mdString(context, "branch_weights")),
       context_(context),
       module_(0) {}
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

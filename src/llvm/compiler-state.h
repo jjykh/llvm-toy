@@ -28,7 +28,7 @@ struct CompilerState {
   CompilerState(const CompilerState&) = delete;
   const CompilerState& operator=(const CompilerState&) = delete;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // COMPILER_STATE_H

@@ -1,5 +1,5 @@
-#include <assert.h>
 #include "src/llvm/compile.h"
+#include <assert.h>
 #include <string.h>
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/log.h"
@@ -135,6 +135,6 @@ void compile(State& state) {
     printf("%s\n", Buffer.data());
   }
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

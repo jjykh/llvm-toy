@@ -20,6 +20,6 @@ CompilerState::CompilerState(const char* moduleName)
 }
 
 CompilerState::~CompilerState() { LLVMContextDispose(context_); }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

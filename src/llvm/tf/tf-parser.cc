@@ -1,9 +1,9 @@
+#include "src/llvm/tf/tf-parser.h"
 #include <ctype.h>
 #include <inttypes.h>
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
-#include "src/llvm/tf/tf-parser.h"
 
 namespace v8 {
 namespace internal {
@@ -425,6 +425,6 @@ void TFParser::ParserError(const char* fmt, ...) {
   fprintf(stderr, "%d:%s\n", line_no_, msg);
   _exit(1);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

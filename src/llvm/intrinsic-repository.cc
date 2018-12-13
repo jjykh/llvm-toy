@@ -20,6 +20,6 @@ IntrinsicRepository::IntrinsicRepository(LContext context, LModule module)
   }
 FOR_EACH_FTL_INTRINSIC(INTRINSIC_GETTER_SLOW_DEFINITION)
 #undef INTRINSIC_GETTER
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

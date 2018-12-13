@@ -1,5 +1,5 @@
-#include <memory>
 #include "src/llvm/basic-block-manager.h"
+#include <memory>
 #include "src/llvm/basic-block.h"
 #include "src/llvm/output.h"
 
@@ -12,7 +12,7 @@ BasicBlockManager::~BasicBlockManager() {}
 
 BasicBlock* BasicBlockManager::createBB(int bid) {
   BasicBlock* bb;
-  auto newBB = std::make_unique<BasicBlock>(bid);
+  std::unique_ptr<BasicBlock> newBB(new BasicBlock(bid));
   bb = newBB.get();
   auto inserted = bbs_.emplace(bid, std::move(newBB));
   assert(inserted.second);
@@ -33,6 +33,6 @@ BasicBlock* BasicBlockManager::ensureBB(int bid) {
   bb = createBB(bid);
   return bb;
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

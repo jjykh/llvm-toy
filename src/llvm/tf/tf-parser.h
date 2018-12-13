@@ -40,7 +40,7 @@ class TFParser {
   std::unordered_map<std::string, WriteBarrierKind> write_barrier_map_;
   int line_no_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // TFPARSER_H

@@ -282,9 +282,9 @@ void TestParserVisitor::VisitTailCall(
        << "VisitTailCall"
        << " is_code:" << code << operands << endl;
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 
 int main() {
   using namespace v8::internal::tf_llvm;

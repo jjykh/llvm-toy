@@ -1,8 +1,8 @@
+#include "src/llvm/output.h"
+#include <assert.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Type.h>
-#include <assert.h>
-#include "src/llvm/output.h"
 #include "src/llvm/compiler-state.h"
 
 namespace v8 {
@@ -55,17 +55,24 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
-  return v8::internal::tf_llvm::appendBasicBlock(state_.context_, state_.function_, name);
+  return v8::internal::tf_llvm::appendBasicBlock(state_.context_,
+                                                 state_.function_, name);
 }
 
 void Output::positionToBBEnd(LBasicBlock bb) {
   LLVMPositionBuilderAtEnd(builder_, bb);
 }
 
-LValue Output::constInt32(int i) { return v8::internal::tf_llvm::constInt(repo_.int32, i); }
-LValue Output::constInt1(int i) { return v8::internal::tf_llvm::constInt(repo_.int1, i); }
+LValue Output::constInt32(int i) {
+  return v8::internal::tf_llvm::constInt(repo_.int32, i);
+}
+LValue Output::constInt1(int i) {
+  return v8::internal::tf_llvm::constInt(repo_.int1, i);
+}
 
-LValue Output::constInt64(long long l) { return v8::internal::tf_llvm::constInt(repo_.int64, l); }
+LValue Output::constInt64(long long l) {
+  return v8::internal::tf_llvm::constInt(repo_.int64, l);
+}
 
 LValue Output::constIntPtr(intptr_t i) {
   return v8::internal::tf_llvm::constInt(repo_.intPtr, i);
@@ -123,16 +130,23 @@ LValue Output::buildAnd(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildAnd(builder_, lhs, rhs);
 }
 
-LValue Output::buildBr(LBasicBlock bb) { return v8::internal::tf_llvm::buildBr(builder_, bb); }
+LValue Output::buildBr(LBasicBlock bb) {
+  return v8::internal::tf_llvm::buildBr(builder_, bb);
+}
 
 LValue Output::buildCondBr(LValue condition, LBasicBlock taken,
                            LBasicBlock notTaken) {
-  return v8::internal::tf_llvm::buildCondBr(builder_, condition, taken, notTaken);
+  return v8::internal::tf_llvm::buildCondBr(builder_, condition, taken,
+                                            notTaken);
 }
 
-LValue Output::buildRet(LValue ret) { return v8::internal::tf_llvm::buildRet(builder_, ret); }
+LValue Output::buildRet(LValue ret) {
+  return v8::internal::tf_llvm::buildRet(builder_, ret);
+}
 
-LValue Output::buildRetVoid(void) { return v8::internal::tf_llvm::buildRetVoid(builder_); }
+LValue Output::buildRetVoid(void) {
+  return v8::internal::tf_llvm::buildRetVoid(builder_);
+}
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
   return LLVMBuildCast(builder_, Op, Val, DestTy, "");
@@ -143,7 +157,8 @@ LValue Output::buildPointerCast(LValue val, LType type) {
 }
 
 LValue Output::buildSelect(LValue condition, LValue taken, LValue notTaken) {
-  return v8::internal::tf_llvm::buildSelect(builder_, condition, taken, notTaken);
+  return v8::internal::tf_llvm::buildSelect(builder_, condition, taken,
+                                            notTaken);
 }
 
 LValue Output::buildICmp(LIntPredicate cond, LValue left, LValue right) {
@@ -159,7 +174,9 @@ LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
   return buildCall(func);
 }
 
-LValue Output::buildPhi(LType type) { return v8::internal::tf_llvm::buildPhi(builder_, type); }
+LValue Output::buildPhi(LType type) {
+  return v8::internal::tf_llvm::buildPhi(builder_, type);
+}
 
 LValue Output::buildGEPWithByteOffset(LValue base, LValue offset,
                                       LType dstType) {
@@ -181,7 +198,9 @@ LValue Output::buildBitCast(LValue val, LType type) {
   return v8::internal::tf_llvm::buildBitCast(builder_, val, type);
 }
 
-void Output::buildUnreachable() { v8::internal::tf_llvm::buildUnreachable(builder_); }
+void Output::buildUnreachable() {
+  v8::internal::tf_llvm::buildUnreachable(builder_);
+}
 
 void Output::buildClobberRegister() { buildCall(clobber_func_); }
 
@@ -209,6 +228,6 @@ LValue Output::getStatePointFunction(LType callee_type) {
   statepoint_function_map_[callee_type] = function;
   return function;
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

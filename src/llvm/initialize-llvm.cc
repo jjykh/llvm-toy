@@ -45,6 +45,6 @@ static void initializeAndGetLLVMAPI(void) {
 }
 
 void initLLVM(void) { initializeAndGetLLVMAPI(); }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

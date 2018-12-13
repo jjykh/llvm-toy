@@ -56,7 +56,7 @@ class IntrinsicRepository : public CommonValues {
 #undef INTRINSIC_FIELD_DECLARATION
   LContext context_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // INTRINSIC_REPOSITORY_H

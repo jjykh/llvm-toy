@@ -16,7 +16,7 @@ typedef LLVMRealPredicate LRealPredicate;
 typedef LLVMTypeRef LType;
 typedef LLVMValueRef LValue;
 typedef LLVMMemoryBufferRef LMemoryBuffer;
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // ABBREVIATED_TYPES_H

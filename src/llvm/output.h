@@ -103,7 +103,7 @@ class Output {
   std::unordered_map<LType, LValue> statepoint_function_map_;
   uint32_t stackMapsId_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif /* OUTPUT_H */

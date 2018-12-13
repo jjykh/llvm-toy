@@ -55,7 +55,7 @@ class CommonValues {
   LContext const context_;
   LModule module_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // COMMON_VALUES_H

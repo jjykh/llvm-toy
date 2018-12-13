@@ -46,9 +46,9 @@ static void buildIR(State& state) {
   }
   fclose(f);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 
 int main() {
   using namespace v8::internal::tf_llvm;

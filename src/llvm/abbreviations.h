@@ -510,7 +510,7 @@ static inline LValue constInlineAsm(LType Ty, const char* AsmString,
   return LLVMConstInlineAsm(Ty, AsmString, Constraints, HasSideEffects,
                             IsAlignStack);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif /* ABBREVIATIONS_H */

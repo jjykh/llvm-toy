@@ -28,6 +28,6 @@ void BasicBlock::AddPredecessor(BasicBlock* pred) {
   assert(!pred->started());
   predecessors().push_back(pred);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
