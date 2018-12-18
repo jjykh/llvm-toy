@@ -413,6 +413,10 @@ void TFParser::HandleTailCall(int id, const std::string& properties,
   state_ = State::ParsingBlockHeader;
 }
 
+void TFParser::HandleRoot(int, const std::string&, const OperandsVector&) {
+  __builtin_unreachable();
+}
+
 void TFParser::ParserError(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);

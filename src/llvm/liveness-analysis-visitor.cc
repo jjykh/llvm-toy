@@ -102,7 +102,7 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
     }
     now->liveins().swap(result);
   }
-  // add back the use of phi in this pass
+// add back the use of phi in this pass
 #if 0
   for (auto it = basicBlockManager().rpo().begin();
        it != basicBlockManager().rpo().end(); ++it) {
@@ -132,7 +132,7 @@ void LivenessAnalysisVisitor::VisitBlock(int id, bool is_deferred,
     bb->AddPredecessor(pred_bb);
   }
   current_basic_block_ = bb;
-  current_basic_block_->set_deffered(true);
+  current_basic_block_->set_deffered(is_deferred);
   basicBlockManager().rpo().push_back(id);
   std::unique_ptr<LivenessBasicBlockImpl> bb_impl(new LivenessBasicBlockImpl);
   bb->SetImpl(bb_impl.release());
@@ -261,6 +261,7 @@ void LivenessAnalysisVisitor::VisitHeapConstant(int id, int64_t magic) {
 void LivenessAnalysisVisitor::VisitExternalConstant(int id, int64_t magic) {
   Define(id);
 }
+
 void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
                                        const OperandsVector& operands) {
   Define(id);
@@ -270,6 +271,7 @@ void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
     GetImpl(current_basic_block_)->phis.push_back({pred->id(), value});
   }
 }
+
 void LivenessAnalysisVisitor::VisitCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
@@ -278,6 +280,7 @@ void LivenessAnalysisVisitor::VisitCall(
     AddIfNotInDefines(e);
   }
 }
+
 void LivenessAnalysisVisitor::VisitTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
@@ -286,6 +289,8 @@ void LivenessAnalysisVisitor::VisitTailCall(
   }
   EndBlock();
 }
+
+void LivenessAnalysisVisitor::VisitRoot(int id, int index) { Define(id); }
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

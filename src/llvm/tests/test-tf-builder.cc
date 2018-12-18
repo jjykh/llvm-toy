@@ -33,11 +33,11 @@ static void buildIR(State& state) {
   fseek(f, 0, SEEK_SET);
   {
     Output output(state);
-    RegisterParameterDesc desc = {{"r0", output.taggedType()},
-                                  {"r5", output.repo().intPtr},
-                                  {"r6", output.taggedType()},
-                                  {"r8", output.taggedType()},
-                                  {"r7", output.taggedType()}};
+    RegisterParameterDesc desc = {{0, output.taggedType()},
+                                  {5, output.repo().intPtr},
+                                  {6, output.taggedType()},
+                                  {8, output.taggedType()},
+                                  {7, output.taggedType()}};
     output.initializeBuild(desc);
     LLVMTFBuilder builder(output, BBM);
     TFParser tfparser(&builder);

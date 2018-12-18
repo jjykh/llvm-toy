@@ -8,7 +8,7 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 using OperandsVector = std::vector<int>;
-using RegistersForOperands = std::vector<std::string>;
+using RegistersForOperands = std::vector<int>;
 
 #define INSTRUCTIONS(V)                                                       \
   V(Parameter, (int id, int pid))                                             \
@@ -33,6 +33,7 @@ using RegistersForOperands = std::vector<std::string>;
   V(Word32Equal, (int id, int e1, int e2))                                    \
   V(Branch, (int id, int cmp, int btrue, int bfalse))                         \
   V(HeapConstant, (int id, int64_t magic))                                    \
+  V(Root, (int id, int index))                                                \
   V(ExternalConstant, (int id, int64_t magic))                                \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call,                                                                     \

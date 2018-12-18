@@ -36,8 +36,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
   char empty[] = "\0";
   char constraint[256];
   for (auto& registerParameter : registerParameters) {
-    int len =
-        snprintf(constraint, 256, "={%s}", registerParameter.name.c_str());
+    int len = snprintf(constraint, 256, "={r%d}", registerParameter.name);
     LValue rvalue = buildInlineAsm(functionType(registerParameter.type), empty,
                                    0, constraint, len, true);
     registerParameters_.push_back(rvalue);

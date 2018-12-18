@@ -9,8 +9,9 @@ namespace internal {
 namespace tf_llvm {
 struct CompilerState;
 struct RegisterParameter {
-  std::string name;
+  int name;
   LType type;
+  RegisterParameter(int _name, LType _type) : name(_name), type(_type) {}
 };
 
 using RegisterParameterDesc = std::vector<RegisterParameter>;

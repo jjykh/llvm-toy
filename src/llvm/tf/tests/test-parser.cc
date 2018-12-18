@@ -32,6 +32,7 @@ class TestParserVisitor : public TFVisitor {
   void VisitUint32LessThanOrEqual(int id, int e1, int e2) override;
   void VisitBranch(int id, int cmp, int btrue, int bfalse) override;
   void VisitHeapConstant(int id, int64_t magic) override;
+  void VisitRoot(int id, int index) override;
   void VisitExternalConstant(int id, int64_t magic) override;
   void VisitPhi(int id, MachineRepresentation rep,
                 const OperandsVector& operands) override;
@@ -252,6 +253,12 @@ void TestParserVisitor::VisitHeapConstant(int id, int64_t magic) {
   cout << id << ":"
        << "VisitHeapConstant"
        << " magic:" << magic << endl;
+}
+
+void TestParserVisitor::VisitRoot(int id, int index) {
+  cout << id << ":"
+       << "VisitRoot"
+       << " index:" << index << endl;
 }
 
 void TestParserVisitor::VisitExternalConstant(int id, int64_t magic) {

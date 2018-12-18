@@ -1,5 +1,6 @@
 #include "src/llvm/llvm-tf-builder.h"
 #include <llvm/Support/Compiler.h>
+#include <bitset>
 #include <sstream>
 #include "src/llvm/basic-block-manager.h"
 #include "src/llvm/basic-block.h"
@@ -52,6 +53,95 @@ LLVMTFBuilderBasicBlockImpl* EnsureImpl(BasicBlock* bb) {
   bb->SetImpl(impl.release());
   return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
 }
+
+class CallOperandResolver {
+ public:
+  explicit CallOperandResolver(BasicBlock* current_bb, Output& output,
+                               LValue target);
+  ~CallOperandResolver() = default;
+  void Resolve(OperandsVector::const_iterator operands_iterator,
+               OperandsVector::const_iterator end,
+               const RegistersForOperands& registers_for_operands);
+  inline std::vector<LValue>& operand_values() { return operand_values_; }
+  inline std::vector<LType>& operand_value_types() {
+    return operand_value_types_;
+  }
+
+ private:
+  static const int kV8CCRegisterParameterCount = 12;
+  static const int kContextReg = 7;
+  static const int kRootReg = 10;
+  static const int kFPReg = 11;
+  void SetOperandValue(int reg, LValue value);
+  int FindNextReg();
+  inline Output& output() { return *output_; }
+  std::bitset<kV8CCRegisterParameterCount>
+      allocatable_register_set_; /* 0 is allocatable */
+  std::vector<LValue> operand_values_;
+  std::vector<LType> operand_value_types_;
+  BasicBlock* current_bb_;
+  Output* output_;
+  LValue target_;
+  int next_reg_;
+};
+
+CallOperandResolver::CallOperandResolver(BasicBlock* current_bb, Output& output,
+                                         LValue target)
+    : operand_values_(kV8CCRegisterParameterCount,
+                      LLVMGetUndef(output.repo().intPtr)),
+      operand_value_types_(kV8CCRegisterParameterCount, output.repo().intPtr),
+      current_bb_(current_bb),
+      output_(&output),
+      target_(target),
+      next_reg_(0) {}
+
+int CallOperandResolver::FindNextReg() {
+  if (next_reg_ < 0) return -1;
+  for (int i = next_reg_; i < kV8CCRegisterParameterCount; ++i) {
+    if (!allocatable_register_set_.test(i)) {
+      next_reg_ = i + 1;
+      return i;
+    }
+  }
+  next_reg_ = -1;
+  return -1;
+}
+
+void CallOperandResolver::SetOperandValue(int reg, LValue llvm_val) {
+  LType llvm_val_type = typeOf(llvm_val);
+  if (reg >= 0) {
+    operand_values_[reg] = llvm_val;
+    operand_value_types_[reg] = llvm_val_type;
+    allocatable_register_set_.set(reg);
+  } else {
+    operand_values_.push_back(llvm_val);
+    operand_value_types_.push_back(llvm_val_type);
+  }
+}
+void CallOperandResolver::Resolve(
+    OperandsVector::const_iterator operands_iterator,
+    OperandsVector::const_iterator end,
+    const RegistersForOperands& registers_for_operands) {
+  // setup register operands
+  for (int reg : registers_for_operands) {
+    assert(reg < kV8CCRegisterParameterCount);
+    LValue llvm_val = current_bb_->value(*operands_iterator);
+    SetOperandValue(reg, llvm_val);
+    ++operands_iterator;
+  }
+  // setup artifact operands' value
+  SetOperandValue(kContextReg, output().context());
+  SetOperandValue(kRootReg, output().root());
+  SetOperandValue(kFPReg, output().fp());
+
+  SetOperandValue(FindNextReg(), target_);
+
+  for (; operands_iterator != end; ++operands_iterator) {
+    LValue llvm_val = current_bb_->value(*operands_iterator);
+    SetOperandValue(FindNextReg(), llvm_val);
+  }
+}
+
 }  // namespace
 
 LLVMTFBuilder::LLVMTFBuilder(Output& output,
@@ -176,8 +266,8 @@ void LLVMTFBuilder::DoTailCall(
   constraints.push_back("={r0}");
   for (auto& rname : registers_for_operands) {
     std::string constraint;
-    constraint.append("{");
-    constraint.append(rname);
+    constraint.append("{r");
+    constraint.append(1, static_cast<char>('0' + rname));
     constraint.append("}");
     constraints.push_back(constraint);
   }
@@ -267,36 +357,22 @@ void LLVMTFBuilder::DoCall(int id, bool code,
     int addr_value = *(operands_iterator++);
     target = current_bb_->value(addr_value);
   }
-  std::vector<LValue> operand_values;
-  std::vector<LType> operand_value_types;
-  for (; operands_iterator != operands.end(); ++operands_iterator) {
-    LValue llvm_val = current_bb_->value(*operands_iterator);
-    LType llvm_val_type = typeOf(llvm_val);
-    operand_values.push_back(llvm_val);
-    operand_value_types.push_back(llvm_val_type);
-  }
-  // push artifact operands' value
-  operand_values.push_back(target);
-  operand_value_types.push_back(typeOf(target));
-  operand_values.push_back(output().context());
-  operand_value_types.push_back(typeOf(output().context()));
-  operand_values.push_back(output().root());
-  operand_value_types.push_back(typeOf(output().root()));
-  operand_values.push_back(output().fp());
-  operand_value_types.push_back(typeOf(output().fp()));
-
+  CallOperandResolver call_operand_resolver(current_bb_, output(), target);
+  call_operand_resolver.Resolve(operands_iterator, operands.end(),
+                                registers_for_operands);
   std::vector<LValue> statepoint_operands;
-  LType callee_function_type =
-      functionType(output().repo().taggedType, operand_value_types.data(),
-                   operand_value_types.size(), NotVariadic);
+  LType callee_function_type = functionType(
+      output().repo().taggedType,
+      call_operand_resolver.operand_value_types().data(),
+      call_operand_resolver.operand_value_types().size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
   statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
   statepoint_operands.push_back(output().constInt32(4));
   statepoint_operands.push_back(constNull(callee_type));
-  statepoint_operands.push_back(
-      output().constInt32(operand_values.size()));        // # call params
+  statepoint_operands.push_back(output().constInt32(
+      call_operand_resolver.operand_values().size()));    // # call params
   statepoint_operands.push_back(output().constInt32(0));  // flags
-  for (LValue operand_value : operand_values)
+  for (LValue operand_value : call_operand_resolver.operand_values())
     statepoint_operands.push_back(operand_value);
   statepoint_operands.push_back(output().constInt32(0));  // # transition args
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
@@ -649,6 +725,14 @@ void LLVMTFBuilder::VisitTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
   DoTailCall(id, code, registers_for_operands, operands);
+}
+
+void LLVMTFBuilder::VisitRoot(int id, int index) {
+  LValue offset = output().buildGEPWithByteOffset(
+      output().root(), output().constInt32(index * sizeof(void*)),
+      pointerType(output().taggedType()));
+  LValue value = output().buildLoad(offset);
+  current_bb_->set_value(id, value);
 }
 }  // namespace tf_llvm
 }  // namespace internal
