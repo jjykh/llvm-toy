@@ -62,6 +62,27 @@ Index: lib/AsmParser/LLToken.h
    kw_swiftcc,
    kw_preserve_mostcc,
    kw_preserve_allcc,
+Index: lib/CodeGen/StackMaps.cpp
+===================================================================
+--- lib/CodeGen/StackMaps.cpp	(revision 347537)
++++ lib/CodeGen/StackMaps.cpp	(working copy)
+@@ -30,6 +30,7 @@
+ #include "llvm/Support/ErrorHandling.h"
+ #include "llvm/Support/MathExtras.h"
+ #include "llvm/Support/raw_ostream.h"
++#include "llvm/Target/TargetMachine.h"
+ #include <algorithm>
+ #include <cassert>
+ #include <cstdint>
+@@ -444,7 +445,7 @@
+     LLVM_DEBUG(dbgs() << WSMP << "function addr: " << FR.first
+                       << " frame size: " << FR.second.StackSize
+                       << " callsite count: " << FR.second.RecordCount << '\n');
+-    OS.EmitSymbolValue(FR.first, 8);
++    OS.EmitSymbolValue(FR.first, AP.TM.getProgramPointerSize());
+     OS.EmitIntValue(FR.second.StackSize, 8);
+     OS.EmitIntValue(FR.second.RecordCount, 8);
+   }
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
 --- lib/IR/AsmWriter.cpp	(revision 347537)

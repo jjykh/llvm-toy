@@ -66,6 +66,9 @@ class CallOperandResolver {
   inline std::vector<LType>& operand_value_types() {
     return operand_value_types_;
   }
+  inline CallInfo::LocationVector&& release_location() {
+    return std::move(locations_);
+  }
 
  private:
   static const int kV8CCRegisterParameterCount = 12;
@@ -79,6 +82,7 @@ class CallOperandResolver {
       allocatable_register_set_; /* 0 is allocatable */
   std::vector<LValue> operand_values_;
   std::vector<LType> operand_value_types_;
+  CallInfo::LocationVector locations_;
   BasicBlock* current_bb_;
   Output* output_;
   LValue target_;
@@ -133,22 +137,27 @@ void CallOperandResolver::Resolve(
   SetOperandValue(kContextReg, output().context());
   SetOperandValue(kRootReg, output().root());
   SetOperandValue(kFPReg, output().fp());
-
-  SetOperandValue(FindNextReg(), target_);
+  int target_reg = FindNextReg();
+  SetOperandValue(target_reg, target_);
+  locations_.push_back(target_reg);
 
   for (; operands_iterator != end; ++operands_iterator) {
     LValue llvm_val = current_bb_->value(*operands_iterator);
-    SetOperandValue(FindNextReg(), llvm_val);
+    int reg = FindNextReg();
+    SetOperandValue(reg, llvm_val);
+    locations_.push_back(reg);
   }
 }
 
 }  // namespace
 
 LLVMTFBuilder::LLVMTFBuilder(Output& output,
-                             BasicBlockManager& basic_block_manager)
+                             BasicBlockManager& basic_block_manager,
+                             StackMapInfoMap& stack_map_info_map)
     : output_(&output),
       basic_block_manager_(&basic_block_manager),
       current_bb_(nullptr),
+      stack_map_info_map_(&stack_map_info_map),
       state_point_id_next_(0) {}
 
 void LLVMTFBuilder::End() {
@@ -366,7 +375,8 @@ void LLVMTFBuilder::DoCall(int id, bool code,
       call_operand_resolver.operand_value_types().data(),
       call_operand_resolver.operand_value_types().size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
-  statepoint_operands.push_back(output().constInt64(state_point_id_next_++));
+  int patchid = state_point_id_next_++;
+  statepoint_operands.push_back(output().constInt64(patchid));
   statepoint_operands.push_back(output().constInt32(4));
   statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(output().constInt32(
@@ -398,6 +408,10 @@ void LLVMTFBuilder::DoCall(int id, bool code,
     gc_paramter_start++;
   }
   ret = output().buildCall(output().repo().gcResultIntrinsic(), statepoint_ret);
+  // save patch point info
+  std::unique_ptr<StackMapInfo> info(
+      new CallInfo(std::move(call_operand_resolver.release_location())));
+  stack_map_info_map_->emplace(patchid, std::move(info));
   current_bb_->set_value(id, ret);
 }
 
@@ -669,23 +683,38 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   char buf[256];
-  int len = snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic));
+  int len =
+      snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic & 0xff));
   char kConstraint[] = "=r";
   // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
                               kConstraint, sizeof(kConstraint) - 1, false);
+  int patchid = state_point_id_next_++;
+  output().buildCall(output().repo().stackmapIntrinsic(),
+                     output().constInt64(patchid), output().repo().int32Zero,
+                     value);
+  std::unique_ptr<StackMapInfo> info(new HeapConstantInfo(magic));
+  stack_map_info_map_->emplace(patchid, std::move(info));
   current_bb_->set_value(id, value);
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   char buf[256];
-  int len = snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic));
+  int len =
+      snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic & 0xff));
   char kConstraint[] = "=r";
   // FIXME: review the sideeffect.
   LValue value =
       output().buildInlineAsm(functionType(output().taggedType()), buf, len,
                               kConstraint, sizeof(kConstraint) - 1, false);
+  int patchid = state_point_id_next_++;
+  output().buildCall(output().repo().stackmapIntrinsic(),
+                     output().constInt64(patchid), output().repo().int32Zero,
+                     value);
+  std::unique_ptr<StackMapInfo> info(new ExternalReferenceInfo(magic));
+  stack_map_info_map_->emplace(patchid, std::move(info));
+
   current_bb_->set_value(id, value);
 }
 

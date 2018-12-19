@@ -11,6 +11,7 @@
 #include "src/llvm/basic-block.h"
 #include "src/llvm/liveness-analysis-visitor.h"
 #include "src/llvm/llvm-tf-builder.h"
+#include "src/llvm/stack-map-info.h"
 #include "src/llvm/tf/tf-parser.h"
 namespace v8 {
 namespace internal {
@@ -39,7 +40,8 @@ static void buildIR(State& state) {
                                   {8, output.taggedType()},
                                   {7, output.taggedType()}};
     output.initializeBuild(desc);
-    LLVMTFBuilder builder(output, BBM);
+    StackMapInfoMap stack_map_info_map;
+    LLVMTFBuilder builder(output, BBM, stack_map_info_map);
     TFParser tfparser(&builder);
     tfparser.Parse(f);
     builder.End();

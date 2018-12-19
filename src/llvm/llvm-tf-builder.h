@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 #include "src/llvm/abbreviated-types.h"
+#include "src/llvm/stack-map-info.h"
 #include "src/llvm/tf/tf-visitor.h"
 namespace v8 {
 namespace internal {
@@ -13,7 +14,7 @@ class BasicBlockManager;
 
 class LLVMTFBuilder final : public TFVisitor {
  public:
-  explicit LLVMTFBuilder(Output&, BasicBlockManager&);
+  explicit LLVMTFBuilder(Output&, BasicBlockManager&, StackMapInfoMap&);
   void End();
 
  private:
@@ -41,6 +42,7 @@ class LLVMTFBuilder final : public TFVisitor {
   Output* output_;
   BasicBlockManager* basic_block_manager_;
   BasicBlock* current_bb_;
+  StackMapInfoMap* stack_map_info_map_;
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
   int64_t state_point_id_next_;

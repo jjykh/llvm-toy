@@ -28,20 +28,13 @@ static void initializeAndGetLLVMAPI(void) {
 // You think you want to call LLVMInitializeNativeTarget()? Think again. This
 // presumes that LLVM was ./configured correctly, which won't be the case in
 // cross-compilation situations.
-
-#if 0
-    LLVMInitializeARMTargetInfo();
-    LLVMInitializeARMTarget();
-    LLVMInitializeARMTargetMC();
-    LLVMInitializeARMAsmPrinter();
-    LLVMInitializeARMDisassembler();
-#else
-  LLVMInitializeAllTargetInfos();
-  LLVMInitializeAllTargets();
-  LLVMInitializeAllTargetMCs();
-  LLVMInitializeAllAsmPrinters();
-  LLVMInitializeAllDisassemblers();
-#endif
+  LLVMLinkInMCJIT();
+  LLVMInitializeARMTargetInfo();
+  LLVMInitializeARMTarget();
+  LLVMInitializeARMTargetMC();
+  LLVMInitializeARMAsmPrinter();
+  LLVMInitializeARMDisassembler();
+  LLVMInitializeARMAsmParser();
 }
 
 void initLLVM(void) { initializeAndGetLLVMAPI(); }
