@@ -1,4 +1,5 @@
 #include "src/llvm/compiler-state.h"
+#include "src/llvm/stack-map-info.h"
 
 namespace v8 {
 namespace internal {

@@ -83,6 +83,18 @@ Index: lib/CodeGen/StackMaps.cpp
      OS.EmitIntValue(FR.second.StackSize, 8);
      OS.EmitIntValue(FR.second.RecordCount, 8);
    }
+Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
+===================================================================
+--- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 347537)
++++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
+@@ -200,6 +200,7 @@
+          .setErrorStr(&Error)
+          .setOptLevel((CodeGenOpt::Level)options.OptLevel)
+          .setTargetOptions(targetOptions);
++  builder.setRelocationModel(Reloc::PIC_);
+   bool JIT;
+   if (Optional<CodeModel::Model> CM = unwrap(options.CodeModel, JIT))
+     builder.setCodeModel(*CM);
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
 --- lib/IR/AsmWriter.cpp	(revision 347537)
@@ -309,12 +321,10 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 347537)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
-@@ -90,6 +90,10 @@
+@@ -90,6 +90,8 @@
        // exception handling.
        return CSR_GenericInt_SaveList;
      }
-+  } else if (F.getCallingConv() == CallingConv::AnyReg) {
-+    return CSR_NoRegs_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    return CSR_NoRegs_SaveList;
    }

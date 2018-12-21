@@ -66,6 +66,7 @@ class CallOperandResolver {
   inline std::vector<LType>& operand_value_types() {
     return operand_value_types_;
   }
+  inline size_t location_count() const { return locations_.size(); }
   inline CallInfo::LocationVector&& release_location() {
     return std::move(locations_);
   }
@@ -127,22 +128,25 @@ void CallOperandResolver::Resolve(
     OperandsVector::const_iterator end,
     const RegistersForOperands& registers_for_operands) {
   // setup register operands
+  OperandsVector stack_operands;
   for (int reg : registers_for_operands) {
     assert(reg < kV8CCRegisterParameterCount);
-    LValue llvm_val = current_bb_->value(*operands_iterator);
+    if (reg < 0) {
+      stack_operands.push_back(*(operands_iterator++));
+      continue;
+    }
+    LValue llvm_val = current_bb_->value(*(operands_iterator++));
     SetOperandValue(reg, llvm_val);
-    ++operands_iterator;
   }
   // setup artifact operands' value
-  SetOperandValue(kContextReg, output().context());
   SetOperandValue(kRootReg, output().root());
   SetOperandValue(kFPReg, output().fp());
   int target_reg = FindNextReg();
   SetOperandValue(target_reg, target_);
   locations_.push_back(target_reg);
 
-  for (; operands_iterator != end; ++operands_iterator) {
-    LValue llvm_val = current_bb_->value(*operands_iterator);
+  for (auto operand : stack_operands) {
+    LValue llvm_val = current_bb_->value(operand);
     int reg = FindNextReg();
     SetOperandValue(reg, llvm_val);
     locations_.push_back(reg);
@@ -270,82 +274,12 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
 void LLVMTFBuilder::DoTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
-  // 1. generate call asm
-  std::vector<std::string> constraints;
-  constraints.push_back("={r0}");
-  for (auto& rname : registers_for_operands) {
-    std::string constraint;
-    constraint.append("{r");
-    constraint.append(1, static_cast<char>('0' + rname));
-    constraint.append("}");
-    constraints.push_back(constraint);
-  }
-  auto operands_iterator = operands.begin();
-  LValue ret;
-  int operand_index_start = 1;
-  LValue target;
-  if (code) {
-    // layout
-    // return value | register operands | stack operands | artifact operands
-    int code_value = *(operands_iterator++);
-    target = output().buildGEPWithByteOffset(
-        current_bb_->value(code_value),
-        output().constInt32(63) /* Code::kHeaderSize */, output().repo().ref8);
-  } else {
-    int addr_value = *(operands_iterator++);
-    target = current_bb_->value(addr_value);
-  }
-
-  std::ostringstream instructions;
-  static const size_t kTargetSize = 1;
-  int stack_operands_index =
-      operand_index_start + registers_for_operands.size();
-  int artifact_operands_index_start =
-      operand_index_start + operands.size() - kTargetSize;
-  int artifact_target_operand_index = artifact_operands_index_start + 0;
-  int artifact_fp_operand_index = artifact_operands_index_start + 3;
-  size_t stack_parameter_size =
-      operands.size() - kTargetSize - registers_for_operands.size();
-  for (size_t i = 0; i < stack_parameter_size; ++i) {
-    constraints.push_back("r");
-    instructions << "push {$" << stack_operands_index++ << "}\n";
-  }
-  instructions << "add sp, $" << artifact_fp_operand_index << ", #8\n"
-               << "pop {r11, lr}\n";
-  instructions << "bx"
-               << " $" << artifact_target_operand_index << "\n";
-  constraints.push_back("r");
-  constraints.push_back("{r7}");
-  constraints.push_back("{r10}");
-  constraints.push_back("{r11}");
-  std::string instruction_string = instructions.str();
-  std::string constraints_string = ConstraintsToString(constraints);
-
-  std::vector<LValue> operand_values;
-  std::vector<LType> operand_value_types;
-  for (; operands_iterator != operands.end(); ++operands_iterator) {
-    LValue llvm_val = current_bb_->value(*operands_iterator);
-    operand_values.push_back(llvm_val);
-    operand_value_types.push_back(typeOf(llvm_val));
-  }
-  // push artifact operands' value
-  operand_values.push_back(target);
-  operand_value_types.push_back(typeOf(target));
-  operand_values.push_back(output().context());
-  operand_value_types.push_back(typeOf(output().context()));
-  operand_values.push_back(output().root());
-  operand_value_types.push_back(typeOf(output().root()));
-  operand_values.push_back(output().fp());
-  operand_value_types.push_back(typeOf(output().fp()));
-
-  LValue func = LLVMGetInlineAsm(
-      functionType(output().taggedType(), operand_value_types.data(),
-                   operand_value_types.size(), NotVariadic),
-      const_cast<char*>(instruction_string.data()), instruction_string.size(),
-      const_cast<char*>(constraints_string.data()), constraints_string.size(),
-      true, false, LLVMInlineAsmDialectATT);
-  ret = output().buildCall(func, operand_values.data(), operand_values.size());
-  current_bb_->set_value(id, ret);
+  DoCall(id, code, registers_for_operands, operands);
+  // just added, so minus one would be last added.
+  int patchid = state_point_id_next_ - 1;
+  StackMapInfo* info = (*stack_map_info_map_)[patchid].get();
+  CallInfo* call_info = static_cast<CallInfo*>(info);
+  call_info->set_tailcall(true);
   output().buildUnreachable();
 }
 
@@ -355,9 +289,10 @@ void LLVMTFBuilder::DoCall(int id, bool code,
   auto operands_iterator = operands.begin();
   LValue ret;
   LValue target;
+  // layout
+  // return value | register operands | stack operands | artifact operands
   if (code) {
-    // layout
-    // return value | register operands | stack operands | artifact operands
+    // FIXME: (UC_linzj): I want __ Call(code, RelocInfo::CODE_TARGET).
     int code_value = *(operands_iterator++);
     target = output().buildGEPWithByteOffset(
         current_bb_->value(code_value),
@@ -377,7 +312,8 @@ void LLVMTFBuilder::DoCall(int id, bool code,
   LType callee_type = pointerType(callee_function_type);
   int patchid = state_point_id_next_++;
   statepoint_operands.push_back(output().constInt64(patchid));
-  statepoint_operands.push_back(output().constInt32(4));
+  statepoint_operands.push_back(
+      output().constInt32(4 * (call_operand_resolver.location_count())));
   statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(output().constInt32(
       call_operand_resolver.operand_values().size()));    // # call params
@@ -397,7 +333,7 @@ void LLVMTFBuilder::DoCall(int id, bool code,
       output().getStatePointFunction(callee_type), statepoint_operands.data(),
       statepoint_operands.size());
   LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
-  // 2. rebuild value if not tailcall
+  // 2. rebuild value
   for (auto& items : current_bb_->values()) {
     if (typeOf(items.second) != output().taggedType()) continue;
     LValue relocated = output().buildCall(

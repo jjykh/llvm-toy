@@ -58,47 +58,6 @@ static LLVMBool mmApplyPermissions(void*, char**) { return false; }
 
 static void mmDestroy(void*) {}
 
-static const char* symbolLookupCallback(void* DisInfo, uint64_t ReferenceValue,
-                                        uint64_t* ReferenceType,
-                                        uint64_t ReferencePC,
-                                        const char** ReferenceName) {
-  *ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
-  return nullptr;
-}
-
-static void disassemble(tf_llvm::ByteBuffer& code) {
-  LLVMDisasmContextRef DCR = LLVMCreateDisasm("armv7-linux-android", nullptr, 0,
-                                              nullptr, symbolLookupCallback);
-
-  uint8_t* BytesP = code.data();
-
-  unsigned NumBytes = code.size();
-  unsigned PC = 0;
-  const char OutStringSize = 100;
-  char OutString[OutStringSize];
-  printf(
-      "========================================================================"
-      "========\n");
-  while (NumBytes != 0) {
-    size_t InstSize = LLVMDisasmInstruction(DCR, BytesP, NumBytes, PC,
-                                            OutString, OutStringSize);
-
-    PC += InstSize;
-    BytesP += InstSize;
-    NumBytes -= InstSize;
-    printf("%s\n", OutString);
-  }
-  printf(
-      "========================================================================"
-      "========\n");
-}
-
-static void disassemble(State& state) {
-  for (auto& code : state.codeSectionList_) {
-    disassemble(code);
-  }
-}
-
 void compile(State& state) {
   LLVMMCJITCompilerOptions options;
   LLVMInitializeMCJITCompilerOptions(&options, sizeof(options));
@@ -148,7 +107,6 @@ void compile(State& state) {
   if (functionPasses) LLVMDisposePassManager(functionPasses);
   LLVMDisposePassManager(modulePasses);
   LLVMDisposeExecutionEngine(engine);
-  disassemble(state);
   llvm::linkCoreCLRGC();
 }
 }  // namespace tf_llvm
