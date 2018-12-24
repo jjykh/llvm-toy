@@ -33,6 +33,7 @@ class TestParserVisitor : public TFVisitor {
   void VisitBranch(int id, int cmp, int btrue, int bfalse) override;
   void VisitHeapConstant(int id, int64_t magic) override;
   void VisitRoot(int id, int index) override;
+  void VisitCodeForCall(int id, int64_t) override;
   void VisitExternalConstant(int id, int64_t magic) override;
   void VisitPhi(int id, MachineRepresentation rep,
                 const OperandsVector& operands) override;
@@ -259,6 +260,12 @@ void TestParserVisitor::VisitRoot(int id, int index) {
   cout << id << ":"
        << "VisitRoot"
        << " index:" << index << endl;
+}
+
+void TestParserVisitor::VisitCodeForCall(int id, int64_t magic) {
+  cout << id << ":"
+       << "VisitCodeForCall"
+       << " magic:" << magic << endl;
 }
 
 void TestParserVisitor::VisitExternalConstant(int id, int64_t magic) {

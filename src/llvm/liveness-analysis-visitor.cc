@@ -290,7 +290,8 @@ void LivenessAnalysisVisitor::VisitTailCall(
   EndBlock();
 }
 
-void LivenessAnalysisVisitor::VisitRoot(int id, int index) { Define(id); }
+void LivenessAnalysisVisitor::VisitRoot(int id, int) { Define(id); }
+void LivenessAnalysisVisitor::VisitCodeForCall(int id, int64_t) { Define(id); }
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

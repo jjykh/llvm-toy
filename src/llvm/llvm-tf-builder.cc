@@ -141,9 +141,13 @@ void CallOperandResolver::Resolve(
   // setup artifact operands' value
   SetOperandValue(kRootReg, output().root());
   SetOperandValue(kFPReg, output().fp());
-  int target_reg = FindNextReg();
-  SetOperandValue(target_reg, target_);
-  locations_.push_back(target_reg);
+  if (!LLVMIsUndef(target_)) {
+    int target_reg = FindNextReg();
+    SetOperandValue(target_reg, target_);
+    locations_.push_back(target_reg);
+  } else {
+    locations_.push_back(-1);
+  }
 
   for (auto operand : stack_operands) {
     LValue llvm_val = current_bb_->value(operand);
@@ -274,33 +278,39 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
 void LLVMTFBuilder::DoTailCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
-  DoCall(id, code, registers_for_operands, operands);
-  // just added, so minus one would be last added.
-  int patchid = state_point_id_next_ - 1;
-  StackMapInfo* info = (*stack_map_info_map_)[patchid].get();
-  CallInfo* call_info = static_cast<CallInfo*>(info);
-  call_info->set_tailcall(true);
+  DoCall(id, code, registers_for_operands, operands, true);
   output().buildUnreachable();
 }
 
 void LLVMTFBuilder::DoCall(int id, bool code,
                            const RegistersForOperands& registers_for_operands,
-                           const OperandsVector& operands) {
+                           const OperandsVector& operands, bool tailcall) {
   auto operands_iterator = operands.begin();
   LValue ret;
   LValue target;
+  int64_t code_magic = 0;
+  int addition_branch_instructions = 0;
   // layout
   // return value | register operands | stack operands | artifact operands
   if (code) {
     // FIXME: (UC_linzj): I want __ Call(code, RelocInfo::CODE_TARGET).
     int code_value = *(operands_iterator++);
-    target = output().buildGEPWithByteOffset(
-        current_bb_->value(code_value),
-        output().constInt32(63) /* Code::kHeaderSize */, output().repo().ref8);
+    auto found = code_uses_map_.find(code_value);
+    if (found != code_uses_map_.end()) {
+      code_magic = found->second;
+      target = LLVMGetUndef(output().repo().intPtr);
+      addition_branch_instructions += 1;
+    } else {
+      target = output().buildGEPWithByteOffset(
+          current_bb_->value(code_value),
+          output().constInt32(63) /* Code::kHeaderSize */,
+          output().repo().ref8);
+    }
   } else {
     int addr_value = *(operands_iterator++);
     target = current_bb_->value(addr_value);
   }
+  if (tailcall) addition_branch_instructions += 2;
   CallOperandResolver call_operand_resolver(current_bb_, output(), target);
   call_operand_resolver.Resolve(operands_iterator, operands.end(),
                                 registers_for_operands);
@@ -313,7 +323,8 @@ void LLVMTFBuilder::DoCall(int id, bool code,
   int patchid = state_point_id_next_++;
   statepoint_operands.push_back(output().constInt64(patchid));
   statepoint_operands.push_back(
-      output().constInt32(4 * (call_operand_resolver.location_count())));
+      output().constInt32(4 * (call_operand_resolver.location_count() +
+                               addition_branch_instructions)));
   statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(output().constInt32(
       call_operand_resolver.operand_values().size()));    // # call params
@@ -333,22 +344,28 @@ void LLVMTFBuilder::DoCall(int id, bool code,
       output().getStatePointFunction(callee_type), statepoint_operands.data(),
       statepoint_operands.size());
   LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
-  // 2. rebuild value
-  for (auto& items : current_bb_->values()) {
-    if (typeOf(items.second) != output().taggedType()) continue;
-    LValue relocated = output().buildCall(
-        output().repo().gcRelocateIntrinsic(), statepoint_ret,
-        output().constInt32(gc_paramter_start),
-        output().constInt32(gc_paramter_start));
-    items.second = relocated;
-    gc_paramter_start++;
+  LLVMSetTailCall(statepoint_ret, tailcall);
+  if (!tailcall) {
+    // 2. rebuild value
+    for (auto& items : current_bb_->values()) {
+      if (typeOf(items.second) != output().taggedType()) continue;
+      LValue relocated = output().buildCall(
+          output().repo().gcRelocateIntrinsic(), statepoint_ret,
+          output().constInt32(gc_paramter_start),
+          output().constInt32(gc_paramter_start));
+      items.second = relocated;
+      gc_paramter_start++;
+    }
+    ret =
+        output().buildCall(output().repo().gcResultIntrinsic(), statepoint_ret);
+    current_bb_->set_value(id, ret);
   }
-  ret = output().buildCall(output().repo().gcResultIntrinsic(), statepoint_ret);
   // save patch point info
   std::unique_ptr<StackMapInfo> info(
       new CallInfo(std::move(call_operand_resolver.release_location())));
+  static_cast<CallInfo*>(info.get())->set_tailcall(tailcall);
+  static_cast<CallInfo*>(info.get())->set_code_magic(code_magic);
   stack_map_info_map_->emplace(patchid, std::move(info));
-  current_bb_->set_value(id, ret);
 }
 
 LValue LLVMTFBuilder::EnsureWord32(LValue v) {
@@ -631,6 +648,8 @@ void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
                      output().constInt64(patchid), output().repo().int32Zero,
                      value);
   std::unique_ptr<StackMapInfo> info(new HeapConstantInfo(magic));
+  const HeapConstantInfo* hinfo =
+      static_cast<const HeapConstantInfo*>(info.get());
   stack_map_info_map_->emplace(patchid, std::move(info));
   current_bb_->set_value(id, value);
 }
@@ -641,9 +660,9 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
       snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic & 0xff));
   char kConstraint[] = "=r";
   // FIXME: review the sideeffect.
-  LValue value =
-      output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, false);
+  LValue value = output().buildInlineAsm(
+      functionType(pointerType(output().repo().int8)), buf, len, kConstraint,
+      sizeof(kConstraint) - 1, false);
   int patchid = state_point_id_next_++;
   output().buildCall(output().repo().stackmapIntrinsic(),
                      output().constInt64(patchid), output().repo().int32Zero,
@@ -683,7 +702,7 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
 void LLVMTFBuilder::VisitCall(
     int id, bool code, const RegistersForOperands& registers_for_operands,
     const OperandsVector& operands) {
-  DoCall(id, code, registers_for_operands, operands);
+  DoCall(id, code, registers_for_operands, operands, false);
 }
 
 void LLVMTFBuilder::VisitTailCall(
@@ -698,6 +717,10 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
       pointerType(output().taggedType()));
   LValue value = output().buildLoad(offset);
   current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
+  code_uses_map_.emplace(id, magic);
 }
 }  // namespace tf_llvm
 }  // namespace internal

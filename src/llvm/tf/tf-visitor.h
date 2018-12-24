@@ -34,6 +34,7 @@ using RegistersForOperands = std::vector<int>;
   V(Branch, (int id, int cmp, int btrue, int bfalse))                         \
   V(HeapConstant, (int id, int64_t magic))                                    \
   V(Root, (int id, int index))                                                \
+  V(CodeForCall, (int id, int64_t magic))                                     \
   V(ExternalConstant, (int id, int64_t magic))                                \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call,                                                                     \

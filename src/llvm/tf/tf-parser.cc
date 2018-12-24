@@ -417,6 +417,10 @@ void TFParser::HandleRoot(int, const std::string&, const OperandsVector&) {
   __builtin_unreachable();
 }
 
+void TFParser::HandleCodeForCall(int, const std::string&, const OperandsVector&) {
+  __builtin_unreachable();
+}
+
 void TFParser::ParserError(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);

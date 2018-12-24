@@ -5,6 +5,10 @@
 #include "src/llvm/initialize-llvm.h"
 #include "src/llvm/llvm-headers.h"
 
+namespace llvm {
+void linkCoreCLRGC();
+}
+
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
@@ -29,6 +33,7 @@ static void initializeAndGetLLVMAPI(void) {
 // presumes that LLVM was ./configured correctly, which won't be the case in
 // cross-compilation situations.
   LLVMLinkInMCJIT();
+  llvm::linkCoreCLRGC();
   LLVMInitializeARMTargetInfo();
   LLVMInitializeARMTarget();
   LLVMInitializeARMTargetMC();

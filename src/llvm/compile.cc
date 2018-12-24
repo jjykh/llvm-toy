@@ -8,10 +8,6 @@
 #define SECTION_NAME_PREFIX "."
 #define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)
 
-namespace llvm {
-void linkCoreCLRGC();
-}
-
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
@@ -107,7 +103,6 @@ void compile(State& state) {
   if (functionPasses) LLVMDisposePassManager(functionPasses);
   LLVMDisposePassManager(modulePasses);
   LLVMDisposeExecutionEngine(engine);
-  llvm::linkCoreCLRGC();
 }
 }  // namespace tf_llvm
 }  // namespace internal
