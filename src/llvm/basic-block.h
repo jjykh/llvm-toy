@@ -22,7 +22,6 @@ class BasicBlock {
   void AddPredecessor(BasicBlock* pred);
   inline bool started() const { return started_; }
   inline bool ended() const { return ended_; }
-  inline LBasicBlock native_bb() { return bb_; }
   // FIXME: move to tf builder
   inline void set_value(int nid, LValue value) { values_[nid] = value; }
   inline LValue value(int nid) {
@@ -65,8 +64,6 @@ class BasicBlock {
     }
   }
 
-  void AssignNativeBB(LBasicBlock native) { bb_ = native; }
-
   bool is_deferred() const { return deferred_; }
   void set_deffered(bool is_deferred) { deferred_ = is_deferred; }
 
@@ -78,7 +75,6 @@ class BasicBlock {
   std::vector<int> rpo_;
 
   void* impl_;
-  LBasicBlock bb_;
   int id_;
   bool started_;
   bool ended_;

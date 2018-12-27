@@ -23,25 +23,36 @@ class Output {
   void initializeBuild(const RegisterParameterDesc&);
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
+  void positionBefore(LValue);
   LValue constInt1(int);
   LValue constInt32(int);
   LValue constIntPtr(intptr_t);
   LValue constInt64(long long);
+  LValue constTagged(void*);
   LValue buildStructGEP(LValue structVal, unsigned field);
   LValue buildGEPWithByteOffset(LValue base, LValue offset, LType dstType);
   LValue buildLoad(LValue toLoad);
   LValue buildStore(LValue val, LValue pointer);
   LValue buildAdd(LValue lhs, LValue rhs);
+  LValue buildFAdd(LValue lhs, LValue rhs);
   LValue buildNSWAdd(LValue lhs, LValue rhs);
   LValue buildSub(LValue lhs, LValue rhs);
+  LValue buildFSub(LValue lhs, LValue rhs);
   LValue buildNSWSub(LValue lhs, LValue rhs);
   LValue buildMul(LValue lhs, LValue rhs);
+  LValue buildFMul(LValue lhs, LValue rhs);
+  LValue buildFDiv(LValue lhs, LValue rhs);
+  LValue buildFCmp(LRealPredicate cond, LValue lhs, LValue rhs);
+  LValue buildFNeg(LValue input);
   LValue buildNSWMul(LValue lhs, LValue rhs);
   LValue buildShl(LValue lhs, LValue rhs);
   LValue buildShr(LValue lhs, LValue rhs);
   LValue buildSar(LValue lhs, LValue rhs);
   LValue buildAnd(LValue lhs, LValue rhs);
+  LValue buildOr(LValue lhs, LValue rhs);
+  LValue buildXor(LValue lhs, LValue rhs);
   LValue buildBr(LBasicBlock bb);
+  LValue buildSwitch(LValue, LBasicBlock, unsigned);
   LValue buildCondBr(LValue condition, LBasicBlock taken, LBasicBlock notTaken);
   LValue buildRet(LValue ret);
   LValue buildRetVoid(void);
@@ -78,7 +89,9 @@ class Output {
 
   LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
   void buildUnreachable();
-  void buildClobberRegister();
+  LValue buildExtractValue(LValue aggVal, unsigned index);
+  void buildReturn(LValue, LValue pop_count);
+  void ensureLR();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
@@ -91,15 +104,13 @@ class Output {
   inline LValue fp() { return fp_; }
 
  private:
-  void buildGetArg();
-
   CompilerState& state_;
   IntrinsicRepository repo_;
   LBuilder builder_;
   LBasicBlock prologue_;
   LValue root_;
   LValue fp_;
-  LValue clobber_func_;
+  LValue lr_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;
   uint32_t stackMapsId_;

@@ -22,9 +22,11 @@
     macro(patchpointVoid, "llvm.experimental.patchpoint.void", functionType(voidType, int64, int32, ref8, int32, Variadic)) \
     macro(stackmap, "llvm.experimental.stackmap", functionType(voidType, int64, int32, Variadic)) \
     macro(gcResult, "llvm.experimental.gc.result.p1s_TaggedStructs", functionType(taggedType, tokenType)) \
+    macro(gcResult2, "llvm.experimental.gc.result.sl_p1s_TaggedStructsp1s_TaggedStructss", functionType(structType(context_, taggedType, taggedType), tokenType)) \
     macro(gcRelocate, "llvm.experimental.gc.relocate.p1s_TaggedStructs", functionType(taggedType, tokenType, int32, int32)) \
     macro(subWithOverflow32, "llvm.ssub.with.overflow.i32", functionType(structType(context_, int32, boolean), int32, int32)) \
     macro(subWithOverflow64, "llvm.ssub.with.overflow.i64", functionType(structType(context_, int64, boolean), int64, int64)) \
+    macro(stackSave, "llvm.stacksave", functionType(ref8)) \
     macro(trap, "llvm.trap", functionType(voidType)) \
     macro(x86SSE2CvtTSD2SI, "llvm.x86.sse2.cvttsd2si", functionType(int32, vectorType(doubleType, 2))) \
     macro(expect, "llvm.expect.i1", functionType(int1, int1, int1))
@@ -54,7 +56,6 @@ class IntrinsicRepository : public CommonValues {
   LLVMValueRef m_##ourName;
   FOR_EACH_FTL_INTRINSIC(INTRINSIC_FIELD_DECLARATION)
 #undef INTRINSIC_FIELD_DECLARATION
-  LContext context_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

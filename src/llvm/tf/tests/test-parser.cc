@@ -12,33 +12,59 @@ class TestParserVisitor : public TFVisitor {
   void VisitGoto(int bid) override;
   void VisitParameter(int id, int pid) override;
   void VisitLoadParentFramePointer(int id) override;
+  void VisitLoadStackPointer(int id) override;
+  void VisitDebugBreak(int id) override;
   void VisitInt32Constant(int id, int32_t value) override;
   void VisitLoad(int id, MachineRepresentation rep, MachineSemantic semantic,
                  int base, int offset) override;
   void VisitStore(int id, MachineRepresentation rep, WriteBarrierKind barrier,
                   int base, int offset, int value) override;
   void VisitBitcastWordToTagged(int id, int e) override;
+  void VisitChangeInt32ToFloat64(int id, int e) override;
+  void VisitChangeUint32ToFloat64(int id, int e) override;
+  void VisitTruncateFloat64ToWord32(int id, int e) override;
+  void VisitRoundFloat64ToInt32(int id, int e) override;
   void VisitInt32Add(int id, int e1, int e2) override;
+  void VisitInt32AddWithOverflow(int id, int e1, int e2) override;
+  void VisitInt32SubWithOverflow(int id, int e1, int e2) override;
+  void VisitInt32MulWithOverflow(int id, int e1, int e2) override;
   void VisitInt32Sub(int id, int e1, int e2) override;
   void VisitInt32Mul(int id, int e1, int e2) override;
+  void VisitInt32Div(int id, int e1, int e2) override;
+  void VisitInt32Mod(int id, int e1, int e2) override;
   void VisitWord32Shl(int id, int e1, int e2) override;
+  void VisitWord32Xor(int id, int e1, int e2) override;
   void VisitWord32Shr(int id, int e1, int e2) override;
   void VisitWord32Sar(int id, int e1, int e2) override;
   void VisitWord32Mul(int id, int e1, int e2) override;
   void VisitWord32And(int id, int e1, int e2) override;
+  void VisitWord32Or(int id, int e1, int e2) override;
   void VisitWord32Equal(int id, int e1, int e2) override;
+  void VisitFloat64Add(int id, int e1, int e2) override;
+  void VisitFloat64Sub(int id, int e1, int e2) override;
+  void VisitFloat64Mul(int id, int e1, int e2) override;
+  void VisitFloat64Div(int id, int e1, int e2) override;
+  void VisitFloat64LessThan(int id, int e1, int e2) override;
+  void VisitFloat64LessThanOrEqual(int id, int e1, int e2) override;
+  void VisitFloat64Equal(int id, int e1, int e2) override;
+  void VisitFloat64Mod(int id, int e1, int e2) override;
+  void VisitFloat64Neg(int id, int e) override;
+  void VisitFloat64Abs(int id, int e) override;
   void VisitInt32LessThanOrEqual(int id, int e1, int e2) override;
   void VisitInt32LessThan(int id, int e1, int e2) override;
   void VisitUint32LessThanOrEqual(int id, int e1, int e2) override;
+  void VisitUint32LessThan(int id, int e1, int e2) override;
   void VisitBranch(int id, int cmp, int btrue, int bfalse) override;
+  void VisitSwitch(int id, int val, const OperandsVector& blocks) override;
+  void VisitIfValue(int id, int val) override;
+  void VisitIfDefault(int id) override;
   void VisitHeapConstant(int id, int64_t magic) override;
   void VisitRoot(int id, int index) override;
   void VisitCodeForCall(int id, int64_t) override;
   void VisitExternalConstant(int id, int64_t magic) override;
   void VisitPhi(int id, MachineRepresentation rep,
                 const OperandsVector& operands) override;
-  void VisitCall(int id, bool code,
-                 const RegistersForOperands& registers_for_operands,
+  void VisitCall(int id, bool code, const CallDescriptor&,
                  const OperandsVector& operands) override;
   void VisitTailCall(int id, bool code,
                      const RegistersForOperands& registers_for_operands,
@@ -140,7 +166,17 @@ void TestParserVisitor::VisitParameter(int id, int pid) {
 
 void TestParserVisitor::VisitLoadParentFramePointer(int id) {
   cout << id << ":"
-       << "VisitParameter " << id << endl;
+       << "LoadParentFramePointer " << id << endl;
+}
+
+void TestParserVisitor::VisitLoadStackPointer(int id) {
+  cout << id << ":"
+       << "LoadStackPointer " << id << endl;
+}
+
+void TestParserVisitor::VisitDebugBreak(int id) {
+  cout << id << ":"
+       << "VisitDebugBreak " << id << endl;
 }
 
 void TestParserVisitor::VisitInt32Constant(int id, int32_t value) {
@@ -171,9 +207,51 @@ void TestParserVisitor::VisitBitcastWordToTagged(int id, int e) {
        << "  e " << e << endl;
 }
 
+void TestParserVisitor::VisitChangeInt32ToFloat64(int id, int e) {
+  cout << id << ":"
+       << "ChangeFloat32ToFloat64"
+       << "  e " << e << endl;
+}
+
+void TestParserVisitor::VisitChangeUint32ToFloat64(int id, int e) {
+  cout << id << ":"
+       << "ChangeUint32ToFloat64"
+       << "  e " << e << endl;
+}
+
+void TestParserVisitor::VisitTruncateFloat64ToWord32(int id, int e) {
+  cout << id << ":"
+       << "TruncateFloat64ToWord32"
+       << "  e " << e << endl;
+}
+
+void TestParserVisitor::VisitRoundFloat64ToInt32(int id, int e) {
+  cout << id << ":"
+       << "RoundFloat64ToInt32"
+       << "  e " << e << endl;
+}
+
 void TestParserVisitor::VisitInt32Add(int id, int e1, int e2) {
   cout << id << ":"
        << "VisitInt32Add"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitInt32AddWithOverflow(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitInt32AddWithOverflow"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitInt32SubWithOverflow(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitInt32SubWithOverflow"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitInt32MulWithOverflow(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitInt32MulWithOverflow"
        << "  e1: " << e1 << "  e2:" << e2 << endl;
 }
 
@@ -189,9 +267,27 @@ void TestParserVisitor::VisitInt32Mul(int id, int e1, int e2) {
        << "  e1: " << e1 << "  e2:" << e2 << endl;
 }
 
+void TestParserVisitor::VisitInt32Div(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitInt32Div"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitInt32Mod(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitInt32Mod"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
 void TestParserVisitor::VisitWord32Shl(int id, int e1, int e2) {
   cout << id << ":"
        << "VisitWord32Shl"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitWord32Xor(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitWord32Xor"
        << "  e1: " << e1 << "  e2:" << e2 << endl;
 }
 
@@ -219,10 +315,76 @@ void TestParserVisitor::VisitWord32And(int id, int e1, int e2) {
        << "  e1: " << e1 << "  e2:" << e2 << endl;
 }
 
+void TestParserVisitor::VisitWord32Or(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitWord32Or"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
 void TestParserVisitor::VisitWord32Equal(int id, int e1, int e2) {
   cout << id << ":"
        << "VisitWord32Equal"
        << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Add(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Add"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Sub(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Sub"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Mul(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Mul"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Div(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Div"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64LessThan(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64LessThan"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64LessThanOrEqual(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64LessThanOrEqual"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Equal(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Equal"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Mod(int id, int e1, int e2) {
+  cout << id << ":"
+       << "Float64Mod"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitFloat64Neg(int id, int e) {
+  cout << id << ":"
+       << "Float64Neg"
+       << "  e: " << e << endl;
+}
+
+void TestParserVisitor::VisitFloat64Abs(int id, int e) {
+  cout << id << ":"
+       << "Float64Abs"
+       << "  e: " << e << endl;
 }
 
 void TestParserVisitor::VisitInt32LessThanOrEqual(int id, int e1, int e2) {
@@ -237,6 +399,12 @@ void TestParserVisitor::VisitUint32LessThanOrEqual(int id, int e1, int e2) {
        << "  e1: " << e1 << "  e2:" << e2 << endl;
 }
 
+void TestParserVisitor::VisitUint32LessThan(int id, int e1, int e2) {
+  cout << id << ":"
+       << "VisitUint32LessThan"
+       << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
 void TestParserVisitor::VisitInt32LessThan(int id, int e1, int e2) {
   cout << id << ":"
        << "VisitInt32LessThan"
@@ -248,6 +416,24 @@ void TestParserVisitor::VisitBranch(int id, int cmp, int btrue, int bfalse) {
        << "VisitBranch "
        << " cmp: " << cmp << " btrue: " << btrue << " bfalse: " << bfalse
        << endl;
+}
+
+void TestParserVisitor::VisitSwitch(int id, int val,
+                                    const OperandsVector& blocks) {
+  cout << id << ":"
+       << "VisitBranch"
+       << " cmp: " << val << endl;
+}
+
+void TestParserVisitor::VisitIfValue(int id, int val) {
+  cout << id << ":"
+       << "VisitIfValue"
+       << " : " << val << endl;
+}
+
+void TestParserVisitor::VisitIfDefault(int id) {
+  cout << id << ":"
+       << "VisitIfDefault" << endl;
 }
 
 void TestParserVisitor::VisitHeapConstant(int id, int64_t magic) {
@@ -268,6 +454,12 @@ void TestParserVisitor::VisitCodeForCall(int id, int64_t magic) {
        << " magic:" << magic << endl;
 }
 
+void TestParserVisitor::VisitSmiConstant(int id, void* magic) {
+  cout << id << ":"
+       << "VisitSmiConstant"
+       << " magic:" << magic << endl;
+}
+
 void TestParserVisitor::VisitExternalConstant(int id, int64_t magic) {
   cout << id << ":"
        << "VisitExternalConstant"
@@ -281,9 +473,8 @@ void TestParserVisitor::VisitPhi(int id, MachineRepresentation rep,
        << " rep:" << MachineReprToString(rep) << operands << endl;
 }
 
-void TestParserVisitor::VisitCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
+void TestParserVisitor::VisitCall(int id, bool code, const CallDescriptor&,
+                                  const OperandsVector& operands) {
   cout << id << ":"
        << "VisitCall"
        << " is_code:" << code << operands << endl;

@@ -6,7 +6,7 @@
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
-BasicBlockManager::BasicBlockManager() {}
+BasicBlockManager::BasicBlockManager() : needs_frame_(false) {}
 
 BasicBlockManager::~BasicBlockManager() {}
 

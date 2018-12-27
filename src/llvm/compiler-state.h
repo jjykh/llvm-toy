@@ -28,6 +28,8 @@ struct CompilerState {
   LLVMValueRef function_;
   LLVMContextRef context_;
   void* entryPoint_;
+  size_t spill_slot_count_;
+  bool needs_frame_;
   CompilerState(const char* moduleName);
   ~CompilerState();
   CompilerState(const CompilerState&) = delete;

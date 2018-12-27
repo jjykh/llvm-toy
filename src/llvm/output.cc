@@ -15,7 +15,6 @@ Output::Output(CompilerState& state)
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
-      clobber_func_(nullptr),
       stackMapsId_(1) {
   state.function_ =
       addFunction(state.module_, "main", functionType(taggedType()));
@@ -47,10 +46,9 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
   len = snprintf(constraint, 256, "={%s}", "r11");
   fp_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
                        constraint, len, true);
-  char clobberList[] = "~{r1},~{r2},~{r3},~{r4},~{r5},~{r6},~{r8},~{r9}";
-  clobber_func_ = LLVMGetInlineAsm(functionType(repo().voidType), empty, 0,
-                                   clobberList, sizeof(clobberList) - 1, true,
-                                   false, LLVMInlineAsmDialectATT);
+  len = snprintf(constraint, 256, "={%s}", "lr");
+  lr_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
+                       constraint, len, true);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -60,6 +58,10 @@ LBasicBlock Output::appendBasicBlock(const char* name) {
 
 void Output::positionToBBEnd(LBasicBlock bb) {
   LLVMPositionBuilderAtEnd(builder_, bb);
+}
+
+void Output::positionBefore(LValue value) {
+  LLVMPositionBuilderBefore(builder_, value);
 }
 
 LValue Output::constInt32(int i) {
@@ -75,6 +77,11 @@ LValue Output::constInt64(long long l) {
 
 LValue Output::constIntPtr(intptr_t i) {
   return v8::internal::tf_llvm::constInt(repo_.intPtr, i);
+}
+
+LValue Output::constTagged(void* magic) {
+  LValue intptr = constIntPtr(reinterpret_cast<intptr_t>(magic));
+  return buildCast(LLVMIntToPtr, intptr, taggedType());
 }
 
 LValue Output::buildStructGEP(LValue structVal, unsigned field) {
@@ -93,6 +100,10 @@ LValue Output::buildAdd(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildAdd(builder_, lhs, rhs);
 }
 
+LValue Output::buildFAdd(LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildFAdd(builder_, lhs, rhs);
+}
+
 LValue Output::buildNSWAdd(LValue lhs, LValue rhs) {
   return LLVMBuildNSWAdd(builder_, lhs, rhs, "");
 }
@@ -101,12 +112,32 @@ LValue Output::buildSub(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildSub(builder_, lhs, rhs);
 }
 
+LValue Output::buildFSub(LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildFSub(builder_, lhs, rhs);
+}
+
 LValue Output::buildNSWSub(LValue lhs, LValue rhs) {
   return LLVMBuildNSWSub(builder_, lhs, rhs, "");
 }
 
 LValue Output::buildMul(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildMul(builder_, lhs, rhs);
+}
+
+LValue Output::buildFMul(LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildFMul(builder_, lhs, rhs);
+}
+
+LValue Output::buildFDiv(LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildFDiv(builder_, lhs, rhs);
+}
+
+LValue Output::buildFCmp(LRealPredicate cond, LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildFCmp(builder_, cond, lhs, rhs);
+}
+
+LValue Output::buildFNeg(LValue value) {
+  return LLVMBuildFNeg(builder_, value, "");
 }
 
 LValue Output::buildNSWMul(LValue lhs, LValue rhs) {
@@ -129,8 +160,21 @@ LValue Output::buildAnd(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildAnd(builder_, lhs, rhs);
 }
 
+LValue Output::buildOr(LValue lhs, LValue rhs) {
+  return v8::internal::tf_llvm::buildOr(builder_, lhs, rhs);
+}
+
+LValue Output::buildXor(LValue lhs, LValue rhs) {
+  return LLVMBuildXor(builder_, lhs, rhs, "");
+}
+
 LValue Output::buildBr(LBasicBlock bb) {
   return v8::internal::tf_llvm::buildBr(builder_, bb);
+}
+
+LValue Output::buildSwitch(LValue val, LBasicBlock defaultBlock,
+                           unsigned cases) {
+  return LLVMBuildSwitch(builder_, val, defaultBlock, cases);
 }
 
 LValue Output::buildCondBr(LValue condition, LBasicBlock taken,
@@ -201,8 +245,6 @@ void Output::buildUnreachable() {
   v8::internal::tf_llvm::buildUnreachable(builder_);
 }
 
-void Output::buildClobberRegister() { buildCall(clobber_func_); }
-
 LValue Output::getStatePointFunction(LType callee_type) {
   auto found = statepoint_function_map_.find(callee_type);
   if (found != statepoint_function_map_.end()) return found->second;
@@ -226,6 +268,40 @@ LValue Output::getStatePointFunction(LType callee_type) {
       addExternFunction(state_.module_, name.c_str(), function_type);
   statepoint_function_map_[callee_type] = function;
   return function;
+}
+
+LValue Output::buildExtractValue(LValue aggVal, unsigned index) {
+  return tf_llvm::buildExtractValue(builder_, aggVal, index);
+}
+
+void Output::ensureLR() {
+  char constraint[256];
+  char empty[] = "\0";
+  int len = snprintf(constraint, 256, "{%s}", "lr");
+  LValue function = LLVMGetInlineAsm(
+      functionType(repo().voidType, pointerType(repo().ref8)), empty, 0,
+      constraint, len, true, false, LLVMInlineAsmDialectATT);
+  buildCall(function, lr_);
+}
+
+void Output::buildReturn(LValue value, LValue pop_count) {
+  if (state_.needs_frame_) {
+    char asm_content[] =
+        "mov sp, $0\n"
+        "ldmia sp!, {fp, lr}\n"
+        "add sp, sp, r2, lsl #2\n"
+        "bx lr\n";
+    char constraint[] = "r, {r2}, {r0}";
+    LValue func = LLVMGetInlineAsm(
+        functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
+                     repo().taggedType),
+        asm_content, sizeof(asm_content) - 1, constraint,
+        sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+    buildCall(func, fp_, pop_count, value);
+  } else {
+    __builtin_trap();
+  }
+  buildUnreachable();
 }
 }  // namespace tf_llvm
 }  // namespace internal

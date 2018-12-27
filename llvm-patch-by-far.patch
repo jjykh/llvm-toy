@@ -101,11 +101,17 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
 --- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 347537)
 +++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
-@@ -200,6 +200,7 @@
+@@ -200,6 +200,13 @@
           .setErrorStr(&Error)
           .setOptLevel((CodeGenOpt::Level)options.OptLevel)
           .setTargetOptions(targetOptions);
 +  builder.setRelocationModel(Reloc::PIC_);
++  std::vector<std::string> AttrList;
++  AttrList.emplace_back("+armv7-a");
++  AttrList.emplace_back("+dsp");
++  AttrList.emplace_back("+neon");
++  AttrList.emplace_back("+vfp3");
++  builder.setMAttrs(AttrList);
    bool JIT;
    if (Optional<CodeModel::Model> CM = unwrap(options.CodeModel, JIT))
      builder.setCodeModel(*CM);

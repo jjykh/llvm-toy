@@ -17,33 +17,8 @@ struct NotMergedPhiDesc {
 
 struct LLVMTFBuilderBasicBlockImpl {
   std::vector<NotMergedPhiDesc> not_merged_phis;
+  LBasicBlock native_bb = nullptr;
 };
-
-void EnsureNativeBB(BasicBlock* bb, Output& output) {
-  if (bb->native_bb()) return;
-  char buf[256];
-  snprintf(buf, 256, "B%d", bb->id());
-  LBasicBlock native_bb = output.appendBasicBlock(buf);
-  bb->AssignNativeBB(native_bb);
-}
-
-void StartBuild(BasicBlock* bb, Output& output) {
-  EnsureNativeBB(bb, output);
-  bb->StartBuild();
-  output.positionToBBEnd(bb->native_bb());
-}
-
-std::string ConstraintsToString(const std::vector<std::string>& constraints) {
-  std::ostringstream oss;
-  auto iterator = constraints.begin();
-  if (iterator == constraints.end()) return oss.str();
-  oss << *(iterator++);
-  if (iterator == constraints.end()) return oss.str();
-  for (; iterator != constraints.end(); ++iterator) {
-    oss << "," << *(iterator);
-  }
-  return oss.str();
-}
 
 LLVMTFBuilderBasicBlockImpl* EnsureImpl(BasicBlock* bb) {
   if (bb->GetImpl<LLVMTFBuilderBasicBlockImpl>())
@@ -52,6 +27,25 @@ LLVMTFBuilderBasicBlockImpl* EnsureImpl(BasicBlock* bb) {
       new LLVMTFBuilderBasicBlockImpl);
   bb->SetImpl(impl.release());
   return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
+}
+
+void EnsureNativeBB(BasicBlock* bb, Output& output) {
+  LLVMTFBuilderBasicBlockImpl* impl = EnsureImpl(bb);
+  if (impl->native_bb) return;
+  char buf[256];
+  snprintf(buf, 256, "B%d", bb->id());
+  LBasicBlock native_bb = output.appendBasicBlock(buf);
+  impl->native_bb = native_bb;
+}
+
+LBasicBlock GetNativeBB(BasicBlock* bb) {
+  return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>()->native_bb;
+}
+
+void StartBuild(BasicBlock* bb, Output& output) {
+  EnsureNativeBB(bb, output);
+  bb->StartBuild();
+  output.positionToBBEnd(GetNativeBB(bb));
 }
 
 class CallOperandResolver {
@@ -172,12 +166,11 @@ void LLVMTFBuilder::End() {
   assert(!!current_bb_);
   EndCurrentBlock();
   ProcessPhiWorkList();
+  output().positionToBBEnd(output().prologue());
+  output().buildBr(GetNativeBB(
+      basic_block_manager().findBB(*basic_block_manager().rpo().begin())));
   v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
       basic_block_manager());
-  output().positionToBBEnd(output().prologue());
-  output().buildBr(basic_block_manager()
-                       .findBB(*basic_block_manager().rpo().begin())
-                       ->native_bb());
 }
 
 void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
@@ -210,7 +203,7 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
     LValue phi = output().buildPhi(ref_type);
     for (BasicBlock* pred : bb->predecessors()) {
       LValue value = pred->value(live);
-      LBasicBlock native = pred->native_bb();
+      LBasicBlock native = GetNativeBB(pred);
       addIncoming(phi, &value, &native, 1);
     }
     bb->set_value(live, phi);
@@ -251,9 +244,8 @@ void LLVMTFBuilder::BuildPhiAndPushToWorkList(BasicBlock* bb,
         not_merged_phi.pred = pred;
         continue;
       }
-
       LValue value = pred->value(live);
-      LBasicBlock native = pred->native_bb();
+      LBasicBlock native = GetNativeBB(pred);
       addIncoming(phi, &value, &native, 1);
     }
   }
@@ -266,8 +258,8 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
     for (auto& e : impl->not_merged_phis) {
       BasicBlock* pred = e.pred;
       assert(pred->started());
-      LValue value = pred->value(e.value);
-      LBasicBlock native = pred->native_bb();
+      LValue value = EnsurePhiInput(pred, e.value, typeOf(e.phi));
+      LBasicBlock native = GetNativeBB(pred);
       addIncoming(e.phi, &value, &native, 1);
     }
     impl->not_merged_phis.clear();
@@ -275,15 +267,14 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
   phi_rebuild_worklist_.clear();
 }
 
-void LLVMTFBuilder::DoTailCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
-  DoCall(id, code, registers_for_operands, operands, true);
+void LLVMTFBuilder::DoTailCall(int id, bool code,
+                               const CallDescriptor& call_desc,
+                               const OperandsVector& operands) {
+  DoCall(id, code, call_desc, operands, true);
   output().buildUnreachable();
 }
 
-void LLVMTFBuilder::DoCall(int id, bool code,
-                           const RegistersForOperands& registers_for_operands,
+void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
                            const OperandsVector& operands, bool tailcall) {
   auto operands_iterator = operands.begin();
   LValue ret;
@@ -310,14 +301,23 @@ void LLVMTFBuilder::DoCall(int id, bool code,
     int addr_value = *(operands_iterator++);
     target = current_bb_->value(addr_value);
   }
-  if (tailcall) addition_branch_instructions += 2;
+  if (tailcall) {
+    if (basic_block_manager().needs_frame())
+      addition_branch_instructions += 2;
+    else
+      output().ensureLR();
+  }
   CallOperandResolver call_operand_resolver(current_bb_, output(), target);
   call_operand_resolver.Resolve(operands_iterator, operands.end(),
-                                registers_for_operands);
+                                call_desc.registers_for_operands);
   std::vector<LValue> statepoint_operands;
+  LType ret_type = output().repo().taggedType;
+  if (call_desc.return_count == 2) {
+    ret_type = structType(output().repo().context_, output().taggedType(),
+                          output().taggedType());
+  }
   LType callee_function_type = functionType(
-      output().repo().taggedType,
-      call_operand_resolver.operand_value_types().data(),
+      ret_type, call_operand_resolver.operand_value_types().data(),
       call_operand_resolver.operand_value_types().size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
   int patchid = state_point_id_next_++;
@@ -356,8 +356,11 @@ void LLVMTFBuilder::DoCall(int id, bool code,
       items.second = relocated;
       gc_paramter_start++;
     }
-    ret =
-        output().buildCall(output().repo().gcResultIntrinsic(), statepoint_ret);
+    LValue intrinsic = output().repo().gcResultIntrinsic();
+    if (call_desc.return_count == 2) {
+      intrinsic = output().repo().gcResult2Intrinsic();
+    }
+    ret = output().buildCall(intrinsic, statepoint_ret);
     current_bb_->set_value(id, ret);
   }
   // save patch point info
@@ -381,8 +384,44 @@ LValue LLVMTFBuilder::EnsureWord32(LValue v) {
   return v;
 }
 
+LValue LLVMTFBuilder::EnsurePhiInput(BasicBlock* pred, int index, LType type) {
+  LValue val = pred->value(index);
+  LType value_type = typeOf(val);
+  if (value_type == type) return val;
+  LValue terminator = LLVMGetBasicBlockTerminator(GetNativeBB(pred));
+  if ((value_type == output().repo().intPtr) &&
+      (type == output().taggedType())) {
+    output().positionBefore(terminator);
+    LValue ret_val =
+        output().buildCast(LLVMIntToPtr, val, output().taggedType());
+    return ret_val;
+  }
+  LLVMTypeKind value_type_kind = LLVMGetTypeKind(value_type);
+  if ((LLVMPointerTypeKind == value_type_kind) &&
+      (type == output().repo().intPtr)) {
+    output().positionBefore(terminator);
+    LValue ret_val =
+        output().buildCast(LLVMPtrToInt, val, output().repo().intPtr);
+    return ret_val;
+  }
+  if ((value_type == output().repo().int1) &&
+      (type == output().repo().intPtr)) {
+    output().positionBefore(terminator);
+    LValue ret_val = output().buildCast(LLVMZExt, val, output().repo().intPtr);
+    return ret_val;
+  }
+  __builtin_trap();
+}
+
+LValue LLVMTFBuilder::EnsurePhiInputAndPosition(BasicBlock* pred, int index,
+                                                LType type) {
+  LValue value = EnsurePhiInput(pred, index, type);
+  output().positionToBBEnd(GetNativeBB(current_bb_));
+  return value;
+}
+
 void LLVMTFBuilder::EndCurrentBlock() {
-  if (current_bb_->values().empty()) output().buildUnreachable();
+  if (current_bb_->successors().empty()) output().buildUnreachable();
   current_bb_->EndBuild();
   current_bb_ = nullptr;
 }
@@ -398,7 +437,7 @@ void LLVMTFBuilder::VisitBlock(int id, bool,
 void LLVMTFBuilder::VisitGoto(int bid) {
   BasicBlock* succ = basic_block_manager().ensureBB(bid);
   EnsureNativeBB(succ, output());
-  output().buildBr(succ->native_bb());
+  output().buildBr(GetNativeBB(succ));
   EndCurrentBlock();
 }
 
@@ -408,8 +447,23 @@ void LLVMTFBuilder::VisitParameter(int id, int pid) {
 }
 
 void LLVMTFBuilder::VisitLoadParentFramePointer(int id) {
-  LValue value = output().fp();
-  current_bb_->set_value(id, output().buildLoad(value));
+  LValue fp = output().fp();
+  if (basic_block_manager().needs_frame())
+    current_bb_->set_value(id, output().buildLoad(fp));
+  else
+    current_bb_->set_value(id, output().buildBitCast(fp, output().repo().ref8));
+}
+
+void LLVMTFBuilder::VisitLoadStackPointer(int id) {
+  LValue value = output().buildCall(output().repo().stackSaveIntrinsic());
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitDebugBreak(int id) {
+  char kUdf[] = "udf #0\n";
+  char empty[] = "\0";
+  output().buildInlineAsm(functionType(output().repo().voidType), kUdf,
+                          sizeof(kUdf) - 1, empty, 0, true);
 }
 
 void LLVMTFBuilder::VisitInt32Constant(int id, int32_t value) {
@@ -420,8 +474,10 @@ static LType getMachineRepresentationType(Output& output,
                                           MachineRepresentation rep) {
   LType dstType;
   switch (rep) {
-    case MachineRepresentation::kTagged:
     case MachineRepresentation::kTaggedSigned:
+      dstType = output.repo().intPtr;
+      break;
+    case MachineRepresentation::kTagged:
     case MachineRepresentation::kTaggedPointer:
       dstType = output.taggedType();
       break;
@@ -530,10 +586,42 @@ void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
                                             output().taggedType()));
 }
 
+void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
+  current_bb_->set_value(id,
+                         output().buildCast(LLVMSIToFP, current_bb_->value(e),
+                                            output().repo().doubleType));
+}
+
+void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
+  current_bb_->set_value(id,
+                         output().buildCast(LLVMUIToFP, current_bb_->value(e),
+                                            output().repo().doubleType));
+}
+
+void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
+  current_bb_->set_value(id,
+                         output().buildCast(LLVMFPToUI, current_bb_->value(e),
+                                            output().repo().int32));
+}
+
+void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
+  current_bb_->set_value(id,
+                         output().buildCast(LLVMFPToSI, current_bb_->value(e),
+                                            output().repo().int32));
+}
+
 void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(current_bb_->value(e1));
   LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildNSWAdd(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitInt32AddWithOverflow(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildCall(
+      output().repo().addWithOverflow32Intrinsic(), e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
@@ -544,6 +632,14 @@ void LLVMTFBuilder::VisitInt32Sub(int id, int e1, int e2) {
   current_bb_->set_value(id, result);
 }
 
+void LLVMTFBuilder::VisitInt32SubWithOverflow(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildCall(
+      output().repo().subWithOverflow32Intrinsic(), e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(current_bb_->value(e1));
   LValue e2_value = EnsureWord32(current_bb_->value(e2));
@@ -551,10 +647,41 @@ void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
   current_bb_->set_value(id, result);
 }
 
+void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  e1_value =
+      output().buildCast(LLVMSIToFP, e1_value, output().repo().doubleType);
+  e2_value =
+      output().buildCast(LLVMSIToFP, e2_value, output().repo().doubleType);
+  LValue result = output().buildFDiv(e1_value, e2_value);
+  result = output().buildCast(LLVMFPToSI, result, output().repo().int32);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitInt32Mod(int id, int e1, int e2) {
+  __builtin_unreachable();
+}
+
+void LLVMTFBuilder::VisitInt32MulWithOverflow(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildCall(
+      output().repo().mulWithOverflow32Intrinsic(), e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitWord32Shl(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(current_bb_->value(e1));
   LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildShl(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitWord32Xor(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildXor(e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
@@ -586,6 +713,13 @@ void LLVMTFBuilder::VisitWord32And(int id, int e1, int e2) {
   current_bb_->set_value(id, result);
 }
 
+void LLVMTFBuilder::VisitWord32Or(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildOr(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitWord32Equal(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(current_bb_->value(e1));
   LValue e2_value = EnsureWord32(current_bb_->value(e2));
@@ -604,6 +738,13 @@ void LLVMTFBuilder::VisitUint32LessThanOrEqual(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(current_bb_->value(e1));
   LValue e2_value = EnsureWord32(current_bb_->value(e2));
   LValue result = output().buildICmp(LLVMIntULE, e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitUint32LessThan(int id, int e1, int e2) {
+  LValue e1_value = EnsureWord32(current_bb_->value(e1));
+  LValue e2_value = EnsureWord32(current_bb_->value(e2));
+  LValue result = output().buildICmp(LLVMIntULT, e1_value, e2_value);
   current_bb_->set_value(id, result);
 }
 
@@ -626,13 +767,37 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
     expected_value = 1;
   }
   LValue cmp_val = current_bb_->value(cmp);
+  if (typeOf(cmp_val) == output().repo().intPtr) {
+    // need to trunc before continue
+    cmp_val = output().buildCast(LLVMTrunc, cmp_val, output().repo().int1);
+  }
   if (expected_value != -1) {
     cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
                                  output().constInt1(expected_value));
   }
-  output().buildCondBr(cmp_val, bbTrue->native_bb(), bbFalse->native_bb());
+  output().buildCondBr(cmp_val, GetNativeBB(bbTrue), GetNativeBB(bbFalse));
   EndCurrentBlock();
 }
+
+void LLVMTFBuilder::VisitSwitch(int id, int val,
+                                const OperandsVector& successors) {
+  // Last successor must be Default.
+  BasicBlock* default_block = basic_block_manager().ensureBB(successors.back());
+  LValue cmp_val = current_bb_->value(val);
+  EnsureNativeBB(default_block, output());
+  output().buildSwitch(cmp_val, GetNativeBB(default_block),
+                       successors.size() - 1);
+  EndCurrentBlock();
+}
+
+void LLVMTFBuilder::VisitIfValue(int id, int val) {
+  BasicBlock* pred = current_bb_->predecessors().front();
+  assert(pred->ended());
+  LValue switch_val = LLVMGetBasicBlockTerminator(GetNativeBB(pred));
+  LLVMAddCase(switch_val, output().constInt32(val), GetNativeBB(current_bb_));
+}
+
+void LLVMTFBuilder::VisitIfDefault(int id) {}
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   char buf[256];
@@ -675,13 +840,15 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
 
 void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
                              const OperandsVector& operands) {
-  LValue phi = output().buildPhi(getMachineRepresentationType(output(), rep));
+  LType phi_type = getMachineRepresentationType(output(), rep);
+  LValue phi = output().buildPhi(phi_type);
   auto operands_iterator = operands.cbegin();
   bool should_add_to_tf_phi_worklist = false;
   for (BasicBlock* pred : current_bb_->predecessors()) {
     if (pred->started()) {
-      LValue value = pred->value(*operands_iterator);
-      LBasicBlock llvbb_ = pred->native_bb();
+      LValue value =
+          EnsurePhiInputAndPosition(pred, (*operands_iterator), phi_type);
+      LBasicBlock llvbb_ = GetNativeBB(pred);
       addIncoming(phi, &value, &llvbb_, 1);
     } else {
       should_add_to_tf_phi_worklist = true;
@@ -699,16 +866,16 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
   current_bb_->set_value(id, phi);
 }
 
-void LLVMTFBuilder::VisitCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
-  DoCall(id, code, registers_for_operands, operands, false);
+void LLVMTFBuilder::VisitCall(int id, bool code,
+                              const CallDescriptor& call_desc,
+                              const OperandsVector& operands) {
+  DoCall(id, code, call_desc, operands, false);
 }
 
-void LLVMTFBuilder::VisitTailCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
-  DoTailCall(id, code, registers_for_operands, operands);
+void LLVMTFBuilder::VisitTailCall(int id, bool code,
+                                  const CallDescriptor& call_desc,
+                                  const OperandsVector& operands) {
+  DoTailCall(id, code, call_desc, operands);
 }
 
 void LLVMTFBuilder::VisitRoot(int id, int index) {
@@ -721,6 +888,97 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
 
 void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
   code_uses_map_.emplace(id, magic);
+}
+
+void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {
+  LValue value = output().constTagged(smi_value);
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitFloat64Constant(int id, double float_value) {
+  LValue value = constReal(output().repo().doubleType, float_value);
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitProjection(int id, int e, int index) {
+  LValue projection = current_bb_->value(e);
+  LValue value = output().buildExtractValue(projection, index);
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitFloat64Add(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFAdd(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Sub(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFSub(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Mul(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFMul(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Div(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFDiv(e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Mod(int id, int e1, int e2) {
+  __builtin_unreachable();
+}
+
+void LLVMTFBuilder::VisitFloat64LessThan(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFCmp(LLVMRealOLT, e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64LessThanOrEqual(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFCmp(LLVMRealOLE, e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Equal(int id, int e1, int e2) {
+  LValue e1_value = current_bb_->value(e1);
+  LValue e2_value = current_bb_->value(e2);
+  LValue result = output().buildFCmp(LLVMRealOEQ, e1_value, e2_value);
+  current_bb_->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64Neg(int id, int e) {
+  LValue e_value = current_bb_->value(e);
+  LValue value = output().buildFNeg(e_value);
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
+  LValue e_value = current_bb_->value(e);
+  LValue value =
+      output().buildCall(output().repo().doubleAbsIntrinsic(), e_value);
+  current_bb_->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitReturn(int id, int pop_count,
+                                const OperandsVector& operands) {
+  if (operands.size() == 1)
+    output().buildReturn(current_bb_->value(operands[0]),
+                         current_bb_->value(pop_count));
+  else
+    __builtin_trap();
 }
 }  // namespace tf_llvm
 }  // namespace internal

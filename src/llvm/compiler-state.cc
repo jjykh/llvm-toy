@@ -10,7 +10,9 @@ CompilerState::CompilerState(const char* moduleName)
       module_(nullptr),
       function_(nullptr),
       context_(nullptr),
-      entryPoint_(nullptr) {
+      entryPoint_(nullptr),
+      spill_slot_count_(0),
+      needs_frame_(false) {
   context_ = LLVMContextCreate();
   module_ = LLVMModuleCreateWithNameInContext("test", context_);
 #if 0

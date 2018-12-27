@@ -57,6 +57,9 @@ void LivenessAnalysisVisitor::EndBlock() {
 }
 
 void LivenessAnalysisVisitor::CalculateLivesIns() {
+  if (current_basic_block_) {
+    EndBlock();
+  }
   std::deque<int> worklist;
   std::copy(basicBlockManager().rpo().rbegin(),
             basicBlockManager().rpo().rend(), std::back_inserter(worklist));
@@ -150,6 +153,10 @@ void LivenessAnalysisVisitor::VisitLoadParentFramePointer(int id) {
   Define(id);
 }
 
+void LivenessAnalysisVisitor::VisitLoadStackPointer(int id) { Define(id); }
+
+void LivenessAnalysisVisitor::VisitDebugBreak(int id) {}
+
 void LivenessAnalysisVisitor::VisitInt32Constant(int id, int32_t value) {
   Define(id);
 }
@@ -159,12 +166,15 @@ void LivenessAnalysisVisitor::VisitLoad(int id, MachineRepresentation rep,
                                         int offset) {
   Define(id);
   AddIfNotInDefines(base);
+  AddIfNotInDefines(offset);
 }
+
 void LivenessAnalysisVisitor::VisitStore(int id, MachineRepresentation rep,
                                          WriteBarrierKind barrier, int base,
                                          int offset, int value) {
   Define(id);
   AddIfNotInDefines(base);
+  AddIfNotInDefines(offset);
   AddIfNotInDefines(value);
 }
 void LivenessAnalysisVisitor::VisitBitcastWordToTagged(int id, int e) {
@@ -172,7 +182,105 @@ void LivenessAnalysisVisitor::VisitBitcastWordToTagged(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitChangeInt32ToFloat64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitChangeUint32ToFloat64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitTruncateFloat64ToWord32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitRoundFloat64ToInt32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitInt32Add(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Add(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Sub(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Mul(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Div(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Mod(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64LessThan(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64LessThanOrEqual(int id, int e1,
+                                                          int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Equal(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Neg(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Abs(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitProjection(int id, int e, int index) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitInt32AddWithOverflow(int id, int e1,
+                                                        int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt32SubWithOverflow(int id, int e1,
+                                                        int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -190,7 +298,32 @@ void LivenessAnalysisVisitor::VisitInt32Mul(int id, int e1, int e2) {
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitInt32Div(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt32Mod(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt32MulWithOverflow(int id, int e1,
+                                                        int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitWord32Shl(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord32Xor(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -213,7 +346,14 @@ void LivenessAnalysisVisitor::VisitWord32Mul(int id, int e1, int e2) {
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
 }
+
 void LivenessAnalysisVisitor::VisitWord32And(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord32Or(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -245,6 +385,12 @@ void LivenessAnalysisVisitor::VisitUint32LessThanOrEqual(int id, int e1,
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitUint32LessThan(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitBranch(int id, int cmp, int btrue,
                                           int bfalse) {
   BasicBlock* bb_true = basicBlockManager().ensureBB(btrue);
@@ -253,6 +399,19 @@ void LivenessAnalysisVisitor::VisitBranch(int id, int cmp, int btrue,
   current_basic_block_->successors().push_back(bb_false);
   EndBlock();
 }
+
+void LivenessAnalysisVisitor::VisitSwitch(int id, int val,
+                                          const OperandsVector& successors) {
+  for (int successor : successors) {
+    BasicBlock* bb = basicBlockManager().ensureBB(successor);
+    current_basic_block_->successors().push_back(bb);
+  }
+  EndBlock();
+}
+
+void LivenessAnalysisVisitor::VisitIfValue(int id, int val) {}
+
+void LivenessAnalysisVisitor::VisitIfDefault(int id) {}
 
 void LivenessAnalysisVisitor::VisitHeapConstant(int id, int64_t magic) {
   Define(id);
@@ -272,18 +431,19 @@ void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
   }
 }
 
-void LivenessAnalysisVisitor::VisitCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
+void LivenessAnalysisVisitor::VisitCall(int id, bool code,
+                                        const CallDescriptor&,
+                                        const OperandsVector& operands) {
   Define(id);
   for (int e : operands) {
     AddIfNotInDefines(e);
   }
+  basicBlockManager().set_needs_frame(true);
 }
 
-void LivenessAnalysisVisitor::VisitTailCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
-    const OperandsVector& operands) {
+void LivenessAnalysisVisitor::VisitTailCall(int id, bool code,
+                                            const CallDescriptor&,
+                                            const OperandsVector& operands) {
   for (int e : operands) {
     AddIfNotInDefines(e);
   }
@@ -292,6 +452,20 @@ void LivenessAnalysisVisitor::VisitTailCall(
 
 void LivenessAnalysisVisitor::VisitRoot(int id, int) { Define(id); }
 void LivenessAnalysisVisitor::VisitCodeForCall(int id, int64_t) { Define(id); }
+void LivenessAnalysisVisitor::VisitSmiConstant(int id, void*) { Define(id); }
+void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
+  Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitReturn(int id, int pop_count,
+                                          const OperandsVector& operands) {
+  Define(id);
+  Define(pop_count);
+  for (int e : operands) {
+    AddIfNotInDefines(e);
+  }
+  EndBlock();
+}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

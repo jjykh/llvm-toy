@@ -188,6 +188,16 @@ void TFParser::HandleLoadParentFramePointer(int id,
   visitor_->VisitLoadParentFramePointer(id);
 }
 
+void TFParser::HandleLoadStackPointer(int id, const std::string& properties,
+                                      const OperandsVector& operands) {
+  visitor_->VisitLoadStackPointer(id);
+}
+
+void TFParser::HandleDebugBreak(int id, const std::string& properties,
+                                const OperandsVector& operands) {
+  visitor_->VisitDebugBreak(id);
+}
+
 void TFParser::HandleInt32Constant(int id, const std::string& properties,
                                    const OperandsVector& operands) {
   int constant;
@@ -275,10 +285,68 @@ void TFParser::HandleBitcastWordToTagged(int id, const std::string& properties,
   visitor_->VisitBitcastWordToTagged(id, operands[0]);
 }
 
+void TFParser::HandleChangeInt32ToFloat64(int id, const std::string& properties,
+                                          const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleChangeUint32ToFloat64(int id,
+                                           const std::string& properties,
+                                           const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleTruncateFloat64ToWord32(int id,
+                                             const std::string& properties,
+                                             const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleRoundFloat64ToInt32(int id, const std::string& properties,
+                                         const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
 void TFParser::HandleInt32Add(int id, const std::string& properties,
                               const OperandsVector& operands) {
   if (2 != operands.size()) ParserError("wrong operands number for Int32Add");
   visitor_->VisitInt32Add(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleFloat64Add(int id, const std::string& properties,
+                                const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Float64Add");
+  visitor_->VisitFloat64Add(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleFloat64Sub(int id, const std::string& properties,
+                                const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Float64Sub");
+  visitor_->VisitFloat64Sub(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleFloat64Mul(int id, const std::string& properties,
+                                const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Float64Mul");
+  visitor_->VisitFloat64Mul(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleInt32AddWithOverflow(int id, const std::string& properties,
+                                          const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Int32Add");
+  visitor_->VisitInt32AddWithOverflow(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleInt32SubWithOverflow(int id, const std::string& properties,
+                                          const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Int32Sub");
+  visitor_->VisitInt32SubWithOverflow(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleInt32MulWithOverflow(int id, const std::string& properties,
+                                          const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Int32Mul");
+  visitor_->VisitInt32MulWithOverflow(id, operands[0], operands[1]);
 }
 
 void TFParser::HandleInt32Mul(int id, const std::string& properties,
@@ -297,6 +365,12 @@ void TFParser::HandleWord32Shl(int id, const std::string& properties,
                                const OperandsVector& operands) {
   if (2 != operands.size()) ParserError("wrong operands number for Word32Shl");
   visitor_->VisitWord32Shl(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleWord32Xor(int id, const std::string& properties,
+                               const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Word32Xor");
+  visitor_->VisitWord32Xor(id, operands[0], operands[1]);
 }
 
 void TFParser::HandleWord32Shr(int id, const std::string& properties,
@@ -321,6 +395,12 @@ void TFParser::HandleWord32And(int id, const std::string& properties,
                                const OperandsVector& operands) {
   if (2 != operands.size()) ParserError("wrong operands number for Word32And");
   visitor_->VisitWord32And(id, operands[0], operands[1]);
+}
+
+void TFParser::HandleWord32Or(int id, const std::string& properties,
+                              const OperandsVector& operands) {
+  if (2 != operands.size()) ParserError("wrong operands number for Word32Or");
+  visitor_->VisitWord32Or(id, operands[0], operands[1]);
 }
 
 void TFParser::HandleWord32Equal(int id, const std::string& properties,
@@ -352,8 +432,33 @@ void TFParser::HandleUint32LessThanOrEqual(int id,
   visitor_->VisitUint32LessThanOrEqual(id, operands[0], operands[1]);
 }
 
+void TFParser::HandleUint32LessThan(int id, const std::string& properties,
+                                    const OperandsVector& operands) {
+  if (2 != operands.size())
+    ParserError("wrong operands number for Uint32LessThan");
+  visitor_->VisitUint32LessThan(id, operands[0], operands[1]);
+}
+
 void TFParser::HandleBranch(int id, const std::string& properties,
                             const OperandsVector& operands) {
+  // handle by other path.
+  __builtin_unreachable();
+}
+
+void TFParser::HandleSwitch(int id, const std::string& properties,
+                            const OperandsVector& operands) {
+  // handle by other path.
+  __builtin_unreachable();
+}
+
+void TFParser::HandleIfValue(int id, const std::string& properties,
+                             const OperandsVector& operands) {
+  // handle by other path.
+  __builtin_unreachable();
+}
+
+void TFParser::HandleIfDefault(int id, const std::string& properties,
+                               const OperandsVector& operands) {
   // handle by other path.
   __builtin_unreachable();
 }
@@ -417,7 +522,13 @@ void TFParser::HandleRoot(int, const std::string&, const OperandsVector&) {
   __builtin_unreachable();
 }
 
-void TFParser::HandleCodeForCall(int, const std::string&, const OperandsVector&) {
+void TFParser::HandleCodeForCall(int, const std::string&,
+                                 const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleSmiConstant(int, const std::string&,
+                                 const OperandsVector&) {
   __builtin_unreachable();
 }
 

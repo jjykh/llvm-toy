@@ -29,9 +29,9 @@ void llvmCrash(const char* reason) {
 static void initializeAndGetLLVMAPI(void) {
   LLVMInstallFatalErrorHandler(llvmCrash);
 
-// You think you want to call LLVMInitializeNativeTarget()? Think again. This
-// presumes that LLVM was ./configured correctly, which won't be the case in
-// cross-compilation situations.
+  // You think you want to call LLVMInitializeNativeTarget()? Think again. This
+  // presumes that LLVM was ./configured correctly, which won't be the case in
+  // cross-compilation situations.
   LLVMLinkInMCJIT();
   llvm::linkCoreCLRGC();
   LLVMInitializeARMTargetInfo();

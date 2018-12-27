@@ -15,7 +15,6 @@
             'basic-block-manager.cc',
             'liveness-analysis-visitor.cc',
             'llvm-tf-builder.cc',
-            'stack-map-info.cc',
         ],
         'llvmlog_level': 0,
     },

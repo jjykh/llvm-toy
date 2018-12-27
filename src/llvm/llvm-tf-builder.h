@@ -31,14 +31,14 @@ class LLVMTFBuilder final : public TFVisitor {
   bool AllPredecessorStarted(BasicBlock* bb, BasicBlock** ref_pred);
   void BuildPhiAndPushToWorkList(BasicBlock* bb, BasicBlock* ref_pred);
   void ProcessPhiWorkList();
-  void DoCall(int id, bool code,
-              const RegistersForOperands& registers_for_operands,
+  void DoCall(int id, bool code, const CallDescriptor&,
               const OperandsVector& operands, bool tailcall);
-  void DoTailCall(int id, bool code,
-                  const RegistersForOperands& registers_for_operands,
+  void DoTailCall(int id, bool code, const CallDescriptor&,
                   const OperandsVector& operands);
   void EndCurrentBlock();
   LValue EnsureWord32(LValue);
+  LValue EnsurePhiInput(BasicBlock*, int, LType);
+  LValue EnsurePhiInputAndPosition(BasicBlock*, int, LType);
   using CodeUsesMap = std::unordered_map<int, int64_t>;
   Output* output_;
   BasicBlockManager* basic_block_manager_;
