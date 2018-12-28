@@ -1,8 +1,5 @@
 #include "src/llvm/output.h"
 #include <assert.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/Type.h>
 #include "src/llvm/compiler-state.h"
 
 namespace v8 {
@@ -257,15 +254,12 @@ LValue Output::getStatePointFunction(LType callee_type) {
   LType function_type =
       functionType(repo().tokenType, wrapped_argument_types.data(),
                    wrapped_argument_types.size(), Variadic);
-  std::vector<llvm::Type*> unwrapped_argument_types;
-  unwrapped_argument_types.push_back(llvm::unwrap(callee_type));
-  llvm::ArrayRef<llvm::Type*> param_ref(unwrapped_argument_types.data(),
-                                        unwrapped_argument_types.size());
-
-  std::string name = llvm::Intrinsic::getName(
-      llvm::Intrinsic::experimental_gc_statepoint, param_ref);
+  char name[256];
+  if (!LLVMGetStatepointName(function_type, name, 256)) {
+    __builtin_trap();
+  }
   LValue function =
-      addExternFunction(state_.module_, name.c_str(), function_type);
+      addExternFunction(state_.module_, name, function_type);
   statepoint_function_map_[callee_type] = function;
   return function;
 }

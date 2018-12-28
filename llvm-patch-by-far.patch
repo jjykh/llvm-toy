@@ -26,6 +26,15 @@ Index: include/llvm-c/Core.h
  } LLVMCallConv;
  
  typedef enum {
+@@ -3554,6 +3555,8 @@
+     @see llvm::llvm_is_multithreaded */
+ LLVMBool LLVMIsMultithreaded(void);
+ 
++LLVMBool LLVMGetStatepointName(LLVMTypeRef type, char* buffer, size_t n);
++
+ /**
+  * @}
+  */
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
 --- lib/AsmParser/LLLexer.cpp	(revision 347537)
@@ -127,6 +136,26 @@ Index: lib/IR/AsmWriter.cpp
    case CallingConv::PreserveMost:  Out << "preserve_mostcc"; break;
    case CallingConv::PreserveAll:   Out << "preserve_allcc"; break;
    case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
+Index: lib/IR/Core.cpp
+===================================================================
+--- lib/IR/Core.cpp	(revision 347537)
++++ lib/IR/Core.cpp	(working copy)
+@@ -3553,3 +3553,15 @@
+ LLVMBool LLVMIsMultithreaded() {
+   return llvm_is_multithreaded();
+ }
++
++LLVMBool LLVMGetStatepointName(LLVMTypeRef type, char *buffer, size_t n) {
++  FunctionType *unwrapped = unwrap<FunctionType>(type);
++  PointerType *target_function_pointer_type =
++      dyn_cast<PointerType>(unwrapped->params()[2]);
++  std::string name = Intrinsic::getName(Intrinsic::experimental_gc_statepoint,
++                                        target_function_pointer_type);
++  if (name.size() >= n)
++    return false;
++  strcpy(buffer, name.c_str());
++  return true;
++}
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
 --- lib/MC/MCAsmStreamer.cpp	(revision 347537)
@@ -314,7 +343,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.h
    /// We need to emit labels even for promoted globals so that DWARF
    /// debug info can link properly.
 -  SmallPtrSet<const GlobalVariable*,2> EmittedPromotedGlobalLabels;
-+  SmallPtrSet<const GlobalVariable *, 2> EmittedPromotedGlobalLabels;
++  SmallPtrSet<const GlobalVariable*, 2> EmittedPromotedGlobalLabels;
  
 +  StackMaps SM;
 +

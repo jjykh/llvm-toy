@@ -188,7 +188,6 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   new_object->set_safepoint_table_offset(
       safepoint_table_builder_.GetCodeOffset());
   new_object->set_is_turbofanned(true);
-  new_object->Print();
   return new_object;
 }
 

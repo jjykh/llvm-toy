@@ -103,7 +103,9 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                                 compiler::CallDescriptor* call_descriptor,
                                 const char* name) {
   static bool llvm_initialized = false;
+#if 0
   std::cout << "name: " << name << "\n" << *schedule;
+#endif
   if (!llvm_initialized) {
     tf_llvm::initLLVM();
     llvm_initialized = true;
