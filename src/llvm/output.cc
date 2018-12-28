@@ -258,8 +258,7 @@ LValue Output::getStatePointFunction(LType callee_type) {
   if (!LLVMGetStatepointName(function_type, name, 256)) {
     __builtin_trap();
   }
-  LValue function =
-      addExternFunction(state_.module_, name, function_type);
+  LValue function = addExternFunction(state_.module_, name, function_type);
   statepoint_function_map_[callee_type] = function;
   return function;
 }
