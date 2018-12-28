@@ -15,6 +15,7 @@ class TestParserVisitor : public TFVisitor {
   void VisitLoadStackPointer(int id) override;
   void VisitDebugBreak(int id) override;
   void VisitInt32Constant(int id, int32_t value) override;
+  void VisitSmiConstant(int id, void* value) override;
   void VisitLoad(int id, MachineRepresentation rep, MachineSemantic semantic,
                  int base, int offset) override;
   void VisitStore(int id, MachineRepresentation rep, WriteBarrierKind barrier,
@@ -59,16 +60,20 @@ class TestParserVisitor : public TFVisitor {
   void VisitIfValue(int id, int val) override;
   void VisitIfDefault(int id) override;
   void VisitHeapConstant(int id, int64_t magic) override;
+  void VisitFloat64Constant(int id, double) override;
   void VisitRoot(int id, int index) override;
   void VisitCodeForCall(int id, int64_t) override;
+  void VisitProjection(int id, int e, int index) override;
   void VisitExternalConstant(int id, int64_t magic) override;
   void VisitPhi(int id, MachineRepresentation rep,
                 const OperandsVector& operands) override;
   void VisitCall(int id, bool code, const CallDescriptor&,
                  const OperandsVector& operands) override;
   void VisitTailCall(int id, bool code,
-                     const RegistersForOperands& registers_for_operands,
+                     const CallDescriptor& registers_for_operands,
                      const OperandsVector& operands) override;
+  void VisitReturn(int id, int pop_count,
+                   const OperandsVector& operands) override;
 };
 
 inline std::ostream& operator<<(std::ostream& os, WriteBarrierKind kind) {
@@ -442,6 +447,12 @@ void TestParserVisitor::VisitHeapConstant(int id, int64_t magic) {
        << " magic:" << magic << endl;
 }
 
+void TestParserVisitor::VisitFloat64Constant(int id, double value) {
+  cout << id << ":"
+       << "VisitFloat64Constant"
+       << " value:" << value << endl;
+}
+
 void TestParserVisitor::VisitRoot(int id, int index) {
   cout << id << ":"
        << "VisitRoot"
@@ -481,12 +492,16 @@ void TestParserVisitor::VisitCall(int id, bool code, const CallDescriptor&,
 }
 
 void TestParserVisitor::VisitTailCall(
-    int id, bool code, const RegistersForOperands& registers_for_operands,
+    int id, bool code, const CallDescriptor& registers_for_operands,
     const OperandsVector& operands) {
   cout << id << ":"
        << "VisitTailCall"
        << " is_code:" << code << operands << endl;
 }
+
+void TestParserVisitor::VisitProjection(int id, int e, int index) {}
+void TestParserVisitor::VisitReturn(int id, int pop_count,
+                                    const OperandsVector& operands) {}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

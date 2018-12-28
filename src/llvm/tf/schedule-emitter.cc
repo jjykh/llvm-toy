@@ -951,6 +951,6 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   else
     visitor->VisitTailCall(node->id(), code, call_desc, operands);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

@@ -257,13 +257,13 @@ bool CodeGeneratorLLVM::IsMove(uint32_t code, uint32_t* location,
 CodeGeneratorLLVM::RecordReference::RecordReference(
     const StackMaps::Record* _record, const StackMapInfo* _info)
     : record(_record), info(_info) {}
-}
+}  // namespace
 
 Handle<Code> GenerateCode(Isolate* isolate, const CompilerState& state) {
   HandleScope handle_scope(isolate);
   CodeGeneratorLLVM code_generator(isolate);
   return handle_scope.CloseAndEscape(code_generator.Generate(state));
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

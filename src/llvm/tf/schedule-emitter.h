@@ -10,7 +10,7 @@ class Schedule;
 class BasicBlock;
 class CallDescriptor;
 class Node;
-}
+}  // namespace compiler
 namespace tf_llvm {
 class TFVisitor;
 class ScheduleEmitter final {
@@ -38,7 +38,7 @@ class ScheduleEmitter final {
   compiler::Schedule* schedule_;
   compiler::CallDescriptor* incoming_descriptor_;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // SCHEDULE_EMITTER_H

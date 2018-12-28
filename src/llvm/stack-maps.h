@@ -110,7 +110,7 @@ struct StackMaps {
 
   unsigned stackSize() const;
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // STACK_MAPS_H

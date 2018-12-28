@@ -494,7 +494,7 @@ void TFParser::HandlePhi(int id, const std::string& properties,
 
 void TFParser::HandleCall(int id, const std::string& properties,
                           const OperandsVector& operands) {
-  RegistersForOperands registers_for_operands;
+  CallDescriptor calldesc;
   static const char kCode[] = "Code";
   static const char kAddr[] = "Addr";
   bool is_code = false;
@@ -502,19 +502,19 @@ void TFParser::HandleCall(int id, const std::string& properties,
     is_code = true;
   else if (memcmp(properties.c_str(), kAddr, sizeof(kAddr) - 1))
     ParserError("unexpected property for call: %s\n", properties.c_str());
-  visitor_->VisitCall(id, is_code, registers_for_operands, operands);
+  visitor_->VisitCall(id, is_code, calldesc, operands);
 }
 
 void TFParser::HandleTailCall(int id, const std::string& properties,
                               const OperandsVector& operands) {
-  RegistersForOperands registers_for_operands;
+  CallDescriptor calldesc;
   static const char kCode[] = "Code";
   static const char kAddr[] = "Addr";
   bool is_code = false;
   if (!memcmp(properties.c_str(), kCode, sizeof(kCode) - 1)) is_code = true;
   if (memcmp(properties.c_str(), kAddr, sizeof(kAddr) - 1))
     ParserError("unexpected property for call: %s\n", properties.c_str());
-  visitor_->VisitTailCall(id, is_code, registers_for_operands, operands);
+  visitor_->VisitTailCall(id, is_code, calldesc, operands);
   state_ = State::ParsingBlockHeader;
 }
 
@@ -529,6 +529,63 @@ void TFParser::HandleCodeForCall(int, const std::string&,
 
 void TFParser::HandleSmiConstant(int, const std::string&,
                                  const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleReturn(int, const std::string&, const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleProjection(int, const std::string&,
+                                const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleInt32Div(int, const std::string&, const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleInt32Mod(int, const std::string&, const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Div(int, const std::string&,
+                                const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Mod(int, const std::string&,
+                                const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64LessThan(int, const std::string&,
+                                     const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64LessThanOrEqual(int, const std::string&,
+                                            const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Equal(int, const std::string&,
+                                  const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Neg(int, const std::string&,
+                                const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Abs(int, const std::string&,
+                                const OperandsVector&) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleFloat64Constant(int, const std::string&,
+                                     const OperandsVector&) {
   __builtin_unreachable();
 }
 

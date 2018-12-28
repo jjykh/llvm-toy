@@ -61,7 +61,7 @@ class CallInfo final : public StackMapInfo {
 // By zuojian.lzj, should be int64_t. But I believe there will not be any number
 // greater.
 typedef std::unordered_map<int, std::unique_ptr<StackMapInfo>> StackMapInfoMap;
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 #endif  // STACK_MAP_INFO_H

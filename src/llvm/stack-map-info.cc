@@ -16,6 +16,6 @@ CallInfo::CallInfo(LocationVector&& locations)
       locations_(std::move(locations)),
       code_magic_(0),
       tailcall_(false) {}
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8

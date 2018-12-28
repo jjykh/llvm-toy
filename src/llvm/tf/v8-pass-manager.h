@@ -6,15 +6,15 @@ namespace internal {
 namespace compiler {
 class Schedule;
 class CallDescriptor;
-}
+}  // namespace compiler
 namespace tf_llvm {
 class V8PassManager {
  public:
   Handle<Code> Run(Isolate* isolate, compiler::Schedule*,
                    compiler::CallDescriptor*, const char* name);
 };
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
 
 #endif  // V8_PASS_MANAGER_:

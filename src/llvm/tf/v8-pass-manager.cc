@@ -162,6 +162,6 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     return tf_llvm::GenerateCode(isolate, compiler_state);
   } while (true);
 }
-}
-}
-}
+}  // namespace tf_llvm
+}  // namespace internal
+}  // namespace v8
