@@ -520,3 +520,10 @@ Index: tools/llvm-shlib/CMakeLists.txt
  
  if (APPLE)
    set_property(TARGET LLVM APPEND_STRING PROPERTY
+Index: tools/llvm-shlib/simple_version_script.map.in
+===================================================================
+--- tools/llvm-shlib/simple_version_script.map.in	(revision 347537)
++++ tools/llvm-shlib/simple_version_script.map.in	(working copy)
+@@ -1 +1 @@
+-LLVM_@LLVM_VERSION_MAJOR@ { global: *; };
++LLVM_@LLVM_VERSION_MAJOR@ { global: LLVM*;_ZN4llvm13linkCoreCLRGCEv; local:*; };
