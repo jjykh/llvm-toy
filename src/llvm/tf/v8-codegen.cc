@@ -4,6 +4,7 @@
 #include "src/llvm/stack-maps.h"
 
 #include "src/arm/assembler-arm-inl.h"
+#include "src/callable.h"
 #include "src/factory.h"
 #include "src/handles-inl.h"
 #include "src/macro-assembler.h"
@@ -25,6 +26,7 @@ class CodeGeneratorLLVM {
   int HandleExternalReference(const ExternalReferenceInfo*,
                               const StackMaps::Record&);
   int HandleCall(const CallInfo*, const StackMaps::Record&);
+  int HandleStoreBarrier(const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record& record);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
@@ -126,6 +128,18 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
+int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
+  int pc_offset = masm_.pc_offset();
+  Callable const callable =
+      Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
+  if (!needs_frame_) masm_.Push(lr);
+  masm_.mov(r2, Operand(ExternalReference::isolate_address(isolate_)));
+  masm_.Call(callable.code(), RelocInfo::CODE_TARGET);
+  if (!needs_frame_) masm_.Pop(lr);
+  CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
+  return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
+}
+
 int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
                                           const StackMaps::Record& record) {
   switch (stack_map_info->GetType()) {
@@ -137,6 +151,8 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
           static_cast<const ExternalReferenceInfo*>(stack_map_info), record);
     case StackMapInfoType::kCallInfo:
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), record);
+    case StackMapInfoType::kStoreBarrier:
+      return HandleStoreBarrier(record);
   }
   UNREACHABLE();
 }
@@ -215,11 +231,18 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
         break;
       case StackMapInfoType::kCallInfo:
         break;
+      case StackMapInfoType::kStoreBarrier:
+        break;
       default:
         UNREACHABLE();
     }
+#if defined(UC_3_0)
     record_reference_map_.emplace(instruction_offset,
                                   RecordReference(&record, stack_map_info));
+#else
+    record_reference_map_.insert(std::make_pair(
+        instruction_offset, RecordReference(&record, stack_map_info)));
+#endif
   }
 }
 

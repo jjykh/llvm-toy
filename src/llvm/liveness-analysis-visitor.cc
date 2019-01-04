@@ -128,7 +128,9 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
 
 void LivenessAnalysisVisitor::VisitBlock(int id, bool is_deferred,
                                          const OperandsVector& predecessors) {
-  assert(!current_basic_block_);
+  if (current_basic_block_) {
+    EndBlock();
+  }
   BasicBlock* bb = basicBlockManager().ensureBB(id);
   for (int predecessor : predecessors) {
     BasicBlock* pred_bb = basicBlockManager().ensureBB(predecessor);
@@ -176,6 +178,7 @@ void LivenessAnalysisVisitor::VisitStore(int id, MachineRepresentation rep,
   AddIfNotInDefines(base);
   AddIfNotInDefines(offset);
   AddIfNotInDefines(value);
+  if (barrier != kNoWriteBarrier) basicBlockManager().set_needs_frame(true);
 }
 void LivenessAnalysisVisitor::VisitBitcastWordToTagged(int id, int e) {
   Define(id);

@@ -1,6 +1,6 @@
 #include "src/llvm/output.h"
-#include <assert.h>
 #include "src/llvm/compiler-state.h"
+#include "src/llvm/log.h"
 
 namespace v8 {
 namespace internal {
@@ -22,8 +22,8 @@ Output::Output(CompilerState& state)
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
-  assert(!builder_);
-  assert(!prologue_);
+  EMASSERT(!builder_);
+  EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
 
   prologue_ = appendBasicBlock("Prologue");
@@ -33,8 +33,11 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
   char constraint[256];
   for (auto& registerParameter : registerParameters) {
     int len = snprintf(constraint, 256, "={r%d}", registerParameter.name);
+    bool side_effect = true;
+    // don't make context reg volatile.
+    if (registerParameter.name == 7) side_effect = false;
     LValue rvalue = buildInlineAsm(functionType(registerParameter.type), empty,
-                                   0, constraint, len, true);
+                                   0, constraint, len, side_effect);
     registerParameters_.push_back(rvalue);
   }
   int len = snprintf(constraint, 256, "={%s}", "r10");

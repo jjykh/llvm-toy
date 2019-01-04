@@ -8,7 +8,12 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 
-enum class StackMapInfoType { kHeapConstant, kExternalReference, kCallInfo };
+enum class StackMapInfoType {
+  kHeapConstant,
+  kExternalReference,
+  kCallInfo,
+  kStoreBarrier
+};
 
 class StackMapInfo {
  public:
@@ -56,6 +61,12 @@ class CallInfo final : public StackMapInfo {
   LocationVector locations_;
   int64_t code_magic_;
   bool tailcall_;
+};
+
+class StoreBarrierInfo final : public StackMapInfo {
+ public:
+  StoreBarrierInfo();
+  ~StoreBarrierInfo() override = default;
 };
 
 // By zuojian.lzj, should be int64_t. But I believe there will not be any number

@@ -2,9 +2,9 @@
 #define BASIC_BLOCK_H
 #include <assert.h>
 #include <set>
-#include <unordered_map>
 #include <vector>
-#include "src/llvm/output.h"
+#include "src/llvm/common-values.h"
+#include "src/llvm/log.h"
 
 namespace v8 {
 namespace internal {
@@ -17,19 +17,7 @@ class BasicBlock {
  public:
   explicit BasicBlock(int id);
   ~BasicBlock();
-  void StartBuild();
-  void EndBuild();
   void AddPredecessor(BasicBlock* pred);
-  inline bool started() const { return started_; }
-  inline bool ended() const { return ended_; }
-  // FIXME: move to tf builder
-  inline void set_value(int nid, LValue value) { values_[nid] = value; }
-  inline LValue value(int nid) {
-    auto found = values_.find(nid);
-    assert(found != values_.end());
-    return found->second;
-  }
-  inline std::unordered_map<int, LValue>& values() { return values_; }
 
   inline const std::vector<BasicBlock*>& predecessors() const {
     return predecessors_;
@@ -70,14 +58,11 @@ class BasicBlock {
  private:
   std::vector<BasicBlock*> predecessors_;
   std::vector<BasicBlock*> successors_;
-  std::unordered_map<int, LValue> values_;
   std::vector<int> liveins_;
   std::vector<int> rpo_;
 
   void* impl_;
   int id_;
-  bool started_;
-  bool ended_;
   bool deferred_;
 };
 }  // namespace tf_llvm

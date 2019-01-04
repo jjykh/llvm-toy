@@ -5,6 +5,7 @@
 #include <bitset>
 #include <unordered_map>
 #include <vector>
+#include "src/llvm/log.h"
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
@@ -15,7 +16,7 @@ class DataView {
   DataView(const uint8_t* data) : data_(data) {}
   template <typename T>
   T read(unsigned& off, bool littenEndian) {
-    assert(littenEndian == true);
+    EMASSERT(littenEndian == true);
     T t = *reinterpret_cast<const T*>(data_ + off);
     off += sizeof(T);
     return t;

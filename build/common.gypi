@@ -33,6 +33,7 @@
               'abstract': 1,
               'include_dirs': [
                   '<(DEPTH)',
+                  '<(DEPTH)/v8_fakeincludes',
               ],
           },
           'Debug_Base': {

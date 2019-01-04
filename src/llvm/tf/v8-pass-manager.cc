@@ -158,7 +158,7 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
       continue;
     }
     compiler_state.spill_slot_count_ = spill_count;
-#if 1
+#if 0
     disassemble(compiler_state);
 #endif
     return tf_llvm::GenerateCode(isolate, compiler_state);

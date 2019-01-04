@@ -56,7 +56,7 @@ void StackMaps::LiveOut::parse(StackMaps::ParseContext& context) {
 
 bool StackMaps::Record::parse(StackMaps::ParseContext& context) {
   int64_t id = context.view->read<int64_t>(context.offset, true);
-  assert(static_cast<int32_t>(id) == id);
+  EMASSERT(static_cast<int32_t>(id) == id);
   patchpointID = static_cast<uint32_t>(id);
   if (static_cast<int32_t>(patchpointID) < 0) return false;
 
@@ -70,7 +70,8 @@ bool StackMaps::Record::parse(StackMaps::ParseContext& context) {
     while (context.offset & 7)
       context.view->read<uint16_t>(context.offset, true);  // padding
   }
-
+  // liveout padding
+  context.view->read<uint16_t>(context.offset, true);
   unsigned numLiveOuts = context.view->read<uint16_t>(context.offset, true);
   while (numLiveOuts--) liveOuts.push_back(readObject<LiveOut>(context));
 
@@ -163,7 +164,7 @@ StackMaps::RecordMap StackMaps::computeRecordMap() const {
 }
 
 unsigned StackMaps::stackSize() const {
-  assert(stackSizes.size() == 1);
+  EMASSERT(stackSizes.size() == 1);
 
   return stackSizes[0].size;
 }

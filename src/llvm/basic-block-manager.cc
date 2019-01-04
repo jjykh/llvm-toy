@@ -14,8 +14,12 @@ BasicBlock* BasicBlockManager::createBB(int bid) {
   BasicBlock* bb;
   std::unique_ptr<BasicBlock> newBB(new BasicBlock(bid));
   bb = newBB.get();
+#if defined(UC_3_0)
   auto inserted = bbs_.emplace(bid, std::move(newBB));
-  assert(inserted.second);
+#else
+  auto inserted = bbs_.insert(std::make_pair(bid, std::move(newBB)));
+#endif
+  EMASSERT(inserted.second);
   return bb;
 }
 

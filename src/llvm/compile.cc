@@ -27,7 +27,7 @@ static uint8_t* mmAllocateCodeSection(void* opaqueState, uintptr_t size,
 
   tf_llvm::ByteBuffer& bb(state.codeSectionList_.back());
   bb.resize(size);
-  assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
+  EMASSERT((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
 
   return const_cast<uint8_t*>(bb.data());
 }
@@ -42,7 +42,7 @@ static uint8_t* mmAllocateDataSection(void* opaqueState, uintptr_t size,
 
   tf_llvm::ByteBuffer& bb(state.dataSectionList_.back());
   bb.resize(size);
-  assert((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
+  EMASSERT((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
   if (!strcmp(sectionName, SECTION_NAME("llvm_stackmaps"))) {
     state.stackMapsSection_ = &bb;
   }
@@ -66,7 +66,7 @@ void compile(State& state) {
   if (LLVMCreateMCJITCompilerForModule(&engine, state.module_, &options,
                                        sizeof(options), &error)) {
     LOGE("FATAL: Could not create LLVM execution engine: %s", error);
-    assert(false);
+    EMASSERT(false);
   }
   LLVMModuleRef module = state.module_;
   LLVMPassManagerRef functionPasses = 0;
