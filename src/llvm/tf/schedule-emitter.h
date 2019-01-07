@@ -17,7 +17,7 @@ class ScheduleEmitter final {
  public:
   explicit ScheduleEmitter(Isolate* isolate, compiler::Schedule*,
                            compiler::CallDescriptor*);
-  ~ScheduleEmitter() = default;
+  ~ScheduleEmitter();
   void Visit(TFVisitor* visitor);
   void VisitBlock(compiler::BasicBlock*, TFVisitor*);
   void VisitBlockControl(compiler::BasicBlock*, TFVisitor*);
@@ -25,6 +25,7 @@ class ScheduleEmitter final {
   void VisitCall(compiler::Node*, TFVisitor*, bool tail);
 
  private:
+  void DoVisit(TFVisitor* visitor);
   compiler::Schedule* schedule() { return schedule_; }
   compiler::CallDescriptor* incoming_descriptor() {
     return incoming_descriptor_;
@@ -34,9 +35,13 @@ class ScheduleEmitter final {
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
                                 Heap::RootListIndex* index_return);
 
+  struct ArtifactState;
+  static const int kArtifactPredecessorStart = 10000;
+
   Isolate* isolate_;
   compiler::Schedule* schedule_;
   compiler::CallDescriptor* incoming_descriptor_;
+  std::unique_ptr<ArtifactState> artifact_state_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

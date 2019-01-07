@@ -1,5 +1,6 @@
 #include "src/llvm/tf/schedule-emitter.h"
 
+#include <unordered_map>
 #include "src/compiler/common-operator.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/machine-operator.h"
@@ -17,7 +18,34 @@ ScheduleEmitter::ScheduleEmitter(Isolate* isolate, compiler::Schedule* schedule,
       schedule_(schedule),
       incoming_descriptor_(incoming_descriptor) {}
 
+ScheduleEmitter::~ScheduleEmitter() {}
+
+struct ScheduleEmitter::ArtifactState {
+  std::unordered_map<int, int> artifact_predecessors_;
+  int artifact_predecessor_magic_;
+  int current_bb_;
+  int current_bb_artifact_;
+};
+
 void ScheduleEmitter::Visit(TFVisitor* visitor) {
+  artifact_state_.reset(new ArtifactState);
+  class NoopVisitor final : public TFVisitor {
+    void VisitBlock(int id, bool is_deferred,
+                    const OperandsVector& predecessors) override {}
+    void VisitGoto(int bid) override {}
+#define NOOP(name, parameters) \
+  void Visit##name parameters override {}
+    INSTRUCTIONS(NOOP)
+#undef NOOP
+  };
+  NoopVisitor noop_visitor;
+  artifact_state_->artifact_predecessor_magic_ = kArtifactPredecessorStart;
+  DoVisit(&noop_visitor);
+  artifact_state_->artifact_predecessor_magic_ = kArtifactPredecessorStart;
+  DoVisit(visitor);
+}
+
+void ScheduleEmitter::DoVisit(TFVisitor* visitor) {
   compiler::BasicBlockVector* blocks = schedule()->rpo_order();
   for (auto const block : *blocks) {
     VisitBlock(block, visitor);
@@ -837,9 +865,16 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
 
 void ScheduleEmitter::VisitBlock(compiler::BasicBlock* bb, TFVisitor* visitor) {
   int id = bb->rpo_number();
+  artifact_state_->current_bb_ = id;
+  artifact_state_->current_bb_artifact_ = id;
   OperandsVector predecessors;
   for (auto pred : bb->predecessors()) {
-    predecessors.push_back(pred->rpo_number());
+    int rpo_number = pred->rpo_number();
+    auto found = artifact_state_->artifact_predecessors_.find(rpo_number);
+    if (found != artifact_state_->artifact_predecessors_.end())
+      predecessors.push_back(found->second);
+    else
+      predecessors.push_back(rpo_number);
   }
   visitor->VisitBlock(id, bb->deferred(), predecessors);
 }
@@ -946,10 +981,18 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
     operands.push_back(node->InputAt(i)->id());
   }
   call_desc.return_count = descriptor->ReturnCount();
-  if (!tail)
+  if (!tail) {
     visitor->VisitCall(node->id(), code, call_desc, operands);
-  else
+    int artifact_id = artifact_state_->artifact_predecessor_magic_++;
+    visitor->VisitGoto(artifact_id);
+    visitor->VisitBlock(artifact_id, false,
+                        {artifact_state_->current_bb_artifact_});
+    artifact_state_->current_bb_artifact_ = artifact_id;
+    artifact_state_->artifact_predecessors_[artifact_state_->current_bb_] =
+        artifact_id;
+  } else {
     visitor->VisitTailCall(node->id(), code, call_desc, operands);
+  }
 }
 }  // namespace tf_llvm
 }  // namespace internal

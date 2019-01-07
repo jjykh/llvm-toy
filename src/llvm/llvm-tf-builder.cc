@@ -519,10 +519,17 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
   int gc_paramter_start = statepoint_operands.size();
   // push current defines
-  for (auto& items : GetImpl(current_bb_)->values()) {
-    LValue to_gc = items.second;
-    if (typeOf(to_gc) != output().taggedType()) continue;
-    statepoint_operands.push_back(to_gc);
+  if (!tailcall) {
+    auto& successor_liveins = current_bb_->successors().front()->liveins();
+    auto& values = GetImpl(current_bb_)->values();
+    for (int livein : successor_liveins) {
+      if (livein == id) continue;
+      auto found = values.find(livein);
+      EMASSERT(found != values.end());
+      LValue to_gc = found->second;
+      if (typeOf(to_gc) != output().taggedType()) continue;
+      statepoint_operands.push_back(to_gc);
+    }
   }
   LValue statepoint_ret = output().buildCall(
       output().getStatePointFunction(callee_type), statepoint_operands.data(),
@@ -531,15 +538,21 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   LLVMSetTailCall(statepoint_ret, tailcall);
   if (!tailcall) {
     // 2. rebuild value
-    for (auto& items : GetImpl(current_bb_)->values()) {
-      if (typeOf(items.second) != output().taggedType()) continue;
+    auto& successor_liveins = current_bb_->successors().front()->liveins();
+    auto& values = GetImpl(current_bb_)->values();
+    for (int livein : successor_liveins) {
+      if (livein == id) continue;
+      auto found = values.find(livein);
+      LValue to_gc = found->second;
+      if (typeOf(to_gc) != output().taggedType()) continue;
       LValue relocated = output().buildCall(
           output().repo().gcRelocateIntrinsic(), statepoint_ret,
           output().constInt32(gc_paramter_start),
           output().constInt32(gc_paramter_start));
-      items.second = relocated;
+      found->second = relocated;
       gc_paramter_start++;
     }
+
     LValue intrinsic = output().repo().gcResultIntrinsic();
     if (call_desc.return_count == 2) {
       intrinsic = output().repo().gcResult2Intrinsic();
