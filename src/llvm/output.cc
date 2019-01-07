@@ -12,40 +12,50 @@ Output::Output(CompilerState& state)
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
-      stackMapsId_(1) {
-  state.function_ =
-      addFunction(state.module_, "main", functionType(taggedType()));
-  setFunctionCallingConv(state.function_, LLVMV8CallConv);
-  // FIXME: Add V8 to LLVM.
-  LLVMSetGC(state.function_, "coreclr");
-}
+      stackMapsId_(1) {}
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
+  int len;
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
+  LType params_types[] = {taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          taggedType(),
+                          pointerType(taggedType()),
+                          pointerType(repo().ref8)};
+  for (auto& registerParameter : registerParameters) {
+    EMASSERT(registerParameter.name < 10);
+    params_types[registerParameter.name] = registerParameter.type;
+  }
+  state_.function_ = addFunction(
+      state_.module_, "main",
+      functionType(taggedType(), params_types,
+                   sizeof(params_types) / sizeof(LType), NotVariadic));
+  setFunctionCallingConv(state_.function_, LLVMV8CallConv);
+  // FIXME: Add V8 to LLVM.
+  LLVMSetGC(state_.function_, "coreclr");
 
   prologue_ = appendBasicBlock("Prologue");
   positionToBBEnd(prologue_);
+  for (auto& registerParameter : registerParameters) {
+    EMASSERT(registerParameter.name < 10);
+    LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
+    registerParameters_.push_back(rvalue);
+  }
   // build parameters
   char empty[] = "\0";
   char constraint[256];
-  for (auto& registerParameter : registerParameters) {
-    int len = snprintf(constraint, 256, "={r%d}", registerParameter.name);
-    bool side_effect = true;
-    // don't make context reg volatile.
-    if (registerParameter.name == 7) side_effect = false;
-    LValue rvalue = buildInlineAsm(functionType(registerParameter.type), empty,
-                                   0, constraint, len, side_effect);
-    registerParameters_.push_back(rvalue);
-  }
-  int len = snprintf(constraint, 256, "={%s}", "r10");
-  root_ = buildInlineAsm(functionType(pointerType(taggedType())), empty, 0,
-                         constraint, len, true);
-  len = snprintf(constraint, 256, "={%s}", "r11");
-  fp_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
-                       constraint, len, true);
+  root_ = LLVMGetParam(state_.function_, 10);
+  fp_ = LLVMGetParam(state_.function_, 11);
   len = snprintf(constraint, 256, "={%s}", "lr");
   lr_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
                        constraint, len, true);
