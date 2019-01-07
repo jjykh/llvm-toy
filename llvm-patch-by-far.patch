@@ -554,13 +554,22 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13078,11 @@
+@@ -13061,6 +13078,20 @@
    return -1;
  }
  
 +const MCPhysReg *ARMTargetLowering::getScratchRegisters(CallingConv::ID) const {
 +  static const MCPhysReg ScratchRegs[] = {ARM::R12, 0};
 +  return ScratchRegs;
++}
++
++MachineBasicBlock *
++ARMTargetLowering::emitPatchPoint(MachineInstr &MI,
++                                  MachineBasicBlock *MBB) const {
++  MachineBasicBlock *MBB2 = TargetLoweringBase::emitPatchPoint(MI, MBB);
++  MachineFunction &MF = *MI.getMF();
++  MI.addOperand(MF, MachineOperand::CreateReg(ARM::LR, true, true));
++  return MBB2;
 +}
 +
  static bool isLegalT1AddressImmediate(int64_t V, EVT VT) {
@@ -570,11 +579,14 @@ Index: lib/Target/ARM/ARMISelLowering.h
 ===================================================================
 --- lib/Target/ARM/ARMISelLowering.h	(revision 347537)
 +++ lib/Target/ARM/ARMISelLowering.h	(working copy)
-@@ -696,6 +696,8 @@
+@@ -696,6 +696,11 @@
      /// correctness bugs.
      bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return false; }
  
 +    const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
++
++    MachineBasicBlock *emitPatchPoint(MachineInstr &MI,
++                                      MachineBasicBlock *MBB) const;
 +
      SDValue ReconstructShuffle(SDValue Op, SelectionDAG &DAG) const;
  
