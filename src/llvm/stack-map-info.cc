@@ -5,11 +5,17 @@ namespace internal {
 namespace tf_llvm {
 StackMapInfo::StackMapInfo(StackMapInfoType type) : type_(type) {}
 
-HeapConstantInfo::HeapConstantInfo(int64_t magic)
-    : StackMapInfo(StackMapInfoType::kHeapConstant), magic_(magic) {}
+HeapConstantInfo::HeapConstantInfo(const void* pc)
+    : StackMapInfo(StackMapInfoType::kHeapConstant), pc_(pc) {}
 
-ExternalReferenceInfo::ExternalReferenceInfo(int64_t magic)
-    : StackMapInfo(StackMapInfoType::kExternalReference), magic_(magic) {}
+HeapConstantLocationInfo::HeapConstantLocationInfo(const void* pc)
+    : StackMapInfo(StackMapInfoType::kHeapConstantLocation), pc_(pc) {}
+
+ExternalReferenceInfo::ExternalReferenceInfo(const void* pc)
+    : StackMapInfo(StackMapInfoType::kExternalReference), pc_(pc) {}
+
+ExternalReferenceLocationInfo::ExternalReferenceLocationInfo(const void* pc)
+    : StackMapInfo(StackMapInfoType::kExternalReferenceLocation), pc_(pc) {}
 
 CallInfo::CallInfo(LocationVector&& locations)
     : StackMapInfo(StackMapInfoType::kCallInfo),

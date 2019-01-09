@@ -17,6 +17,8 @@ typedef std::vector<uint8_t> ByteBuffer;
 typedef std::list<ByteBuffer> BufferList;
 typedef std::list<std::string> StringList;
 
+enum class PrologueKind { Unset, CFunctionCall, JSFunctionCall, Stub };
+
 struct CompilerState {
   BufferList codeSectionList_;
   BufferList dataSectionList_;
@@ -28,7 +30,9 @@ struct CompilerState {
   LLVMValueRef function_;
   LLVMContextRef context_;
   void* entryPoint_;
-  size_t spill_slot_count_;
+  size_t frame_slot_count_;
+  int code_kind_;
+  PrologueKind prologue_kind_;
   bool needs_frame_;
   CompilerState(const char* moduleName);
   ~CompilerState();

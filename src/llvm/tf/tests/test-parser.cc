@@ -12,9 +12,12 @@ class TestParserVisitor : public TFVisitor {
   void VisitGoto(int bid) override;
   void VisitParameter(int id, int pid) override;
   void VisitLoadParentFramePointer(int id) override;
+  void VisitLoadFramePointer(int id) override;
   void VisitLoadStackPointer(int id) override;
   void VisitDebugBreak(int id) override;
   void VisitInt32Constant(int id, int32_t value) override;
+  void VisitFloat64SilenceNaN(int id, int value) override;
+  void VisitIdentity(int id, int value) override;
   void VisitSmiConstant(int id, void* value) override;
   void VisitLoad(int id, MachineRepresentation rep, MachineSemantic semantic,
                  int base, int offset) override;
@@ -174,6 +177,11 @@ void TestParserVisitor::VisitLoadParentFramePointer(int id) {
        << "LoadParentFramePointer " << id << endl;
 }
 
+void TestParserVisitor::VisitLoadFramePointer(int id) {
+  cout << id << ":"
+       << "LoadFramePointer " << id << endl;
+}
+
 void TestParserVisitor::VisitLoadStackPointer(int id) {
   cout << id << ":"
        << "LoadStackPointer " << id << endl;
@@ -187,6 +195,16 @@ void TestParserVisitor::VisitDebugBreak(int id) {
 void TestParserVisitor::VisitInt32Constant(int id, int32_t value) {
   cout << id << ":"
        << "VisitInt32Constant " << value << endl;
+}
+
+void TestParserVisitor::VisitFloat64SilenceNaN(int id, int value) {
+  cout << id << ":"
+       << "VisitFloat64SilenceNaN " << value << endl;
+}
+
+void TestParserVisitor::VisitIdentity(int id, int value) {
+  cout << id << ":"
+       << "VisitIdentity " << value << endl;
 }
 
 void TestParserVisitor::VisitLoad(int id, MachineRepresentation rep,

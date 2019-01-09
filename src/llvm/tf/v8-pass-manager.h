@@ -11,7 +11,8 @@ namespace tf_llvm {
 class V8PassManager {
  public:
   Handle<Code> Run(Isolate* isolate, compiler::Schedule*,
-                   compiler::CallDescriptor*, const char* name);
+                   compiler::CallDescriptor*, const char* name,
+                   Code::Kind kind);
 };
 }  // namespace tf_llvm
 }  // namespace internal

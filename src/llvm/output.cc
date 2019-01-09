@@ -33,8 +33,10 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
                           pointerType(taggedType()),
                           pointerType(repo().ref8)};
   for (auto& registerParameter : registerParameters) {
-    EMASSERT(registerParameter.name < 10);
-    params_types[registerParameter.name] = registerParameter.type;
+    if (registerParameter.name >= 0) {
+      EMASSERT(registerParameter.name < 10);
+      params_types[registerParameter.name] = registerParameter.type;
+    }
   }
   state_.function_ = addFunction(
       state_.module_, "main",
@@ -46,16 +48,24 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
 
   prologue_ = appendBasicBlock("Prologue");
   positionToBBEnd(prologue_);
-  for (auto& registerParameter : registerParameters) {
-    EMASSERT(registerParameter.name < 10);
-    LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
-    registerParameters_.push_back(rvalue);
-  }
   // build parameters
   char empty[] = "\0";
   char constraint[256];
   root_ = LLVMGetParam(state_.function_, 10);
   fp_ = LLVMGetParam(state_.function_, 11);
+  for (auto& registerParameter : registerParameters) {
+    if (registerParameter.name >= 0) {
+      EMASSERT(registerParameter.name < 10);
+      LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
+      registerParameters_.push_back(rvalue);
+    } else {
+      // callee frame
+      LValue gep = buildGEPWithByteOffset(
+          fp_, constInt32((1 - registerParameter.name) * sizeof(void*)),
+          pointerType(taggedType()));
+      registerParameters_.push_back(buildLoad(gep));
+    }
+  }
   len = snprintf(constraint, 256, "={%s}", "lr");
   lr_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
                        constraint, len, true);
@@ -225,6 +235,16 @@ LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
                                  constraintString, constraintStringSize,
                                  sideEffect, false, LLVMInlineAsmDialectATT);
   return buildCall(func);
+}
+
+LValue Output::buildLoadMagic(LType type, int64_t magic) {
+  char kAsmString[] = "ldr $0, =${1:c}";
+  char kConstraint[] = "=r,i";
+  LValue func = LLVMGetInlineAsm(functionType(type, repo().intPtr), kAsmString,
+                                 sizeof(kAsmString) - 1, kConstraint,
+                                 sizeof(kConstraint) - 1, false, false,
+                                 LLVMInlineAsmDialectATT);
+  return buildCall(func, constIntPtr(magic));
 }
 
 LValue Output::buildPhi(LType type) {

@@ -1,6 +1,7 @@
 #include "src/llvm/tf/v8-pass-manager.h"
 
 #include <iostream>
+#include "src/assembler-inl.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/schedule.h"
 #include "src/llvm/compile.h"
@@ -101,7 +102,7 @@ static int FindSpillSlotCount(const uint32_t* pc) {
 
 Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                                 compiler::CallDescriptor* call_descriptor,
-                                const char* name) {
+                                const char* name, Code::Kind kind) {
   static bool llvm_initialized = false;
 #if 0
   std::cout << "name: " << name << "\n" << *schedule;
@@ -131,13 +132,15 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
   }
   do {
     tf_llvm::CompilerState compiler_state("test");
+    compiler_state.code_kind_ = static_cast<int>(kind);
     compiler_state.needs_frame_ = BBM.needs_frame();
 
     tf_llvm::Output output(compiler_state);
     tf_llvm::RegisterParameterDesc input_desc;
     for (int i = 1; i <= call_descriptor->ParameterCount(); ++i) {
       compiler::LinkageLocation location = call_descriptor->GetInputLocation(i);
-      CHECK(location.IsRegister() && !location.IsAnyRegister());
+      CHECK((location.IsRegister() && !location.IsAnyRegister()) ||
+            location.IsCallerFrameSlot());
       input_desc.emplace_back(location.GetLocation(),
                               GetLLVMType(output.repo(), location.GetType()));
     }
@@ -157,7 +160,15 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
       BBM.set_needs_frame(true);
       continue;
     }
-    compiler_state.spill_slot_count_ = spill_count;
+    if (call_descriptor->IsJSFunctionCall()) {
+      CHECK(call_descriptor->PushArgumentCount());
+      compiler_state.frame_slot_count_ =
+          spill_count + 5;  // arg count?, function, context, fp, sp
+      compiler_state.prologue_kind_ = PrologueKind::JSFunctionCall;
+    } else {
+      compiler_state.frame_slot_count_ = spill_count + 3;  // marker, fp, sp
+      compiler_state.prologue_kind_ = PrologueKind::Stub;
+    }
 #if 0
     disassemble(compiler_state);
 #endif

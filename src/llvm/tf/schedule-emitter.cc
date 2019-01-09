@@ -56,6 +56,16 @@ void ScheduleEmitter::DoVisit(TFVisitor* visitor) {
   }
 }
 
+static bool CanProduceSignalingNaN(compiler::Node* node) {
+  // TODO(jarin) Improve the heuristic here.
+  if (node->opcode() == compiler::IrOpcode::kFloat64Add ||
+      node->opcode() == compiler::IrOpcode::kFloat64Sub ||
+      node->opcode() == compiler::IrOpcode::kFloat64Mul) {
+    return false;
+  }
+  return true;
+}
+
 void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
   switch (node->opcode()) {
     case compiler::IrOpcode::kStart:
@@ -389,7 +399,12 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kChangeFloat64ToUint64:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64SilenceNaN:
-      UNREACHABLE();
+      if (CanProduceSignalingNaN(node->InputAt(0))) {
+        visitor->VisitFloat64SilenceNaN(node->id(), node->InputAt(0)->id());
+      } else {
+        visitor->VisitIdentity(node->id(), node->InputAt(0)->id());
+      }
+      return;
     case compiler::IrOpcode::kTruncateFloat64ToUint32:
       UNREACHABLE();
     case compiler::IrOpcode::kTruncateFloat32ToInt32:
@@ -580,7 +595,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitLoadStackPointer(node->id());
       return;
     case compiler::IrOpcode::kLoadFramePointer:
-      UNREACHABLE();
+      visitor->VisitLoadFramePointer(node->id());
+      return;
     case compiler::IrOpcode::kLoadParentFramePointer:
       visitor->VisitLoadParentFramePointer(node->id());
       return;

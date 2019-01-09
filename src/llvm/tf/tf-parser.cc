@@ -188,6 +188,11 @@ void TFParser::HandleLoadParentFramePointer(int id,
   visitor_->VisitLoadParentFramePointer(id);
 }
 
+void TFParser::HandleLoadFramePointer(int id, const std::string& properties,
+                                      const OperandsVector& operands) {
+  visitor_->VisitLoadFramePointer(id);
+}
+
 void TFParser::HandleLoadStackPointer(int id, const std::string& properties,
                                       const OperandsVector& operands) {
   visitor_->VisitLoadStackPointer(id);
@@ -205,6 +210,16 @@ void TFParser::HandleInt32Constant(int id, const std::string& properties,
     ParserError("failed to extract int32 constant");
   }
   visitor_->VisitInt32Constant(id, constant);
+}
+
+void TFParser::HandleFloat64SilenceNaN(int id, const std::string& properties,
+                                       const OperandsVector& operands) {
+  visitor_->VisitInt32Constant(id, operands[0]);
+}
+
+void TFParser::HandleIdentity(int id, const std::string& properties,
+                              const OperandsVector& operands) {
+  visitor_->VisitIdentity(id, operands[0]);
 }
 
 std::tuple<MachineRepresentation, MachineSemantic>

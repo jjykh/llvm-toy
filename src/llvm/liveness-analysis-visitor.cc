@@ -155,12 +155,24 @@ void LivenessAnalysisVisitor::VisitLoadParentFramePointer(int id) {
   Define(id);
 }
 
+void LivenessAnalysisVisitor::VisitLoadFramePointer(int id) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitLoadStackPointer(int id) { Define(id); }
 
 void LivenessAnalysisVisitor::VisitDebugBreak(int id) {}
 
 void LivenessAnalysisVisitor::VisitInt32Constant(int id, int32_t value) {
   Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64SilenceNaN(int id, int value) {
+  Define(id);
+  AddIfNotInDefines(value);
+}
+
+void LivenessAnalysisVisitor::VisitIdentity(int id, int value) {
+  Define(id);
+  AddIfNotInDefines(value);
 }
 
 void LivenessAnalysisVisitor::VisitLoad(int id, MachineRepresentation rep,

@@ -657,6 +657,15 @@ void LLVMTFBuilder::VisitLoadParentFramePointer(int id) {
         ->set_value(id, output().buildBitCast(fp, output().repo().ref8));
 }
 
+void LLVMTFBuilder::VisitIdentity(int id, int value) {
+  GetImpl(current_bb_)->set_value(id, GetImpl(current_bb_)->value(value));
+}
+
+void LLVMTFBuilder::VisitLoadFramePointer(int id) {
+  LValue fp = output().fp();
+  GetImpl(current_bb_)->set_value(id, fp);
+}
+
 void LLVMTFBuilder::VisitLoadStackPointer(int id) {
   LValue value = output().buildCall(output().repo().stackSaveIntrinsic());
   GetImpl(current_bb_)->set_value(id, value);
@@ -671,6 +680,13 @@ void LLVMTFBuilder::VisitDebugBreak(int id) {
 
 void LLVMTFBuilder::VisitInt32Constant(int id, int32_t value) {
   GetImpl(current_bb_)->set_value(id, output().constInt32(value));
+}
+
+void LLVMTFBuilder::VisitFloat64SilenceNaN(int id, int value) {
+  LValue llvalue = GetImpl(current_bb_)->value(value);
+  LValue result =
+      output().buildFSub(llvalue, constReal(output().repo().doubleType, 0.0));
+  GetImpl(current_bb_)->set_value(id, result);
 }
 
 static LType getMachineRepresentationType(Output& output,
@@ -1016,45 +1032,13 @@ void LLVMTFBuilder::VisitIfValue(int id, int val) {
 void LLVMTFBuilder::VisitIfDefault(int id) {}
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
-  char buf[256];
-  int len =
-      snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic & 0xff));
-  char kConstraint[] = "=r";
-  LValue value =
-      output().buildInlineAsm(functionType(output().taggedType()), buf, len,
-                              kConstraint, sizeof(kConstraint) - 1, true);
-  int patchid = state_point_id_next_++;
-  output().buildCall(output().repo().stackmapIntrinsic(),
-                     output().constInt64(patchid), output().repo().int32Zero,
-                     value);
-  std::unique_ptr<StackMapInfo> info(new HeapConstantInfo(magic));
-#if defined(UC_3_0)
-  stack_map_info_map_->emplace(patchid, std::move(info));
-#else
-  stack_map_info_map_->insert(std::make_pair(patchid, std::move(info)));
-#endif
+  LValue value = output().buildLoadMagic(output().taggedType(), magic);
   GetImpl(current_bb_)->set_value(id, value);
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
-  char buf[256];
-  int len =
-      snprintf(buf, 256, "mov $0, #%lld", static_cast<long long>(magic & 0xff));
-  char kConstraint[] = "=r";
-  LValue value = output().buildInlineAsm(
-      functionType(pointerType(output().repo().int8)), buf, len, kConstraint,
-      sizeof(kConstraint) - 1, true);
-  int patchid = state_point_id_next_++;
-  output().buildCall(output().repo().stackmapIntrinsic(),
-                     output().constInt64(patchid), output().repo().int32Zero,
-                     value);
-  std::unique_ptr<StackMapInfo> info(new ExternalReferenceInfo(magic));
-#if defined(UC_3_0)
-  stack_map_info_map_->emplace(patchid, std::move(info));
-#else
-  stack_map_info_map_->insert(std::make_pair(patchid, std::move(info)));
-#endif
-
+  LValue value =
+      output().buildLoadMagic(pointerType(output().repo().int8), magic);
   GetImpl(current_bb_)->set_value(id, value);
 }
 

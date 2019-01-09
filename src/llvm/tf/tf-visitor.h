@@ -18,9 +18,12 @@ struct CallDescriptor {
   V(Parameter, (int id, int pid))                                             \
   V(Return, (int id, int pop_count, const OperandsVector& operands))          \
   V(LoadParentFramePointer, (int id))                                         \
+  V(LoadFramePointer, (int id))                                               \
   V(LoadStackPointer, (int id))                                               \
   V(DebugBreak, (int id))                                                     \
   V(Int32Constant, (int id, int32_t value))                                   \
+  V(Float64SilenceNaN, (int id, int value))                                   \
+  V(Identity, (int id, int value))                                            \
   V(Load, (int id, MachineRepresentation rep, MachineSemantic semantic,       \
            int base, int offset))                                             \
   V(Store, (int id, MachineRepresentation rep, WriteBarrierKind barrier,      \
