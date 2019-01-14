@@ -84,9 +84,7 @@ int CodeGeneratorLLVM::HandleExternalReference(
 
 int CodeGeneratorLLVM::HandleExternalReferenceLocation(
     const ExternalReferenceLocationInfo* external_location_info) {
-  ExternalReference* external_reference = reinterpret_cast<ExternalReference*>(
-      reinterpret_cast<intptr_t>(external_location_info->pc()));
-  masm_.dd(reinterpret_cast<intptr_t>(external_reference->address()));
+  masm_.dd(reinterpret_cast<intptr_t>(external_location_info->pc()));
   return 1;
 }
 

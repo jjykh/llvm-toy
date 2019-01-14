@@ -123,7 +123,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kExternalConstant: {
       const ExternalReference& external_reference =
           compiler::OpParameter<ExternalReference>(node);
-      int64_t magic = reinterpret_cast<int64_t>(&external_reference);
+      int64_t magic = reinterpret_cast<int64_t>(external_reference.address());
       visitor->VisitExternalConstant(node->id(), magic);
     }
       return;
