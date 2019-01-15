@@ -15,11 +15,12 @@ namespace internal {
 namespace tf_llvm {
 
 namespace {
+class CodeGeneratorLLVM;
 class DeferredCodeGen {
  public:
   enum Type { CallCode, TailCallCode, StoreWB };
   DeferredCodeGen(Type type, int pc_offset, int size, int64_t magic);
-  void Run(Isolate*, MacroAssembler*);
+  void Run(CodeGeneratorLLVM* generator);
 
  private:
   Type type_;
@@ -49,6 +50,8 @@ class CodeGeneratorLLVM {
   void PushDeferredCodeGen(DeferredCodeGen::Type type, int64_t magic,
                            int fake_op_count);
   void FlushDeferredCodeGenQueue();
+  Handle<Code> LookupCode(int64_t magic);
+  friend class DeferredCodeGen;
 
   struct RecordReference {
     const StackMaps::Record* record;
@@ -58,6 +61,7 @@ class CodeGeneratorLLVM {
   };
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
+  typedef std::unordered_map<int64_t, Handle<Code>> CodeHandleMap;
   typedef std::vector<std::unique_ptr<StackMapInfo>> InfoStorage;
   typedef std::vector<DeferredCodeGen> DeferredCodeGenQueue;
   Isolate* isolate_;
@@ -67,6 +71,7 @@ class CodeGeneratorLLVM {
   RecordReferenceMap record_reference_map_;
   InfoStorage info_storage_;
   DeferredCodeGenQueue deferred_codegen_queue_;
+  CodeHandleMap code_handle_map_;
   int slot_count_ = 0;
   bool needs_frame_ = false;
 };
@@ -349,9 +354,19 @@ void CodeGeneratorLLVM::PushDeferredCodeGen(DeferredCodeGen::Type type,
 void CodeGeneratorLLVM::FlushDeferredCodeGenQueue() {
   int pc_offset = masm_.pc_offset();
   for (auto& deferred : deferred_codegen_queue_) {
-    deferred.Run(isolate_, &masm_);
+    deferred.Run(this);
   }
   masm_.reset_pc(pc_offset);
+}
+
+Handle<Code> CodeGeneratorLLVM::LookupCode(int64_t magic) {
+  auto found = code_handle_map_.find(magic);
+  if (found == code_handle_map_.end()) {
+    auto inserted = code_handle_map_.insert(std::make_pair(
+        magic, handle(reinterpret_cast<Code*>(magic), isolate_)));
+    return inserted.first->second;
+  }
+  return found->second;
 }
 
 CodeGeneratorLLVM::RecordReference::RecordReference(
@@ -362,16 +377,18 @@ DeferredCodeGen::DeferredCodeGen(Type type, int pc_offset, int size,
                                  int64_t magic)
     : type_(type), pc_offset_(pc_offset), size_(size), magic_(magic) {}
 
-void DeferredCodeGen::Run(Isolate* isolate, MacroAssembler* masm) {
+void DeferredCodeGen::Run(CodeGeneratorLLVM* generator) {
+  Isolate* isolate = generator->isolate_;
+  MacroAssembler* masm = &generator->masm_;
   masm->reset_pc(pc_offset_);
   int pc_offset = masm->pc_offset();
   switch (type_) {
     case CallCode: {
-      Handle<Code> code = handle(reinterpret_cast<Code*>(magic_), isolate);
+      Handle<Code> code = generator->LookupCode(magic_);
       masm->Call(code, RelocInfo::CODE_TARGET);
     } break;
     case TailCallCode: {
-      Handle<Code> code = handle(reinterpret_cast<Code*>(magic_), isolate);
+      Handle<Code> code = generator->LookupCode(magic_);
       masm->Jump(code, RelocInfo::CODE_TARGET);
     } break;
     case StoreWB: {
