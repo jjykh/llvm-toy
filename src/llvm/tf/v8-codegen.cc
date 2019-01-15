@@ -15,6 +15,19 @@ namespace internal {
 namespace tf_llvm {
 
 namespace {
+class DeferredCodeGen {
+ public:
+  enum Type { CallCode, TailCallCode, StoreWB };
+  DeferredCodeGen(Type type, int pc_offset, int size, int64_t magic);
+  void Run(Isolate*, MacroAssembler*);
+
+ private:
+  Type type_;
+  int pc_offset_;
+  int size_;
+  int64_t magic_;
+};
+
 class CodeGeneratorLLVM {
  public:
   CodeGeneratorLLVM(Isolate*);
@@ -33,6 +46,9 @@ class CodeGeneratorLLVM {
   void ProcessCode(const uint32_t* code_start, const uint32_t* code_end);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
+  void PushDeferredCodeGen(DeferredCodeGen::Type type, int64_t magic,
+                           int fake_op_count);
+  void FlushDeferredCodeGenQueue();
 
   struct RecordReference {
     const StackMaps::Record* record;
@@ -43,12 +59,14 @@ class CodeGeneratorLLVM {
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
   typedef std::vector<std::unique_ptr<StackMapInfo>> InfoStorage;
+  typedef std::vector<DeferredCodeGen> DeferredCodeGenQueue;
   Isolate* isolate_;
   Zone zone_;
   MacroAssembler masm_;
   SafepointTableBuilder safepoint_table_builder_;
   RecordReferenceMap record_reference_map_;
   InfoStorage info_storage_;
+  DeferredCodeGenQueue deferred_codegen_queue_;
   int slot_count_ = 0;
   bool needs_frame_ = false;
 };
@@ -107,12 +125,9 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     else
       masm_.bx(Register::from_code(call_target_reg));
   } else {
-    Handle<Code> code =
-        handle(reinterpret_cast<Code*>(call_info->code_magic()), isolate_);
-    if (!call_info->tailcall())
-      masm_.Call(code, RelocInfo::CODE_TARGET);
-    else
-      masm_.Jump(code, RelocInfo::CODE_TARGET);
+    PushDeferredCodeGen(call_info->tailcall() ? DeferredCodeGen::TailCallCode
+                                              : DeferredCodeGen::CallCode,
+                        call_info->code_magic(), 2);
   }
   if (!call_info->tailcall()) {
     // record safepoint
@@ -138,8 +153,7 @@ int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   Callable const callable =
       Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
   if (!needs_frame_) masm_.Push(lr);
-  masm_.mov(r2, Operand(ExternalReference::isolate_address(isolate_)));
-  masm_.Call(callable.code(), RelocInfo::CODE_TARGET);
+  PushDeferredCodeGen(DeferredCodeGen::StoreWB, 0, 3);
   if (!needs_frame_) masm_.Pop(lr);
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
@@ -218,6 +232,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
       uint32_t instruction = *instruction_pointer;
       masm_.dd(instruction);
     }
+    FlushDeferredCodeGenQueue();
   }
   masm_.CheckConstPool(true, false);
   record_reference_map_.clear();
@@ -249,9 +264,9 @@ void CodeGeneratorLLVM::ProcessCode(const uint32_t* code_start,
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(&address));
       if (reinterpret_cast<intptr_t>(address) & 1) {
-        to_push.reset(new HeapConstantInfo(instruction_pointer));
         auto found = record_reference_map_.find(constant_pc_offset);
         if (found == record_reference_map_.end()) {
+          to_push.reset(new HeapConstantInfo(instruction_pointer));
           info_storage_.emplace_back(new HeapConstantLocationInfo(address));
 #if defined(UC_3_0)
           record_reference_map_.emplace(
@@ -264,9 +279,9 @@ void CodeGeneratorLLVM::ProcessCode(const uint32_t* code_start,
 #endif
         }
       } else {
-        to_push.reset(new ExternalReferenceInfo(instruction_pointer));
         auto found = record_reference_map_.find(constant_pc_offset);
         if (found == record_reference_map_.end()) {
+          to_push.reset(new ExternalReferenceInfo(instruction_pointer));
           info_storage_.emplace_back(
               new ExternalReferenceLocationInfo(address));
 #if defined(UC_3_0)
@@ -283,14 +298,16 @@ void CodeGeneratorLLVM::ProcessCode(const uint32_t* code_start,
       int pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(instruction_pointer));
-      info_storage_.emplace_back(std::move(to_push));
+      if (to_push) {
+        info_storage_.emplace_back(std::move(to_push));
 #if defined(UC_3_0)
-      record_reference_map_.emplace(
-          pc_offset, RecordReference(nullptr, info_storage_.back().get()));
+        record_reference_map_.emplace(
+            pc_offset, RecordReference(nullptr, info_storage_.back().get()));
 #else
-      record_reference_map_.insert(std::make_pair(
-          pc_offset, RecordReference(nullptr, info_storage_.back().get())));
+        record_reference_map_.insert(std::make_pair(
+            pc_offset, RecordReference(nullptr, info_storage_.back().get())));
 #endif
+      }
     }
   }
 }
@@ -320,9 +337,54 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
   }
 }
 
+void CodeGeneratorLLVM::PushDeferredCodeGen(DeferredCodeGen::Type type,
+                                            int64_t magic, int fake_op_count) {
+  deferred_codegen_queue_.emplace_back(
+      type, masm_.pc_offset(), fake_op_count * Assembler::kInstrSize, magic);
+  for (int i = 0; i < fake_op_count; ++i) {
+    masm_.nop();
+  }
+}
+
+void CodeGeneratorLLVM::FlushDeferredCodeGenQueue() {
+  int pc_offset = masm_.pc_offset();
+  for (auto& deferred : deferred_codegen_queue_) {
+    deferred.Run(isolate_, &masm_);
+  }
+  masm_.reset_pc(pc_offset);
+}
+
 CodeGeneratorLLVM::RecordReference::RecordReference(
     const StackMaps::Record* _record, const StackMapInfo* _info)
     : record(_record), info(_info) {}
+
+DeferredCodeGen::DeferredCodeGen(Type type, int pc_offset, int size,
+                                 int64_t magic)
+    : type_(type), pc_offset_(pc_offset), size_(size), magic_(magic) {}
+
+void DeferredCodeGen::Run(Isolate* isolate, MacroAssembler* masm) {
+  masm->reset_pc(pc_offset_);
+  int pc_offset = masm->pc_offset();
+  switch (type_) {
+    case CallCode: {
+      Handle<Code> code = handle(reinterpret_cast<Code*>(magic_), isolate);
+      masm->Call(code, RelocInfo::CODE_TARGET);
+    } break;
+    case TailCallCode: {
+      Handle<Code> code = handle(reinterpret_cast<Code*>(magic_), isolate);
+      masm->Jump(code, RelocInfo::CODE_TARGET);
+    } break;
+    case StoreWB: {
+      Callable const callable =
+          Builtins::CallableFor(isolate, Builtins::kRecordWrite);
+      masm->mov(r2, Operand(ExternalReference::isolate_address(isolate)));
+      masm->Call(callable.code(), RelocInfo::CODE_TARGET);
+    } break;
+    default:
+      UNREACHABLE();
+  }
+  CHECK((masm->pc_offset() - pc_offset) <= size_);
+}
 }  // namespace
 
 Handle<Code> GenerateCode(Isolate* isolate, const CompilerState& state) {
