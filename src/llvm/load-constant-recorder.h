@@ -8,11 +8,19 @@ namespace tf_llvm {
 
 class LoadConstantRecorder {
  public:
-  enum Type { ExternalReference, HeapConstant, CodeConstant };
+  enum Type {
+    kExternalReference,
+    kHeapConstant,
+    kCodeConstant,
+    kIsolateExternalReference,
+    kRecordStubCodeConstant
+  };
   LoadConstantRecorder() = default;
   ~LoadConstantRecorder() = default;
   void Register(int64_t magic, Type type);
   Type Query(int64_t magic) const;
+  static int64_t IsolateExternalReferenceMagic();
+  static int64_t RecordStubCodeConstantMagic();
 
  private:
   std::unordered_map<int64_t, Type> map_;

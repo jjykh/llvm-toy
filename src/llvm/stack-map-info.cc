@@ -4,24 +4,7 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 StackMapInfo::StackMapInfo(StackMapInfoType type) : type_(type) {}
-
-HeapConstantInfo::HeapConstantInfo()
-    : StackMapInfo(StackMapInfoType::kHeapConstant) {}
-
-HeapConstantLocationInfo::HeapConstantLocationInfo()
-    : StackMapInfo(StackMapInfoType::kHeapConstantLocation) {}
-
-ExternalReferenceInfo::ExternalReferenceInfo()
-    : StackMapInfo(StackMapInfoType::kExternalReference) {}
-
-ExternalReferenceLocationInfo::ExternalReferenceLocationInfo()
-    : StackMapInfo(StackMapInfoType::kExternalReferenceLocation) {}
-
-CodeConstantInfo::CodeConstantInfo()
-    : StackMapInfo(StackMapInfoType::kCodeConstant) {}
-
-CodeConstantLocationInfo::CodeConstantLocationInfo()
-    : StackMapInfo(StackMapInfoType::kCodeConstantLocation) {}
+StackMapInfo::~StackMapInfo() {}
 
 CallInfo::CallInfo(LocationVector&& locations)
     : StackMapInfo(StackMapInfoType::kCallInfo),

@@ -10,11 +10,10 @@ namespace tf_llvm {
 
 enum class StackMapInfoType {
   kHeapConstant,
-  kHeapConstantLocation,
   kExternalReference,
-  kExternalReferenceLocation,
   kCodeConstant,
-  kCodeConstantLocation,
+  kIsolateExternalReferenceLocation,
+  kRecordStubCodeLocation,
   kCallInfo,
   kStoreBarrier
 };
@@ -22,48 +21,12 @@ enum class StackMapInfoType {
 class StackMapInfo {
  public:
   explicit StackMapInfo(StackMapInfoType);
-  virtual ~StackMapInfo() = default;
+  virtual ~StackMapInfo();
 
   StackMapInfoType GetType() const { return type_; }
 
  private:
   const StackMapInfoType type_;
-};
-
-class HeapConstantInfo final : public StackMapInfo {
- public:
-  explicit HeapConstantInfo();
-  ~HeapConstantInfo() override = default;
-};
-
-class HeapConstantLocationInfo final : public StackMapInfo {
- public:
-  explicit HeapConstantLocationInfo();
-  ~HeapConstantLocationInfo() override = default;
-};
-
-class ExternalReferenceInfo final : public StackMapInfo {
- public:
-  explicit ExternalReferenceInfo();
-  ~ExternalReferenceInfo() override = default;
-};
-
-class ExternalReferenceLocationInfo final : public StackMapInfo {
- public:
-  explicit ExternalReferenceLocationInfo();
-  ~ExternalReferenceLocationInfo() override = default;
-};
-
-class CodeConstantInfo final : public StackMapInfo {
- public:
-  explicit CodeConstantInfo();
-  ~CodeConstantInfo() override = default;
-};
-
-class CodeConstantLocationInfo final : public StackMapInfo {
- public:
-  explicit CodeConstantLocationInfo();
-  ~CodeConstantLocationInfo() override = default;
 };
 
 class CallInfo final : public StackMapInfo {

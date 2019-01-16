@@ -291,11 +291,9 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
 void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
                                           LValue remembered_set_action,
                                           LValue save_fp_mode) {
-  // mov ip xxx,
   // blx ip
-  // mov r2 xxx
-  // 3 instructions.
-  int instructions_count = 3;
+  // 1 instructions.
+  int instructions_count = 1;
   int patchid = patch_point_id_;
   // will not be true again.
   if (!needs_frame_) {
@@ -303,13 +301,18 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
     instructions_count += 2;
     output().ensureLR();
   }
+  LValue isolate = output().buildLoadMagic(
+      output().repo().ref8,
+      LoadConstantRecorder::IsolateExternalReferenceMagic());
+  LValue stub = output().buildLoadMagic(
+      output().repo().ref8,
+      LoadConstantRecorder::RecordStubCodeConstantMagic());
 
   LValue call = output().buildCall(
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
       output().constInt32(4 * instructions_count),
-      constNull(output().repo().ref8), output().constInt32(6), base, offset,
-      LLVMGetUndef(output().repo().int32), remembered_set_action, save_fp_mode,
-      output().root());
+      constNull(output().repo().ref8), output().constInt32(7), base, offset,
+      isolate, remembered_set_action, save_fp_mode, output().root(), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(new StoreBarrierInfo());
 #if defined(UC_3_0)
@@ -1027,7 +1030,7 @@ void LLVMTFBuilder::VisitIfDefault(int id) {}
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   LValue value = output().buildLoadMagic(output().taggedType(), magic);
   GetImpl(current_bb_)->set_value(id, value);
-  load_constant_recorder_->Register(magic, LoadConstantRecorder::HeapConstant);
+  load_constant_recorder_->Register(magic, LoadConstantRecorder::kHeapConstant);
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
@@ -1035,7 +1038,7 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
       output().buildLoadMagic(pointerType(output().repo().int8), magic);
   GetImpl(current_bb_)->set_value(id, value);
   load_constant_recorder_->Register(magic,
-                                    LoadConstantRecorder::ExternalReference);
+                                    LoadConstantRecorder::kExternalReference);
 }
 
 void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
@@ -1089,7 +1092,7 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
 void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
   LValue value = output().buildLoadMagic(output().repo().ref8, magic);
   GetImpl(current_bb_)->set_value(id, value);
-  load_constant_recorder_->Register(magic, LoadConstantRecorder::CodeConstant);
+  load_constant_recorder_->Register(magic, LoadConstantRecorder::kCodeConstant);
 }
 
 void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {
