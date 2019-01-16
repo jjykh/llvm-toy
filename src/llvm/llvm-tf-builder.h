@@ -41,7 +41,6 @@ class LLVMTFBuilder final : public TFVisitor {
   LValue EnsureWord32(LValue);
   LValue EnsurePhiInput(BasicBlock*, int, LType);
   LValue EnsurePhiInputAndPosition(BasicBlock*, int, LType);
-  using CodeUsesMap = std::unordered_map<int, int64_t>;
   Output* output_;
   BasicBlockManager* basic_block_manager_;
   BasicBlock* current_bb_;
@@ -49,7 +48,6 @@ class LLVMTFBuilder final : public TFVisitor {
   LoadConstantRecorder* load_constant_recorder_;
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
-  CodeUsesMap code_uses_map_;
   int64_t state_point_id_next_;
 };
 }  // namespace tf_llvm

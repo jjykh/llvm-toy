@@ -8,7 +8,7 @@ namespace tf_llvm {
 
 class LoadConstantRecorder {
  public:
-  enum Type { ExternalReference, HeapConstant, Code };
+  enum Type { ExternalReference, HeapConstant, CodeConstant };
   LoadConstantRecorder() = default;
   ~LoadConstantRecorder() = default;
   void Register(int64_t magic, Type type);

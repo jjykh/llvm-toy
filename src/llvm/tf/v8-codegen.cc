@@ -40,6 +40,8 @@ class CodeGeneratorLLVM {
   int HandleHeapConstantLocation(const HeapConstantLocationInfo*);
   int HandleExternalReference(const ExternalReferenceInfo*);
   int HandleExternalReferenceLocation(const ExternalReferenceLocationInfo*);
+  int HandleCodeConstant(const CodeConstantInfo*);
+  int HandleCodeConstantLocation(const CodeConstantLocationInfo*);
   int HandleCall(const CallInfo*, const StackMaps::Record&);
   int HandleStoreBarrier(const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
@@ -110,6 +112,18 @@ int CodeGeneratorLLVM::HandleExternalReferenceLocation(
   return 1;
 }
 
+int CodeGeneratorLLVM::HandleCodeConstant(const CodeConstantInfo*) {
+  masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
+  masm_.dd(reference_instruction_);
+  return 1;
+}
+
+int CodeGeneratorLLVM::HandleCodeConstantLocation(
+    const CodeConstantLocationInfo*) {
+  masm_.dd(reference_instruction_);
+  return 1;
+}
+
 int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
                                   const StackMaps::Record& record) {
   auto call_paramters_iterator = call_info->locations().begin();
@@ -123,16 +137,10 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     masm_.push(Register::from_code(*call_paramters_iterator));
   }
 
-  if (!call_info->code_magic()) {
-    if (!call_info->tailcall())
-      masm_.blx(Register::from_code(call_target_reg));
-    else
-      masm_.bx(Register::from_code(call_target_reg));
-  } else {
-    PushDeferredCodeGen(call_info->tailcall() ? DeferredCodeGen::TailCallCode
-                                              : DeferredCodeGen::CallCode,
-                        call_info->code_magic(), 2);
-  }
+  if (!call_info->tailcall())
+    masm_.blx(Register::from_code(call_target_reg));
+  else
+    masm_.bx(Register::from_code(call_target_reg));
   if (!call_info->tailcall()) {
     // record safepoint
     // FIXME: (UC_linzj) kLazyDeopt is abusing, pass frame-state flags to
@@ -178,6 +186,12 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
     case StackMapInfoType::kExternalReferenceLocation:
       return HandleExternalReferenceLocation(
           static_cast<const ExternalReferenceLocationInfo*>(stack_map_info));
+    case StackMapInfoType::kCodeConstant:
+      return HandleCodeConstant(
+          static_cast<const CodeConstantInfo*>(stack_map_info));
+    case StackMapInfoType::kCodeConstantLocation:
+      return HandleCodeConstantLocation(
+          static_cast<const CodeConstantLocationInfo*>(stack_map_info));
     case StackMapInfoType::kCallInfo:
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), *record);
     case StackMapInfoType::kStoreBarrier:
@@ -285,6 +299,11 @@ void CodeGeneratorLLVM::ProcessCode(
         case LoadConstantRecorder::ExternalReference:
           InsertLoadConstantInfoIfNeeded<ExternalReferenceInfo,
                                          ExternalReferenceLocationInfo>(
+              constant_pc_offset, pc_offset);
+          break;
+        case LoadConstantRecorder::CodeConstant:
+          InsertLoadConstantInfoIfNeeded<CodeConstantInfo,
+                                         CodeConstantLocationInfo>(
               constant_pc_offset, pc_offset);
           break;
         default:

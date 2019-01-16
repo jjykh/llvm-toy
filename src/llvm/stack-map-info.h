@@ -13,6 +13,8 @@ enum class StackMapInfoType {
   kHeapConstantLocation,
   kExternalReference,
   kExternalReferenceLocation,
+  kCodeConstant,
+  kCodeConstantLocation,
   kCallInfo,
   kStoreBarrier
 };
@@ -52,6 +54,18 @@ class ExternalReferenceLocationInfo final : public StackMapInfo {
   ~ExternalReferenceLocationInfo() override = default;
 };
 
+class CodeConstantInfo final : public StackMapInfo {
+ public:
+  explicit CodeConstantInfo();
+  ~CodeConstantInfo() override = default;
+};
+
+class CodeConstantLocationInfo final : public StackMapInfo {
+ public:
+  explicit CodeConstantLocationInfo();
+  ~CodeConstantLocationInfo() override = default;
+};
+
 class CallInfo final : public StackMapInfo {
  public:
   typedef std::vector<int> LocationVector;
@@ -60,12 +74,9 @@ class CallInfo final : public StackMapInfo {
   const LocationVector& locations() const { return locations_; }
   bool tailcall() const { return tailcall_; }
   void set_tailcall(bool _tailcall) { tailcall_ = _tailcall; }
-  int64_t code_magic() const { return code_magic_; }
-  void set_code_magic(int64_t _code_magic) { code_magic_ = _code_magic; }
 
  private:
   LocationVector locations_;
-  int64_t code_magic_;
   bool tailcall_;
 };
 

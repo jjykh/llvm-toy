@@ -17,10 +17,15 @@ ExternalReferenceInfo::ExternalReferenceInfo()
 ExternalReferenceLocationInfo::ExternalReferenceLocationInfo()
     : StackMapInfo(StackMapInfoType::kExternalReferenceLocation) {}
 
+CodeConstantInfo::CodeConstantInfo()
+    : StackMapInfo(StackMapInfoType::kCodeConstant) {}
+
+CodeConstantLocationInfo::CodeConstantLocationInfo()
+    : StackMapInfo(StackMapInfoType::kCodeConstantLocation) {}
+
 CallInfo::CallInfo(LocationVector&& locations)
     : StackMapInfo(StackMapInfoType::kCallInfo),
       locations_(std::move(locations)),
-      code_magic_(0),
       tailcall_(false) {}
 
 StoreBarrierInfo::StoreBarrierInfo()

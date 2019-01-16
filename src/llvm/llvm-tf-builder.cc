@@ -212,13 +212,9 @@ void CallOperandResolver::Resolve(
   // setup artifact operands' value
   SetOperandValue(kRootReg, output().root());
   SetOperandValue(kFPReg, output().fp());
-  if (!LLVMIsUndef(target_)) {
-    int target_reg = FindNextReg();
-    SetOperandValue(target_reg, target_);
-    locations_.push_back(target_reg);
-  } else {
-    locations_.push_back(-1);
-  }
+  int target_reg = FindNextReg();
+  SetOperandValue(target_reg, target_);
+  locations_.push_back(target_reg);
 
   for (auto operand : stack_operands) {
     LValue llvm_val = GetImpl(current_bb_)->value(operand);
@@ -466,22 +462,17 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   auto operands_iterator = operands.begin();
   LValue ret;
   LValue target;
-  int64_t code_magic = 0;
   int addition_branch_instructions = 0;
   // layout
   // return value | register operands | stack operands | artifact operands
   if (code) {
-    int code_value = *(operands_iterator++);
-    auto found = code_uses_map_.find(code_value);
-    if (found != code_uses_map_.end()) {
-      code_magic = found->second;
-      target = LLVMGetUndef(output().repo().intPtr);
-      // ldr to ip
-      addition_branch_instructions += 1;
+    LValue code_value = GetImpl(current_bb_)->value(*(operands_iterator++));
+    if (typeOf(code_value) != output().taggedType()) {
+      EMASSERT(typeOf(code_value) == output().repo().ref8);
+      target = code_value;
     } else {
       target = output().buildGEPWithByteOffset(
-          GetImpl(current_bb_)->value(code_value),
-          output().constInt32(Code::kHeaderSize - kHeapObjectTag),
+          code_value, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
           output().repo().ref8);
     }
   } else {
@@ -567,7 +558,6 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   std::unique_ptr<StackMapInfo> info(
       new CallInfo(std::move(call_operand_resolver.release_location())));
   static_cast<CallInfo*>(info.get())->set_tailcall(tailcall);
-  static_cast<CallInfo*>(info.get())->set_code_magic(code_magic);
 #if defined(UC_3_0)
   stack_map_info_map_->emplace(patchid, std::move(info));
 #else
@@ -1097,12 +1087,9 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
 }
 
 void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
-  load_constant_recorder_->Register(magic, LoadConstantRecorder::Code);
-#if defined(UC_3_0)
-  code_uses_map_.emplace(id, magic);
-#else
-  code_uses_map_.insert(std::make_pair(id, magic));
-#endif
+  LValue value = output().buildLoadMagic(output().repo().ref8, magic);
+  GetImpl(current_bb_)->set_value(id, value);
+  load_constant_recorder_->Register(magic, LoadConstantRecorder::CodeConstant);
 }
 
 void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {
