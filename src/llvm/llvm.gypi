@@ -17,6 +17,7 @@
             'llvm-tf-builder.cc',
             'llvm-tf-builder.cc',
             'stack-map-info.cc',
+            'load-constant-recorder.cc',
         ],
         'llvmlog_level': 0,
     },
