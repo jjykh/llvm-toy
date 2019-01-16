@@ -11,10 +11,12 @@ namespace tf_llvm {
 class Output;
 class BasicBlock;
 class BasicBlockManager;
+class LoadConstantRecorder;
 
 class LLVMTFBuilder final : public TFVisitor {
  public:
-  explicit LLVMTFBuilder(Output&, BasicBlockManager&, StackMapInfoMap&);
+  explicit LLVMTFBuilder(Output&, BasicBlockManager&, StackMapInfoMap&,
+                         LoadConstantRecorder&);
   void End();
 
  private:
@@ -44,6 +46,7 @@ class LLVMTFBuilder final : public TFVisitor {
   BasicBlockManager* basic_block_manager_;
   BasicBlock* current_bb_;
   StackMapInfoMap* stack_map_info_map_;
+  LoadConstantRecorder* load_constant_recorder_;
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
   CodeUsesMap code_uses_map_;

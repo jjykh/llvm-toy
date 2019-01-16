@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 #include "src/llvm/llvm-headers.h"
+#include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/stack-map-info.h"
 
 namespace v8 {
@@ -24,8 +25,9 @@ struct CompilerState {
   BufferList dataSectionList_;
   StringList codeSectionNames_;
   StringList dataSectionNames_;
+  StackMapInfoMap stack_map_info_map_;
+  LoadConstantRecorder load_constant_recorder_;
   ByteBuffer* stackMapsSection_;
-  StackMapInfoMap stack_map_info_map;
   LLVMModuleRef module_;
   LLVMValueRef function_;
   LLVMContextRef context_;

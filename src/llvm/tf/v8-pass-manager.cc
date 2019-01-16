@@ -16,6 +16,7 @@
 #include "src/llvm/basic-block.h"
 #include "src/llvm/liveness-analysis-visitor.h"
 #include "src/llvm/llvm-tf-builder.h"
+#include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/tf/tf-parser.h"
 #include "src/llvm/tf/v8-codegen.h"
 
@@ -146,7 +147,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     }
     output.initializeBuild(input_desc);
     tf_llvm::LLVMTFBuilder builder(output, BBM,
-                                   compiler_state.stack_map_info_map);
+                                   compiler_state.stack_map_info_map_,
+                                   compiler_state.load_constant_recorder_);
     llvm_emitter.Visit(&builder);
     builder.End();
 #if 0

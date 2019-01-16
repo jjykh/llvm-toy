@@ -30,42 +30,26 @@ class StackMapInfo {
 
 class HeapConstantInfo final : public StackMapInfo {
  public:
-  explicit HeapConstantInfo(const void* pc);
+  explicit HeapConstantInfo();
   ~HeapConstantInfo() override = default;
-  const void* pc() const { return pc_; }
-
- private:
-  const void* pc_;
 };
 
 class HeapConstantLocationInfo final : public StackMapInfo {
  public:
-  explicit HeapConstantLocationInfo(const void* pc);
+  explicit HeapConstantLocationInfo();
   ~HeapConstantLocationInfo() override = default;
-  const void* pc() const { return pc_; }
-
- private:
-  const void* pc_;
 };
 
 class ExternalReferenceInfo final : public StackMapInfo {
  public:
-  explicit ExternalReferenceInfo(const void* pc);
+  explicit ExternalReferenceInfo();
   ~ExternalReferenceInfo() override = default;
-  const void* pc() const { return pc_; }
-
- private:
-  const void* pc_;
 };
 
 class ExternalReferenceLocationInfo final : public StackMapInfo {
  public:
-  explicit ExternalReferenceLocationInfo(const void* pc);
+  explicit ExternalReferenceLocationInfo();
   ~ExternalReferenceLocationInfo() override = default;
-  const void* pc() const { return pc_; }
-
- private:
-  const void* pc_;
 };
 
 class CallInfo final : public StackMapInfo {

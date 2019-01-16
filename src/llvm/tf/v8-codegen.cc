@@ -44,13 +44,15 @@ class CodeGeneratorLLVM {
   int HandleStoreBarrier(const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
-  void ProcessCode(const uint32_t* code_start, const uint32_t* code_end);
+  void ProcessCode(const uint32_t* code_start, const uint32_t* code_end,
+                   const LoadConstantRecorder&);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
   void PushDeferredCodeGen(DeferredCodeGen::Type type, int64_t magic,
                            int fake_op_count);
   void FlushDeferredCodeGenQueue();
-  Handle<Code> LookupCode(int64_t magic);
+  template <class InfoType, class LocationType>
+  void InsertLoadConstantInfoIfNeeded(int constant_pc_offset, int pc_offset);
   friend class DeferredCodeGen;
 
   struct RecordReference {
@@ -72,6 +74,7 @@ class CodeGeneratorLLVM {
   InfoStorage info_storage_;
   DeferredCodeGenQueue deferred_codegen_queue_;
   CodeHandleMap code_handle_map_;
+  uint32_t reference_instruction_;
   int slot_count_ = 0;
   bool needs_frame_ = false;
 };
@@ -84,30 +87,26 @@ CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
 
 int CodeGeneratorLLVM::HandleHeapConstant(const HeapConstantInfo* heap_info) {
   masm_.RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
-  masm_.dd(*static_cast<const uint32_t*>(heap_info->pc()));
+  masm_.dd(reference_instruction_);
   return 1;
 }
 
 int CodeGeneratorLLVM::HandleHeapConstantLocation(
     const HeapConstantLocationInfo* heap_location_info) {
-  Handle<HeapObject> object =
-      handle(reinterpret_cast<HeapObject*>(
-                 reinterpret_cast<intptr_t>(heap_location_info->pc())),
-             isolate_);
-  masm_.dd(reinterpret_cast<intptr_t>(object.location()));
+  masm_.dd(reference_instruction_);
   return 1;
 }
 
 int CodeGeneratorLLVM::HandleExternalReference(
     const ExternalReferenceInfo* external_info) {
   masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-  masm_.dd(*static_cast<const uint32_t*>(external_info->pc()));
+  masm_.dd(reference_instruction_);
   return 1;
 }
 
 int CodeGeneratorLLVM::HandleExternalReferenceLocation(
     const ExternalReferenceLocationInfo* external_location_info) {
-  masm_.dd(reinterpret_cast<intptr_t>(external_location_info->pc()));
+  masm_.dd(reference_instruction_);
   return 1;
 }
 
@@ -200,8 +199,9 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   unsigned num_bytes = code.size();
   const uint32_t* instruction_end =
       reinterpret_cast<const uint32_t*>(code.data() + num_bytes);
-  ProcessCode(instruction_pointer, instruction_end);
-  ProcessRecordMap(rm, state.stack_map_info_map);
+  ProcessCode(instruction_pointer, instruction_end,
+              state.load_constant_recorder_);
+  ProcessRecordMap(rm, state.stack_map_info_map_);
 
   slot_count_ = state.frame_slot_count_;
   int incremental = 0;
@@ -228,6 +228,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
       CHECK((pc_offset + num_bytes) == code.size());
       auto found = record_reference_map_.find(pc_offset);
       if (found != record_reference_map_.end()) {
+        reference_instruction_ = *instruction_pointer;
         auto& record_reference = found->second;
         incremental =
             HandleStackMapInfo(record_reference.info, record_reference.record);
@@ -253,8 +254,9 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   return new_object;
 }
 
-void CodeGeneratorLLVM::ProcessCode(const uint32_t* code_start,
-                                    const uint32_t* code_end) {
+void CodeGeneratorLLVM::ProcessCode(
+    const uint32_t* code_start, const uint32_t* code_end,
+    const LoadConstantRecorder& load_constant_recorder) {
   for (auto instruction_pointer = code_start; instruction_pointer != code_end;
        instruction_pointer += 1) {
     uint32_t instruction = *instruction_pointer;
@@ -268,50 +270,25 @@ void CodeGeneratorLLVM::ProcessCode(const uint32_t* code_start,
       int constant_pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(&address));
-      if (reinterpret_cast<intptr_t>(address) & 1) {
-        auto found = record_reference_map_.find(constant_pc_offset);
-        if (found == record_reference_map_.end()) {
-          to_push.reset(new HeapConstantInfo(instruction_pointer));
-          info_storage_.emplace_back(new HeapConstantLocationInfo(address));
-#if defined(UC_3_0)
-          record_reference_map_.emplace(
-              constant_pc_offset,
-              RecordReference(nullptr, info_storage_.back().get()));
-#else
-          record_reference_map_.insert(std::make_pair(
-              constant_pc_offset,
-              RecordReference(nullptr, info_storage_.back().get())));
-#endif
-        }
-      } else {
-        auto found = record_reference_map_.find(constant_pc_offset);
-        if (found == record_reference_map_.end()) {
-          to_push.reset(new ExternalReferenceInfo(instruction_pointer));
-          info_storage_.emplace_back(
-              new ExternalReferenceLocationInfo(address));
-#if defined(UC_3_0)
-          record_reference_map_.emplace(
-              constant_pc_offset,
-              RecordReference(nullptr, info_storage_.back().get()));
-#else
-          record_reference_map_.insert(std::make_pair(
-              constant_pc_offset,
-              RecordReference(nullptr, info_storage_.back().get())));
-#endif
-        }
-      }
       int pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(instruction_pointer));
-      if (to_push) {
-        info_storage_.emplace_back(std::move(to_push));
-#if defined(UC_3_0)
-        record_reference_map_.emplace(
-            pc_offset, RecordReference(nullptr, info_storage_.back().get()));
-#else
-        record_reference_map_.insert(std::make_pair(
-            pc_offset, RecordReference(nullptr, info_storage_.back().get())));
-#endif
+
+      LoadConstantRecorder::Type type =
+          load_constant_recorder.Query(reinterpret_cast<int64_t>(address));
+      switch (type) {
+        case LoadConstantRecorder::HeapConstant:
+          InsertLoadConstantInfoIfNeeded<HeapConstantInfo,
+                                         HeapConstantLocationInfo>(
+              constant_pc_offset, pc_offset);
+          break;
+        case LoadConstantRecorder::ExternalReference:
+          InsertLoadConstantInfoIfNeeded<ExternalReferenceInfo,
+                                         ExternalReferenceLocationInfo>(
+              constant_pc_offset, pc_offset);
+          break;
+        default:
+          UNREACHABLE();
       }
     }
   }
@@ -359,14 +336,30 @@ void CodeGeneratorLLVM::FlushDeferredCodeGenQueue() {
   masm_.reset_pc(pc_offset);
 }
 
-Handle<Code> CodeGeneratorLLVM::LookupCode(int64_t magic) {
-  auto found = code_handle_map_.find(magic);
-  if (found == code_handle_map_.end()) {
-    auto inserted = code_handle_map_.insert(std::make_pair(
-        magic, handle(reinterpret_cast<Code*>(magic), isolate_)));
-    return inserted.first->second;
+template <class InfoType, class LocationType>
+void CodeGeneratorLLVM::InsertLoadConstantInfoIfNeeded(int constant_pc_offset,
+                                                       int pc_offset) {
+  auto found = record_reference_map_.find(constant_pc_offset);
+  if (found == record_reference_map_.end()) {
+    info_storage_.emplace_back(new LocationType());
+#if defined(UC_3_0)
+    record_reference_map_.emplace(
+        constant_pc_offset,
+        RecordReference(nullptr, info_storage_.back().get()));
+#else
+    record_reference_map_.insert(
+        std::make_pair(constant_pc_offset,
+                       RecordReference(nullptr, info_storage_.back().get())));
+#endif
+    info_storage_.emplace_back(new InfoType());
+#if defined(UC_3_0)
+    record_reference_map_.emplace(
+        pc_offset, RecordReference(nullptr, info_storage_.back().get()));
+#else
+    record_reference_map_.insert(std::make_pair(
+        pc_offset, RecordReference(nullptr, info_storage_.back().get())));
+#endif
   }
-  return found->second;
 }
 
 CodeGeneratorLLVM::RecordReference::RecordReference(
@@ -384,11 +377,11 @@ void DeferredCodeGen::Run(CodeGeneratorLLVM* generator) {
   int pc_offset = masm->pc_offset();
   switch (type_) {
     case CallCode: {
-      Handle<Code> code = generator->LookupCode(magic_);
+      Handle<Code> code = Handle<Code>(reinterpret_cast<Code**>(magic_));
       masm->Call(code, RelocInfo::CODE_TARGET);
     } break;
     case TailCallCode: {
-      Handle<Code> code = generator->LookupCode(magic_);
+      Handle<Code> code = Handle<Code>(reinterpret_cast<Code**>(magic_));
       masm->Jump(code, RelocInfo::CODE_TARGET);
     } break;
     case StoreWB: {

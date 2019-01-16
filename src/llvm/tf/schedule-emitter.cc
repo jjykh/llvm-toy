@@ -152,13 +152,13 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
         if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
              (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
             (iterator == uses.end())) {
-          visitor->VisitCodeForCall(node->id(),
-                                    reinterpret_cast<int64_t>(*object));
+          visitor->VisitCodeForCall(
+              node->id(), reinterpret_cast<int64_t>(object.location()));
           return;
         }
       }
       visitor->VisitHeapConstant(node->id(),
-                                 reinterpret_cast<int64_t>(*object));
+                                 reinterpret_cast<int64_t>(object.location()));
     }
       return;
     case compiler::IrOpcode::kNumberConstant: {

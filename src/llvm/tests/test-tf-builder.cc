@@ -40,7 +40,8 @@ static void buildIR(State& state) {
                                   {8, output.taggedType()},
                                   {7, output.taggedType()}};
     output.initializeBuild(desc);
-    LLVMTFBuilder builder(output, BBM, state.stack_map_info_map);
+    LLVMTFBuilder builder(output, BBM, state.stack_map_info_map_,
+                          state_.load_constant_recorder_);
     TFParser tfparser(&builder);
     tfparser.Parse(f);
     builder.End();

@@ -5,6 +5,7 @@
 #include "src/heap/spaces.h"
 #include "src/llvm/basic-block-manager.h"
 #include "src/llvm/basic-block.h"
+#include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/output.h"
 #include "src/objects.h"
 
@@ -339,11 +340,13 @@ void StoreBarrierResolver::CheckSmi(LValue value) {
 
 LLVMTFBuilder::LLVMTFBuilder(Output& output,
                              BasicBlockManager& basic_block_manager,
-                             StackMapInfoMap& stack_map_info_map)
+                             StackMapInfoMap& stack_map_info_map,
+                             LoadConstantRecorder& load_constant_recorder)
     : output_(&output),
       basic_block_manager_(&basic_block_manager),
       current_bb_(nullptr),
       stack_map_info_map_(&stack_map_info_map),
+      load_constant_recorder_(&load_constant_recorder),
       state_point_id_next_(0) {}
 
 void LLVMTFBuilder::End() {
@@ -1034,12 +1037,15 @@ void LLVMTFBuilder::VisitIfDefault(int id) {}
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   LValue value = output().buildLoadMagic(output().taggedType(), magic);
   GetImpl(current_bb_)->set_value(id, value);
+  load_constant_recorder_->Register(magic, LoadConstantRecorder::HeapConstant);
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   LValue value =
       output().buildLoadMagic(pointerType(output().repo().int8), magic);
   GetImpl(current_bb_)->set_value(id, value);
+  load_constant_recorder_->Register(magic,
+                                    LoadConstantRecorder::ExternalReference);
 }
 
 void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
@@ -1091,6 +1097,7 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
 }
 
 void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
+  load_constant_recorder_->Register(magic, LoadConstantRecorder::Code);
 #if defined(UC_3_0)
   code_uses_map_.emplace(id, magic);
 #else
