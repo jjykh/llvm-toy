@@ -11,8 +11,7 @@ Output::Output(CompilerState& state)
       builder_(nullptr),
       prologue_(nullptr),
       root_(nullptr),
-      fp_(nullptr),
-      stackMapsId_(1) {}
+      fp_(nullptr) {}
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {

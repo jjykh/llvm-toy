@@ -116,7 +116,6 @@ class Output {
   LValue lr_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;
-  uint32_t stackMapsId_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

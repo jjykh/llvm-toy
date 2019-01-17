@@ -409,8 +409,8 @@ void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
   LValue maybe_return =
       output().buildCast(LLVMFPToSI, fp, output().repo().int32);
   LValue subed = output().buildSub(maybe_return, output().constInt32(1));
-  LValue cmp_val = output().buildICmp(LLVMIntSGE, maybe_return,
-                                      output().constInt32(0x7ffffffe));
+  LValue cmp_val =
+      output().buildICmp(LLVMIntSGE, subed, output().constInt32(0x7ffffffe));
   cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
                                output().constInt1(0));
   output().buildCondBr(cmp_val, slow_bb, impl_->continuation);
@@ -420,7 +420,6 @@ void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
 
 void TruncateFloat64ToWord32Resolver::SlowPath(LValue fp, LBasicBlock slow_bb) {
   output().positionToBBEnd(slow_bb);
-  static const int kExponentBias = 1023;
   LValue fp_storage = output().buildAlloca(typeOf(fp));
   output().buildStore(fp, fp_storage);
   LValue fp_bitcast_pointer_low =
