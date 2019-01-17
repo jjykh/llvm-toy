@@ -138,27 +138,62 @@ class CallOperandResolver {
   int next_reg_;
 };
 
-class StoreBarrierResolver {
+class ContinuationResolver {
+ protected:
+  ContinuationResolver(BasicBlock* bb, Output& output, int id);
+  ~ContinuationResolver() = default;
+  void CreateContination();
+  inline Output& output() { return *output_; }
+  inline BasicBlock* current_bb() { return current_bb_; }
+  inline int id() { return id_; }
+  LBasicBlock old_continuation_;
+  LLVMTFBuilderBasicBlockImpl* impl_;
+
+ private:
+  BasicBlock* current_bb_;
+  Output* output_;
+  int id_;
+};
+
+class StoreBarrierResolver final : public ContinuationResolver {
  public:
-  StoreBarrierResolver(BasicBlock* bb, Output& output,
-                       StackMapInfoMap* stack_map_info_map, int id,
-                       int patch_point_id, bool needs_frame);
+  StoreBarrierResolver(BasicBlock* bb, Output& output, int id,
+                       StackMapInfoMap* stack_map_info_map, int patch_point_id,
+                       bool needs_frame);
   void Resolve(LValue base, LValue offset, LValue value,
                WriteBarrierKind barrier_kind);
 
  private:
-  LBasicBlock CreateContination();
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
                       LValue save_fp_mode);
   void CheckSmi(LValue value);
-  inline Output& output() { return *output_; }
-  BasicBlock* current_bb_;
-  Output* output_;
   StackMapInfoMap* stack_map_info_map_;
   int id_;
   int patch_point_id_;
   bool needs_frame_;
+};
+
+class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
+ public:
+  TruncateFloat64ToWord32Resolver(BasicBlock* bb, Output& output, int id);
+  LValue Resolve(LValue fp);
+
+ private:
+  void FastPath(LValue fp, LBasicBlock slow_bb);
+  void SlowPath(LValue fp, LBasicBlock slow_bb);
+  void OutOfRange(LBasicBlock bb);
+  void Extract(LBasicBlock bb, LValue fp_low, LValue fp_high,
+               LValue sub_exponent);
+  LValue OnlyLow(LBasicBlock only_low_bb, LBasicBlock negate_bb, LValue fp_low,
+                 LValue sub_exponent);
+  LValue Mix(LBasicBlock mix_bb, LBasicBlock negate_bb, LValue fp_low,
+             LValue fp_high, LValue sub_exponent);
+  void Negate(LBasicBlock negate_bb, LValue only_low_value, LValue mix_value,
+              LBasicBlock only_low_bb, LBasicBlock mix_bb, LValue fp_high);
+
+  std::vector<LValue> to_merge_value_;
+  std::vector<LBasicBlock> to_merge_block_;
 };
 
 CallOperandResolver::CallOperandResolver(BasicBlock* current_bb, Output& output,
@@ -224,21 +259,35 @@ void CallOperandResolver::Resolve(
   }
 }
 
-StoreBarrierResolver::StoreBarrierResolver(BasicBlock* bb, Output& output,
-                                           StackMapInfoMap* stack_map_info_map,
-                                           int id, int patch_point_id,
-                                           bool needs_frame)
-    : current_bb_(bb),
+ContinuationResolver::ContinuationResolver(BasicBlock* bb, Output& output,
+                                           int id)
+    : old_continuation_(nullptr),
+      impl_(nullptr),
+      current_bb_(bb),
       output_(&output),
+      id_(id) {}
+
+void ContinuationResolver::CreateContination() {
+  impl_ = GetImpl(current_bb());
+  char buf[256];
+  snprintf(buf, 256, "B%d_value%d_continuation", current_bb()->id(), id());
+  old_continuation_ = impl_->continuation;
+  impl_->continuation = output().appendBasicBlock(buf);
+}
+
+StoreBarrierResolver::StoreBarrierResolver(BasicBlock* bb, Output& output,
+
+                                           int id,
+                                           StackMapInfoMap* stack_map_info_map,
+                                           int patch_point_id, bool needs_frame)
+    : ContinuationResolver(bb, output, id),
       stack_map_info_map_(stack_map_info_map),
-      id_(id),
       patch_point_id_(patch_point_id),
       needs_frame_(needs_frame) {}
 
 void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
                                    WriteBarrierKind barrier_kind) {
-  auto impl = GetImpl(current_bb_);
-  impl->continuation = CreateContination();
+  CreateContination();
   CheckPageFlag(base, MemoryChunk::kPointersFromHereAreInterestingMask);
   if (barrier_kind > kPointerWriteBarrier) {
     CheckSmi(value);
@@ -253,15 +302,8 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
       output().constIntPtr(static_cast<int>(save_fp_mode) << 1));
-  output().buildBr(impl->continuation);
-  output().positionToBBEnd(impl->continuation);
-}
-
-LBasicBlock StoreBarrierResolver::CreateContination() {
-  char buf[256];
-  snprintf(buf, 256, "B%d_value%d_continuation", current_bb_->id(), id_);
-  LBasicBlock native_bb = output().appendBasicBlock(buf);
-  return native_bb;
+  output().buildBr(impl_->continuation);
+  output().positionToBBEnd(impl_->continuation);
 }
 
 void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
@@ -281,10 +323,11 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
 
   char buf[256];
-  snprintf(buf, 256, "B%d_value%d_checkpageflag_%d", current_bb_->id(), id_,
+  snprintf(buf, 256, "B%d_value%d_checkpageflag_%d", current_bb()->id(), id_,
            mask);
   LBasicBlock continuation = output().appendBasicBlock(buf);
-  output().buildCondBr(cmp, GetNativeBBContinuation(current_bb_), continuation);
+  output().buildCondBr(cmp, GetNativeBBContinuation(current_bb()),
+                       continuation);
   output().positionToBBEnd(continuation);
 }
 
@@ -329,10 +372,154 @@ void StoreBarrierResolver::CheckSmi(LValue value) {
   LValue cmp =
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
   char buf[256];
-  snprintf(buf, 256, "B%d_value%d_checksmi", current_bb_->id(), id_);
+  snprintf(buf, 256, "B%d_value%d_checksmi", current_bb()->id(), id());
   LBasicBlock continuation = output().appendBasicBlock(buf);
-  output().buildCondBr(cmp, GetNativeBBContinuation(current_bb_), continuation);
+  output().buildCondBr(cmp, GetNativeBBContinuation(current_bb()),
+                       continuation);
   output().positionToBBEnd(continuation);
+}
+
+TruncateFloat64ToWord32Resolver::TruncateFloat64ToWord32Resolver(BasicBlock* bb,
+                                                                 Output& output,
+                                                                 int id)
+    : ContinuationResolver(bb, output, id) {}
+
+LValue TruncateFloat64ToWord32Resolver::Resolve(LValue fp) {
+  CreateContination();
+  char buf[256];
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_slow", id());
+  LBasicBlock slow_bb = output().appendBasicBlock(buf);
+  FastPath(fp, slow_bb);
+  SlowPath(fp, slow_bb);
+#if 0
+  char kUdf[] = "udf #0\n";
+  char empty[] = "\0";
+  output().buildInlineAsm(functionType(output().repo().voidType), kUdf,
+                          sizeof(kUdf) - 1, empty, 0, true);
+  output().buildUnreachable();
+#endif
+  output().positionToBBEnd(impl_->continuation);
+  LValue real_return = output().buildPhi(output().repo().int32);
+  addIncoming(real_return, to_merge_value_.data(), to_merge_block_.data(),
+              to_merge_block_.size());
+  return real_return;
+}
+
+void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
+  LValue maybe_return =
+      output().buildCast(LLVMFPToSI, fp, output().repo().int32);
+  LValue subed = output().buildSub(maybe_return, output().constInt32(1));
+  LValue cmp_val = output().buildICmp(LLVMIntSGE, maybe_return,
+                                      output().constInt32(0x7ffffffe));
+  cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
+                               output().constInt1(0));
+  output().buildCondBr(cmp_val, slow_bb, impl_->continuation);
+  to_merge_value_.push_back(maybe_return);
+  to_merge_block_.push_back(old_continuation_);
+}
+
+void TruncateFloat64ToWord32Resolver::SlowPath(LValue fp, LBasicBlock slow_bb) {
+  output().positionToBBEnd(slow_bb);
+  static const int kExponentBias = 1023;
+  LValue fp_storage = output().buildAlloca(typeOf(fp));
+  output().buildStore(fp, fp_storage);
+  LValue fp_bitcast_pointer_low =
+      output().buildBitCast(fp_storage, output().repo().ref32);
+  LValue fp_low = output().buildLoad(fp_bitcast_pointer_low);
+  LValue fp_bitcast_pointer_high = output().buildGEPWithByteOffset(
+      fp_bitcast_pointer_low, output().constInt32(sizeof(int32_t)),
+      output().repo().ref32);
+  LValue fp_high = output().buildLoad(fp_bitcast_pointer_high);
+  LValue exponent = output().buildShr(
+      fp_high, output().constInt32(HeapNumber::kExponentShift));
+  exponent = output().buildAnd(
+      exponent, output().constInt32((1 << HeapNumber::kExponentBits) - 1));
+  LValue sub_exponent = output().buildSub(
+      exponent, output().constInt32(HeapNumber::kExponentBias + 1));
+  LValue cmp_value =
+      output().buildICmp(LLVMIntSGE, sub_exponent, output().constInt32(83));
+  char buf[256];
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_out_of_range", id());
+  LBasicBlock out_of_range_bb = output().appendBasicBlock(buf);
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_extract", id());
+  LBasicBlock extract_bb = output().appendBasicBlock(buf);
+  output().buildCondBr(cmp_value, out_of_range_bb, extract_bb);
+  OutOfRange(out_of_range_bb);
+  Extract(extract_bb, fp_low, fp_high, sub_exponent);
+}
+
+void TruncateFloat64ToWord32Resolver::OutOfRange(LBasicBlock bb) {
+  output().positionToBBEnd(bb);
+  LValue zero = output().repo().int32Zero;
+  to_merge_value_.push_back(zero);
+  to_merge_block_.push_back(bb);
+  output().buildBr(impl_->continuation);
+}
+
+void TruncateFloat64ToWord32Resolver::Extract(LBasicBlock bb, LValue fp_low,
+                                              LValue fp_high,
+                                              LValue sub_exponent) {
+  output().positionToBBEnd(bb);
+  sub_exponent = output().buildSub(output().constInt32(51), sub_exponent);
+  char buf[256];
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_only_low", id());
+  LBasicBlock only_low_bb = output().appendBasicBlock(buf);
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_mix", id());
+  LBasicBlock mix_bb = output().appendBasicBlock(buf);
+  snprintf(buf, 256, "B_value%d_truncatefloat64toword32_negate", id());
+  LBasicBlock negate_bb = output().appendBasicBlock(buf);
+  LValue cmp_value =
+      output().buildICmp(LLVMIntSLE, sub_exponent, output().repo().int32Zero);
+  output().buildCondBr(cmp_value, only_low_bb, mix_bb);
+  LValue only_low_value = OnlyLow(only_low_bb, negate_bb, fp_low, sub_exponent);
+  LValue mix_value = Mix(mix_bb, negate_bb, fp_low, fp_high, sub_exponent);
+  Negate(negate_bb, only_low_value, mix_value, only_low_bb, mix_bb, fp_high);
+}
+
+LValue TruncateFloat64ToWord32Resolver::OnlyLow(LBasicBlock only_low_bb,
+                                                LBasicBlock negate_bb,
+                                                LValue fp_low,
+                                                LValue sub_exponent) {
+  output().positionToBBEnd(only_low_bb);
+  sub_exponent = output().buildNeg(sub_exponent);
+  LValue to_return = output().buildShl(fp_low, sub_exponent);
+  output().buildBr(negate_bb);
+  return to_return;
+}
+
+LValue TruncateFloat64ToWord32Resolver::Mix(LBasicBlock mix_bb,
+                                            LBasicBlock negate_bb,
+                                            LValue fp_low, LValue fp_high,
+                                            LValue sub_exponent) {
+  output().positionToBBEnd(mix_bb);
+  LValue low = output().buildShr(fp_low, sub_exponent);
+  sub_exponent = output().buildSub(output().constInt32(32), sub_exponent);
+  LValue mantissa_bits_in_top_word = output().buildAnd(
+      fp_high,
+      output().constInt32((1 << HeapNumber::kMantissaBitsInTopWord) - 1));
+  LValue high = output().buildOr(
+      mantissa_bits_in_top_word,
+      output().constInt32(1 << HeapNumber::kMantissaBitsInTopWord));
+  high = output().buildShl(high, sub_exponent);
+  LValue to_return = output().buildOr(low, high);
+  output().buildBr(negate_bb);
+  return to_return;
+}
+
+void TruncateFloat64ToWord32Resolver::Negate(
+    LBasicBlock negate_bb, LValue only_low_value, LValue mix_value,
+    LBasicBlock only_low_bb, LBasicBlock mix_bb, LValue fp_high) {
+  output().positionToBBEnd(negate_bb);
+  LValue to_merge = output().buildPhi(output().repo().int32);
+  addIncoming(to_merge, &only_low_value, &only_low_bb, 1);
+  addIncoming(to_merge, &mix_value, &mix_bb, 1);
+  LValue shr = output().buildShr(fp_high, output().constInt32(31));
+  LValue asr = output().buildSar(fp_high, output().constInt32(31));
+  LValue final_value = output().buildXor(to_merge, asr);
+  final_value = output().buildAdd(final_value, shr);
+  output().buildBr(impl_->continuation);
+  to_merge_value_.push_back(final_value);
+  to_merge_block_.push_back(negate_bb);
 }
 
 }  // namespace
@@ -794,8 +981,8 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   // store should not be recorded, whatever.
   GetImpl(current_bb_)->set_value(id, val);
   if (barrier != kNoWriteBarrier) {
-    StoreBarrierResolver resolver(current_bb_, output(), stack_map_info_map_,
-                                  id, state_point_id_next_++,
+    StoreBarrierResolver resolver(current_bb_, output(), id,
+                                  stack_map_info_map_, state_point_id_next_++,
                                   basic_block_manager().needs_frame());
     resolver.Resolve(GetImpl(current_bb_)->value(base), pointer, llvm_val,
                      barrier);
@@ -824,10 +1011,9 @@ void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
+  TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
   GetImpl(current_bb_)
-      ->set_value(id,
-                  output().buildCast(LLVMFPToUI, GetImpl(current_bb_)->value(e),
-                                     output().repo().int32));
+      ->set_value(id, resolver.Resolve(GetImpl(current_bb_)->value(e)));
 }
 
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {

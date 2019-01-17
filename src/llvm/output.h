@@ -33,6 +33,7 @@ class Output {
   LValue buildGEPWithByteOffset(LValue base, LValue offset, LType dstType);
   LValue buildLoad(LValue toLoad);
   LValue buildStore(LValue val, LValue pointer);
+  LValue buildNeg(LValue val);
   LValue buildAdd(LValue lhs, LValue rhs);
   LValue buildFAdd(LValue lhs, LValue rhs);
   LValue buildNSWAdd(LValue lhs, LValue rhs);
@@ -59,6 +60,7 @@ class Output {
   LValue buildSelect(LValue condition, LValue taken, LValue notTaken);
   LValue buildICmp(LIntPredicate cond, LValue left, LValue right);
   LValue buildPhi(LType type);
+  LValue buildAlloca(LType);
 
   inline LValue buildCall(LValue function, const LValue* args,
                           unsigned numArgs) {

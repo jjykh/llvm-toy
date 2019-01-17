@@ -116,6 +116,10 @@ LValue Output::buildStore(LValue val, LValue pointer) {
   return v8::internal::tf_llvm::buildStore(builder_, val, pointer);
 }
 
+LValue Output::buildNeg(LValue val) {
+  return v8::internal::tf_llvm::buildNeg(builder_, val);
+}
+
 LValue Output::buildAdd(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildAdd(builder_, lhs, rhs);
 }
@@ -249,6 +253,10 @@ LValue Output::buildLoadMagic(LType type, int64_t magic) {
 
 LValue Output::buildPhi(LType type) {
   return v8::internal::tf_llvm::buildPhi(builder_, type);
+}
+
+LValue Output::buildAlloca(LType type) {
+  return v8::internal::tf_llvm::buildAlloca(builder_, type);
 }
 
 LValue Output::buildGEPWithByteOffset(LValue base, LValue offset,
