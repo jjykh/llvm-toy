@@ -137,7 +137,7 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
 --- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 347537)
 +++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
-@@ -200,6 +200,13 @@
+@@ -200,6 +200,14 @@
           .setErrorStr(&Error)
           .setOptLevel((CodeGenOpt::Level)options.OptLevel)
           .setTargetOptions(targetOptions);
@@ -148,6 +148,7 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 +  AttrList.emplace_back("+neon");
 +  AttrList.emplace_back("+vfp3");
 +  builder.setMAttrs(AttrList);
++  builder.setMCPU("cortex-a57");
    bool JIT;
    if (Optional<CodeModel::Model> CM = unwrap(options.CodeModel, JIT))
      builder.setCodeModel(*CM);
