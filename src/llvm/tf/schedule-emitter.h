@@ -35,13 +35,9 @@ class ScheduleEmitter final {
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
                                 Heap::RootListIndex* index_return);
 
-  struct ArtifactState;
-  static const int kArtifactPredecessorStart = 10000;
-
   Isolate* isolate_;
   compiler::Schedule* schedule_;
   compiler::CallDescriptor* incoming_descriptor_;
-  std::unique_ptr<ArtifactState> artifact_state_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

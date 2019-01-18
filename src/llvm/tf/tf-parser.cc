@@ -305,6 +305,12 @@ void TFParser::HandleChangeInt32ToFloat64(int id, const std::string& properties,
   __builtin_unreachable();
 }
 
+void TFParser::HandleChangeFloat32ToFloat64(int id,
+                                            const std::string& properties,
+                                            const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
 void TFParser::HandleChangeUint32ToFloat64(int id,
                                            const std::string& properties,
                                            const OperandsVector& operands) {
@@ -317,7 +323,18 @@ void TFParser::HandleTruncateFloat64ToWord32(int id,
   __builtin_unreachable();
 }
 
+void TFParser::HandleTruncateFloat64ToFloat32(int id,
+                                              const std::string& properties,
+                                              const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
 void TFParser::HandleRoundFloat64ToInt32(int id, const std::string& properties,
+                                         const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
+void TFParser::HandleRoundInt32ToFloat32(int id, const std::string& properties,
                                          const OperandsVector& operands) {
   __builtin_unreachable();
 }

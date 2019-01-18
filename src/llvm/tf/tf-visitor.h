@@ -30,9 +30,12 @@ struct CallDescriptor {
             int base, int offset, int value))                                 \
   V(BitcastWordToTagged, (int id, int e))                                     \
   V(ChangeInt32ToFloat64, (int id, int e))                                    \
+  V(ChangeFloat32ToFloat64, (int id, int e))                                  \
   V(ChangeUint32ToFloat64, (int id, int e))                                   \
   V(TruncateFloat64ToWord32, (int id, int e))                                 \
+  V(TruncateFloat64ToFloat32, (int id, int e))                                \
   V(RoundFloat64ToInt32, (int id, int e))                                     \
+  V(RoundInt32ToFloat32, (int id, int e))                                     \
   V(Projection, (int id, int e, int index))                                   \
   V(Int32Add, (int id, int e1, int e2))                                       \
   V(Int32AddWithOverflow, (int id, int e1, int e2))                           \

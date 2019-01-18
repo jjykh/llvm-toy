@@ -202,6 +202,11 @@ void LivenessAnalysisVisitor::VisitChangeInt32ToFloat64(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitChangeFloat32ToFloat64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitChangeUint32ToFloat64(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
@@ -212,7 +217,17 @@ void LivenessAnalysisVisitor::VisitTruncateFloat64ToWord32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitTruncateFloat64ToFloat32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitRoundFloat64ToInt32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitRoundInt32ToFloat32(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -408,6 +423,7 @@ void LivenessAnalysisVisitor::VisitUint32LessThan(int id, int e1, int e2) {
 
 void LivenessAnalysisVisitor::VisitBranch(int id, int cmp, int btrue,
                                           int bfalse) {
+  AddIfNotInDefines(cmp);
   BasicBlock* bb_true = basicBlockManager().ensureBB(btrue);
   BasicBlock* bb_false = basicBlockManager().ensureBB(bfalse);
   current_basic_block_->successors().push_back(bb_true);

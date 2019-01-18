@@ -25,9 +25,12 @@ class TestParserVisitor : public TFVisitor {
                   int base, int offset, int value) override;
   void VisitBitcastWordToTagged(int id, int e) override;
   void VisitChangeInt32ToFloat64(int id, int e) override;
+  void VisitChangeFloat32ToFloat64(int id, int e) override;
   void VisitChangeUint32ToFloat64(int id, int e) override;
   void VisitTruncateFloat64ToWord32(int id, int e) override;
+  void VisitTruncateFloat64ToFloat32(int id, int e) override;
   void VisitRoundFloat64ToInt32(int id, int e) override;
+  void VisitRoundInt32ToFloat32(int id, int e) override;
   void VisitInt32Add(int id, int e1, int e2) override;
   void VisitInt32AddWithOverflow(int id, int e1, int e2) override;
   void VisitInt32SubWithOverflow(int id, int e1, int e2) override;
@@ -236,6 +239,12 @@ void TestParserVisitor::VisitChangeInt32ToFloat64(int id, int e) {
        << "  e " << e << endl;
 }
 
+void TestParserVisitor::VisitChangeFloat32ToFloat64(int id, int e) {
+  cout << id << ":"
+       << "ChangeFloat32ToFloat64"
+       << "  e " << e << endl;
+}
+
 void TestParserVisitor::VisitChangeUint32ToFloat64(int id, int e) {
   cout << id << ":"
        << "ChangeUint32ToFloat64"
@@ -248,9 +257,21 @@ void TestParserVisitor::VisitTruncateFloat64ToWord32(int id, int e) {
        << "  e " << e << endl;
 }
 
+void TestParserVisitor::VisitTruncateFloat64ToFloat32(int id, int e) {
+  cout << id << ":"
+       << "TruncateFloat64ToFloat32"
+       << "  e " << e << endl;
+}
+
 void TestParserVisitor::VisitRoundFloat64ToInt32(int id, int e) {
   cout << id << ":"
        << "RoundFloat64ToInt32"
+       << "  e " << e << endl;
+}
+
+void TestParserVisitor::VisitRoundInt32ToFloat32(int id, int e) {
+  cout << id << ":"
+       << "RoundInt32ToFloat32"
        << "  e " << e << endl;
 }
 

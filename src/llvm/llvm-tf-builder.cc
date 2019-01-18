@@ -1002,6 +1002,13 @@ void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
                                      output().repo().doubleType));
 }
 
+void LLVMTFBuilder::VisitChangeFloat32ToFloat64(int id, int e) {
+  GetImpl(current_bb_)
+      ->set_value(id,
+                  output().buildCast(LLVMFPExt, GetImpl(current_bb_)->value(e),
+                                     output().repo().doubleType));
+}
+
 void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
   GetImpl(current_bb_)
       ->set_value(id,
@@ -1015,11 +1022,26 @@ void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
       ->set_value(id, resolver.Resolve(GetImpl(current_bb_)->value(e)));
 }
 
+void LLVMTFBuilder::VisitTruncateFloat64ToFloat32(int id, int e) {
+  TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
+  GetImpl(current_bb_)
+      ->set_value(
+          id, output().buildCast(LLVMFPTrunc, GetImpl(current_bb_)->value(e),
+                                 output().repo().floatType));
+}
+
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
   GetImpl(current_bb_)
       ->set_value(id,
                   output().buildCast(LLVMFPToSI, GetImpl(current_bb_)->value(e),
                                      output().repo().int32));
+}
+
+void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
+  GetImpl(current_bb_)
+      ->set_value(id,
+                  output().buildCast(LLVMSIToFP, GetImpl(current_bb_)->value(e),
+                                     output().repo().floatType));
 }
 
 void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
