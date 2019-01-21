@@ -116,6 +116,7 @@ class Output {
   LValue root_;
   LValue fp_;
   LValue lr_;
+  size_t stack_parameter_count_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;
 };

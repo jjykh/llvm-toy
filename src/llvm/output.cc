@@ -11,7 +11,10 @@ Output::Output(CompilerState& state)
       builder_(nullptr),
       prologue_(nullptr),
       root_(nullptr),
-      fp_(nullptr) {}
+      fp_(nullptr),
+      lr_(nullptr),
+      stack_parameter_count_(0) {}
+
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
@@ -63,6 +66,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
           fp_, constInt32((1 - registerParameter.name) * sizeof(void*)),
           pointerType(taggedType()));
       registerParameters_.push_back(buildLoad(gep));
+      stack_parameter_count_++;
     }
   }
   len = snprintf(constraint, 256, "={%s}", "lr");
@@ -327,18 +331,35 @@ void Output::ensureLR() {
 
 void Output::buildReturn(LValue value, LValue pop_count) {
   if (state_.needs_frame_) {
-    char asm_content[] =
-        "mov sp, $0\n"
-        "ldmia sp!, {fp, lr}\n"
-        "add sp, sp, r2, lsl #2\n"
-        "bx lr\n";
-    char constraint[] = "r, {r2}, {r0}";
-    LValue func = LLVMGetInlineAsm(
-        functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
-                     repo().taggedType),
-        asm_content, sizeof(asm_content) - 1, constraint,
-        sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-    buildCall(func, fp_, pop_count, value);
+    if (!LLVMIsConstant(pop_count)) {
+      char asm_content[] =
+          "mov sp, $0\n"
+          "ldmia sp!, {fp, lr}\n"
+          "add sp, sp, r2, lsl #2\n"
+          "bx lr\n";
+      char constraint[] = "r, {r2}, {r0}";
+      LValue func = LLVMGetInlineAsm(
+          functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
+                       repo().taggedType),
+          asm_content, sizeof(asm_content) - 1, constraint,
+          sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+      buildCall(func, fp_, pop_count, value);
+    } else {
+      int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
+      int to_pop = pop_count_value + stack_parameter_count_;
+      char asm_content[] =
+          "mov sp, $0\n"
+          "ldmia sp!, {fp, lr}\n"
+          "add sp, sp, $1\n"
+          "bx lr\n";
+      char constraint[] = "r, i, {r0}";
+      LValue func = LLVMGetInlineAsm(
+          functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
+                       repo().taggedType),
+          asm_content, sizeof(asm_content) - 1, constraint,
+          sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+      buildCall(func, fp_, constInt32(to_pop), value);
+    }
   } else {
     __builtin_trap();
   }
