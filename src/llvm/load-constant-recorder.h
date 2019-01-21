@@ -13,7 +13,8 @@ class LoadConstantRecorder {
     kHeapConstant,
     kCodeConstant,
     kIsolateExternalReference,
-    kRecordStubCodeConstant
+    kRecordStubCodeConstant,
+    kModuloExternalReference,
   };
   LoadConstantRecorder() = default;
   ~LoadConstantRecorder() = default;
@@ -21,6 +22,7 @@ class LoadConstantRecorder {
   Type Query(int64_t magic) const;
   static int64_t IsolateExternalReferenceMagic();
   static int64_t RecordStubCodeConstantMagic();
+  static int64_t ModuloExternalReferenceMagic();
 
  private:
   std::unordered_map<int64_t, Type> map_;

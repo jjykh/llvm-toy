@@ -13,6 +13,7 @@ enum class StackMapInfoType {
   kExternalReference,
   kCodeConstant,
   kIsolateExternalReferenceLocation,
+  kModuloExternalReferenceLocation,
   kRecordStubCodeLocation,
   kCallInfo,
   kStoreBarrier

@@ -147,6 +147,14 @@ LValue Output::buildMul(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildMul(builder_, lhs, rhs);
 }
 
+LValue Output::buildSRem(LValue lhs, LValue rhs) {
+  return LLVMBuildSRem(builder_, lhs, rhs, "");
+}
+
+LValue Output::buildSDiv(LValue lhs, LValue rhs) {
+  return LLVMBuildSDiv(builder_, lhs, rhs, "");
+}
+
 LValue Output::buildFMul(LValue lhs, LValue rhs) {
   return v8::internal::tf_llvm::buildFMul(builder_, lhs, rhs);
 }

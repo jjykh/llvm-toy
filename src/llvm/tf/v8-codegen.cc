@@ -27,6 +27,7 @@ class CodeGeneratorLLVM {
   int HandleExternalReference();
   int HandleCodeConstant();
   int HandleIsolateExternalReferenceLocation();
+  int HandleModuloExternalReferenceLocation();
   int HandleRecordStubCodeLocation();
   int HandleCall(const CallInfo*, const StackMaps::Record&);
   int HandleStoreBarrier(const StackMaps::Record&);
@@ -93,6 +94,13 @@ int CodeGeneratorLLVM::HandleIsolateExternalReferenceLocation() {
   return 1;
 }
 
+int CodeGeneratorLLVM::HandleModuloExternalReferenceLocation() {
+  ExternalReference modulo_reference =
+      ExternalReference::mod_two_doubles_operation(isolate_);
+  masm_.dd(reinterpret_cast<intptr_t>(modulo_reference.address()));
+  return 1;
+}
+
 int CodeGeneratorLLVM::HandleRecordStubCodeLocation() {
   Callable const callable =
       Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
@@ -156,6 +164,8 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
       return HandleCodeConstant();
     case StackMapInfoType::kIsolateExternalReferenceLocation:
       return HandleIsolateExternalReferenceLocation();
+    case StackMapInfoType::kModuloExternalReferenceLocation:
+      return HandleModuloExternalReferenceLocation();
     case StackMapInfoType::kRecordStubCodeLocation:
       return HandleRecordStubCodeLocation();
     case StackMapInfoType::kCallInfo:
@@ -280,6 +290,13 @@ void CodeGeneratorLLVM::ProcessCode(
               StackMapInfoType::kRecordStubCodeLocation;
           InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
                                          StackMapInfoType::kCodeConstant,
+                                         &location_type);
+        } break;
+        case LoadConstantRecorder::kModuloExternalReference: {
+          StackMapInfoType location_type =
+              StackMapInfoType::kModuloExternalReferenceLocation;
+          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
+                                         StackMapInfoType::kExternalReference,
                                          &location_type);
         } break;
         default:

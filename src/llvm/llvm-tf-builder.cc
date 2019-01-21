@@ -702,7 +702,9 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
   int gc_paramter_start = statepoint_operands.size();
   // push current defines
-  if (!tailcall) {
+  // FIXME: (UC_linzj): this is a workaround for c call. c call has no needs to
+  // generate safepoints.
+  if (!tailcall && !current_bb_->successors().empty()) {
     auto& successor_liveins = current_bb_->successors().front()->liveins();
     auto& values = GetImpl(current_bb_)->values();
     for (int livein : successor_liveins) {
@@ -719,7 +721,7 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
       statepoint_operands.size());
   LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
   LLVMSetTailCall(statepoint_ret, tailcall);
-  if (!tailcall) {
+  if (!tailcall && !current_bb_->successors().empty()) {
     // 2. rebuild value
     auto& successor_liveins = current_bb_->successors().front()->liveins();
     auto& values = GetImpl(current_bb_)->values();
@@ -1084,17 +1086,15 @@ void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
 void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(GetImpl(current_bb_)->value(e1));
   LValue e2_value = EnsureWord32(GetImpl(current_bb_)->value(e2));
-  e1_value =
-      output().buildCast(LLVMSIToFP, e1_value, output().repo().doubleType);
-  e2_value =
-      output().buildCast(LLVMSIToFP, e2_value, output().repo().doubleType);
-  LValue result = output().buildFDiv(e1_value, e2_value);
-  result = output().buildCast(LLVMFPToSI, result, output().repo().int32);
+  LValue result = output().buildSDiv(e1_value, e2_value);
   GetImpl(current_bb_)->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32Mod(int id, int e1, int e2) {
-  __builtin_unreachable();
+  LValue e1_value = EnsureWord32(GetImpl(current_bb_)->value(e1));
+  LValue e2_value = EnsureWord32(GetImpl(current_bb_)->value(e2));
+  LValue result = output().buildSRem(e1_value, e2_value);
+  GetImpl(current_bb_)->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitInt32MulWithOverflow(int id, int e1, int e2) {
@@ -1347,7 +1347,15 @@ void LLVMTFBuilder::VisitFloat64Div(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Mod(int id, int e1, int e2) {
-  __builtin_unreachable();
+  LType double_type = output().repo().doubleType;
+  LType function_type = functionType(double_type, double_type, double_type);
+  LValue function = output().buildLoadMagic(
+      pointerType(function_type),
+      LoadConstantRecorder::ModuloExternalReferenceMagic());
+  LValue e1_value = GetImpl(current_bb_)->value(e1);
+  LValue e2_value = GetImpl(current_bb_)->value(e2);
+  LValue result = output().buildCall(function, e1_value, e2_value);
+  GetImpl(current_bb_)->set_value(id, result);
 }
 
 void LLVMTFBuilder::VisitFloat64LessThan(int id, int e1, int e2) {

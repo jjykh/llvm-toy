@@ -41,6 +41,8 @@ class Output {
   LValue buildFSub(LValue lhs, LValue rhs);
   LValue buildNSWSub(LValue lhs, LValue rhs);
   LValue buildMul(LValue lhs, LValue rhs);
+  LValue buildSRem(LValue lhs, LValue rhs);
+  LValue buildSDiv(LValue lhs, LValue rhs);
   LValue buildFMul(LValue lhs, LValue rhs);
   LValue buildFDiv(LValue lhs, LValue rhs);
   LValue buildFCmp(LRealPredicate cond, LValue lhs, LValue rhs);
