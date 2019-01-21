@@ -358,7 +358,7 @@ void Output::buildReturn(LValue value, LValue pop_count) {
                        repo().taggedType),
           asm_content, sizeof(asm_content) - 1, constraint,
           sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-      buildCall(func, fp_, constInt32(to_pop), value);
+      buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value);
     }
   } else {
     __builtin_trap();

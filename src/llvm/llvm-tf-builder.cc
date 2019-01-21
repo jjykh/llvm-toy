@@ -976,7 +976,15 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   LType pointer_element_type = getElementType(typeOf(pointer));
   if (pointer_element_type != value_type) {
     EMASSERT(value_type = output().repo().intPtr);
-    llvm_val = output().buildCast(LLVMIntToPtr, llvm_val, pointer_element_type);
+    LLVMTypeKind kind = LLVMGetTypeKind(pointer_element_type);
+    if (kind == LLVMPointerTypeKind)
+      llvm_val =
+          output().buildCast(LLVMIntToPtr, llvm_val, pointer_element_type);
+    else if ((pointer_element_type == output().repo().int8) ||
+             (pointer_element_type == output().repo().int16))
+      llvm_val = output().buildCast(LLVMTrunc, llvm_val, pointer_element_type);
+    else
+      __builtin_trap();
   }
   LValue val = output().buildStore(llvm_val, pointer);
   // store should not be recorded, whatever.
