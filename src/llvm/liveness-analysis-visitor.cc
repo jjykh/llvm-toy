@@ -227,6 +227,11 @@ void LivenessAnalysisVisitor::VisitRoundFloat64ToInt32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitFloat64ExtractHighWord32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitRoundInt32ToFloat32(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);

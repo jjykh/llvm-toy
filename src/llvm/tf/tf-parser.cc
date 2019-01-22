@@ -334,6 +334,12 @@ void TFParser::HandleRoundFloat64ToInt32(int id, const std::string& properties,
   __builtin_unreachable();
 }
 
+void TFParser::HandleFloat64ExtractHighWord32(int id,
+                                              const std::string& properties,
+                                              const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
 void TFParser::HandleRoundInt32ToFloat32(int id, const std::string& properties,
                                          const OperandsVector& operands) {
   __builtin_unreachable();

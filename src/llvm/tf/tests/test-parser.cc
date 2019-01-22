@@ -30,6 +30,7 @@ class TestParserVisitor : public TFVisitor {
   void VisitTruncateFloat64ToWord32(int id, int e) override;
   void VisitTruncateFloat64ToFloat32(int id, int e) override;
   void VisitRoundFloat64ToInt32(int id, int e) override;
+  void VisitFloat64ExtractHighWord32(int id, int e) override;
   void VisitRoundInt32ToFloat32(int id, int e) override;
   void VisitInt32Add(int id, int e1, int e2) override;
   void VisitInt32AddWithOverflow(int id, int e1, int e2) override;
@@ -268,6 +269,12 @@ void TestParserVisitor::VisitTruncateFloat64ToFloat32(int id, int e) {
 void TestParserVisitor::VisitRoundFloat64ToInt32(int id, int e) {
   cout << id << ":"
        << "RoundFloat64ToInt32"
+       << "  e " << e << endl;
+}
+
+void TestParserVisitor::VisitFloat64ExtractHighWord32(int id, int e) {
+  cout << id << ":"
+       << "Float64ExtractHighWord32"
        << "  e " << e << endl;
 }
 

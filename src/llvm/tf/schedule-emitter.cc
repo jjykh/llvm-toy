@@ -146,7 +146,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
         return;
       }
       Handle<HeapNumber> num = isolate_->factory()->NewHeapNumber(value);
-      visitor->VisitHeapConstant(node->id(), reinterpret_cast<int64_t>(*num));
+      visitor->VisitHeapConstant(node->id(),
+                                 reinterpret_cast<int64_t>(num.location()));
     }
       return;
     case compiler::IrOpcode::kCall:
@@ -566,7 +567,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kFloat64ExtractLowWord32:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64ExtractHighWord32:
-      UNREACHABLE();
+      visitor->VisitFloat64ExtractHighWord32(node->id(),
+                                             node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat64InsertLowWord32:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64InsertHighWord32:

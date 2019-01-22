@@ -702,9 +702,7 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
   int gc_paramter_start = statepoint_operands.size();
   // push current defines
-  // FIXME: (UC_linzj): this is a workaround for c call. c call has no needs to
-  // generate safepoints.
-  if (!tailcall && !current_bb_->successors().empty()) {
+  if (!tailcall) {
     auto& successor_liveins = current_bb_->successors().front()->liveins();
     auto& values = GetImpl(current_bb_)->values();
     for (int livein : successor_liveins) {
@@ -721,7 +719,7 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
       statepoint_operands.size());
   LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
   LLVMSetTailCall(statepoint_ret, tailcall);
-  if (!tailcall && !current_bb_->successors().empty()) {
+  if (!tailcall) {
     // 2. rebuild value
     auto& successor_liveins = current_bb_->successors().front()->liveins();
     auto& values = GetImpl(current_bb_)->values();
@@ -1045,6 +1043,17 @@ void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
       ->set_value(id,
                   output().buildCast(LLVMFPToSI, GetImpl(current_bb_)->value(e),
                                      output().repo().int32));
+}
+
+void LLVMTFBuilder::VisitFloat64ExtractHighWord32(int id, int e) {
+  LValue value = GetImpl(current_bb_)->value(e);
+  LValue value_storage = output().buildAlloca(output().repo().doubleType);
+  output().buildStore(value, value_storage);
+  LValue value_bitcast_pointer_high = output().buildGEPWithByteOffset(
+      value_storage, output().constInt32(sizeof(int32_t)),
+      output().repo().ref32);
+  LValue value_high = output().buildLoad(value_bitcast_pointer_high);
+  GetImpl(current_bb_)->set_value(id, value_high);
 }
 
 void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
