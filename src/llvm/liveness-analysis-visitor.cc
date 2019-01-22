@@ -433,6 +433,7 @@ void LivenessAnalysisVisitor::VisitBranch(int id, int cmp, int btrue,
 
 void LivenessAnalysisVisitor::VisitSwitch(int id, int val,
                                           const OperandsVector& successors) {
+  AddIfNotInDefines(val);
   for (int successor : successors) {
     BasicBlock* bb = basicBlockManager().ensureBB(successor);
     current_basic_block_->successors().push_back(bb);
