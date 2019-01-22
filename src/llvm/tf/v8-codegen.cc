@@ -178,8 +178,10 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
 
 Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   StackMaps sm;
-  DataView dv(state.stackMapsSection_->data());
-  sm.parse(&dv);
+  if (state.stackMapsSection_) {
+    DataView dv(state.stackMapsSection_->data());
+    sm.parse(&dv);
+  }
   auto rm = sm.computeRecordMap();
   const ByteBuffer& code = state.codeSectionList_.front();
   needs_frame_ = state.needs_frame_;

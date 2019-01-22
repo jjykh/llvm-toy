@@ -23,6 +23,7 @@ class ScheduleEmitter final {
   void VisitBlockControl(compiler::BasicBlock*, TFVisitor*);
   void VisitNode(compiler::Node*, TFVisitor*);
   void VisitCall(compiler::Node*, TFVisitor*, bool tail);
+  void VisitCCall(compiler::Node*, TFVisitor*);
 
  private:
   void DoVisit(TFVisitor* visitor);

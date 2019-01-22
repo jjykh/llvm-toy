@@ -537,6 +537,11 @@ void TFParser::HandleCall(int id, const std::string& properties,
   visitor_->VisitCall(id, is_code, calldesc, operands);
 }
 
+void TFParser::HandleCallWithCallerSavedRegisters(
+    int id, const OperandsVector& operands) {
+  __builtin_unreachable();
+}
+
 void TFParser::HandleTailCall(int id, const std::string& properties,
                               const OperandsVector& operands) {
   CallDescriptor calldesc;

@@ -339,8 +339,8 @@ void Output::buildReturn(LValue value, LValue pop_count) {
           "bx lr\n";
       char constraint[] = "r, {r2}, {r0}, {r10}";
       LValue func = LLVMGetInlineAsm(
-          functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
-                       repo().taggedType, pointerType(taggedType())),
+          functionType(repo().voidType, typeOf(fp_), repo().int32,
+                       typeOf(value), typeOf(root_)),
           asm_content, sizeof(asm_content) - 1, constraint,
           sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
       buildCall(func, fp_, pop_count, value, root_);
@@ -354,14 +354,38 @@ void Output::buildReturn(LValue value, LValue pop_count) {
           "bx lr\n";
       char constraint[] = "r, i, {r0}, {r10}";
       LValue func = LLVMGetInlineAsm(
-          functionType(repo().voidType, pointerType(repo().ref8), repo().int32,
-                       repo().taggedType, pointerType(taggedType())),
+          functionType(repo().voidType, typeOf(fp_), repo().int32,
+                       typeOf(value), typeOf(root_)),
           asm_content, sizeof(asm_content) - 1, constraint,
           sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
       buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value, root_);
     }
   } else {
-    __builtin_trap();
+    if (!LLVMIsConstant(pop_count)) {
+      char asm_content[] =
+          "add sp, sp, r2, lsl #2\n"
+          "bx lr\n";
+      char constraint[] = "{r2}, {r0}, {r10}";
+      LValue func = LLVMGetInlineAsm(functionType(repo().voidType, repo().int32,
+                                                  typeOf(value), typeOf(root_)),
+                                     asm_content, sizeof(asm_content) - 1,
+                                     constraint, sizeof(constraint) - 1, true,
+                                     false, LLVMInlineAsmDialectATT);
+      buildCall(func, pop_count, value, root_);
+    } else {
+      int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
+      int to_pop = pop_count_value + stack_parameter_count_;
+      char asm_content[] =
+          "add sp, sp, $0\n"
+          "bx lr\n";
+      char constraint[] = "i, {r0}, {r10}";
+      LValue func = LLVMGetInlineAsm(functionType(repo().voidType, repo().int32,
+                                                  typeOf(value), typeOf(root_)),
+                                     asm_content, sizeof(asm_content) - 1,
+                                     constraint, sizeof(constraint) - 1, true,
+                                     false, LLVMInlineAsmDialectATT);
+      buildCall(func, constInt32(to_pop * sizeof(void*)), value, root_);
+    }
   }
   buildUnreachable();
 }

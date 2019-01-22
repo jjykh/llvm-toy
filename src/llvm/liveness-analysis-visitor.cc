@@ -473,6 +473,14 @@ void LivenessAnalysisVisitor::VisitCall(int id, bool code,
   basicBlockManager().set_needs_frame(true);
 }
 
+void LivenessAnalysisVisitor::VisitCallWithCallerSavedRegisters(
+    int id, const OperandsVector& operands) {
+  Define(id);
+  for (int operand : operands) {
+    AddIfNotInDefines(operand);
+  }
+}
+
 void LivenessAnalysisVisitor::VisitTailCall(int id, bool code,
                                             const CallDescriptor&,
                                             const OperandsVector& operands) {

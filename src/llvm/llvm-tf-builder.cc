@@ -1296,6 +1296,27 @@ void LLVMTFBuilder::VisitTailCall(int id, bool code,
   DoTailCall(id, code, call_desc, operands);
 }
 
+void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
+    int id, const OperandsVector& operands) {
+  std::vector<LType> types;
+  std::vector<LValue> values;
+  auto it = operands.begin();
+  auto impl = GetImpl(current_bb_);
+  LValue function = impl->value(*(it++));
+  for (; it != operands.end(); ++it) {
+    LValue val = impl->value(*it);
+    LType val_type = typeOf(val);
+    types.push_back(val_type);
+    values.push_back(val);
+  }
+  LType function_type = functionType(output().repo().intPtr, types.data(),
+                                     types.size(), NotVariadic);
+  LValue result = output().buildCall(
+      output().buildBitCast(function, pointerType(function_type)),
+      values.data(), values.size());
+  impl->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitRoot(int id, int index) {
   LValue offset = output().buildGEPWithByteOffset(
       output().root(), output().constInt32(index * sizeof(void*)),

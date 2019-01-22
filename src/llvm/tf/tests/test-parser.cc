@@ -75,6 +75,8 @@ class TestParserVisitor : public TFVisitor {
                 const OperandsVector& operands) override;
   void VisitCall(int id, bool code, const CallDescriptor&,
                  const OperandsVector& operands) override;
+  void VisitCallWithCallerSavedRegisters(
+      int id, const OperandsVector& operands) override;
   void VisitTailCall(int id, bool code,
                      const CallDescriptor& registers_for_operands,
                      const OperandsVector& operands) override;
@@ -528,6 +530,12 @@ void TestParserVisitor::VisitCall(int id, bool code, const CallDescriptor&,
   cout << id << ":"
        << "VisitCall"
        << " is_code:" << code << operands << endl;
+}
+
+void TestParserVisitor::VisitCallWithCallerSavedRegisters(
+    int id, const OperandsVector& operands) {
+  cout << id << ":"
+       << "VisitCallWithCallerSavedRegisters" << endl;
 }
 
 void TestParserVisitor::VisitTailCall(

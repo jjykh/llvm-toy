@@ -80,6 +80,7 @@ struct CallDescriptor {
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call, (int id, bool code, const CallDescriptor& call_desc,                \
            const OperandsVector& operands))                                   \
+  V(CallWithCallerSavedRegisters, (int id, const OperandsVector& operands))   \
   V(TailCall, (int id, bool code, const CallDescriptor& call_desc,            \
                const OperandsVector& operands))
 

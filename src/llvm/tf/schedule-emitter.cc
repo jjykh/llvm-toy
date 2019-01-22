@@ -153,7 +153,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       VisitCall(node, visitor, false);
       return;
     case compiler::IrOpcode::kCallWithCallerSavedRegisters:
-      UNREACHABLE();
+      VisitCCall(node, visitor);
+      return;
     case compiler::IrOpcode::kDeoptimizeIf:
       UNREACHABLE();
     case compiler::IrOpcode::kDeoptimizeUnless:
@@ -942,6 +943,10 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
                                 bool tail) {
   const compiler::CallDescriptor* descriptor =
       compiler::CallDescriptorOf(node->op());
+  if (!strcmp(descriptor->debug_name(), "c-call")) {
+    VisitCCall(node, visitor);
+    return;
+  }
   bool code = false;
   switch (descriptor->kind()) {
     case compiler::CallDescriptor::kCallAddress:
@@ -978,6 +983,16 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
     visitor->VisitTailCall(node->id(), code, call_desc, operands);
   }
 }
+
+void ScheduleEmitter::VisitCCall(compiler::Node* node, TFVisitor* visitor) {
+  int count = node->InputCount();
+  OperandsVector operands;
+  for (int i = 0; i < count; ++i) {
+    operands.push_back(node->InputAt(i)->id());
+  }
+  visitor->VisitCallWithCallerSavedRegisters(node->id(), operands);
+}
+
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8
