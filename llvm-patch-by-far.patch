@@ -435,6 +435,23 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
+@@ -205,6 +213,16 @@
+       if (Reserved.test(*SI))
+         markSuperRegs(Reserved, Reg);
+ 
++  const Function &F = MF.getFunction();
++  if (F.getCallingConv() == CallingConv::V8SBCC) {
++    markSuperRegs(Reserved, ARM::R5);
++    markSuperRegs(Reserved, ARM::R6);
++    markSuperRegs(Reserved, ARM::R7);
++    markSuperRegs(Reserved, ARM::R8);
++    markSuperRegs(Reserved, ARM::R9);
++    markSuperRegs(Reserved, ARM::R10);
++    markSuperRegs(Reserved, ARM::R11);
++  }
+   assert(checkAllSuperRegsMarked(Reserved));
+   return Reserved;
+ }
 Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
 --- lib/Target/ARM/ARMCallingConv.td	(revision 347537)

@@ -20,7 +20,7 @@ class Output {
  public:
   Output(CompilerState& state);
   ~Output();
-  void initializeBuild(const RegisterParameterDesc&);
+  void initializeBuild(const RegisterParameterDesc&, bool v8cc);
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
   void positionBefore(LValue);

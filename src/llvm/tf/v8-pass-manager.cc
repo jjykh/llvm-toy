@@ -107,6 +107,7 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
   static bool llvm_initialized = false;
 #if 0
   std::cout << "name: " << name << "\n" << *schedule;
+  std::cout.flush();
 #endif
   if (!llvm_initialized) {
     tf_llvm::initLLVM();
@@ -145,7 +146,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
       input_desc.emplace_back(location.GetLocation(),
                               GetLLVMType(output.repo(), location.GetType()));
     }
-    output.initializeBuild(input_desc);
+    output.initializeBuild(
+        input_desc, call_descriptor->AllocatableRegisters() & (1 << r7.code()));
     tf_llvm::LLVMTFBuilder builder(output, BBM,
                                    compiler_state.stack_map_info_map_,
                                    compiler_state.load_constant_recorder_);

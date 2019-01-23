@@ -39,7 +39,7 @@ static void buildIR(State& state) {
                                   {6, output.taggedType()},
                                   {8, output.taggedType()},
                                   {7, output.taggedType()}};
-    output.initializeBuild(desc);
+    output.initializeBuild(desc, true);
     LLVMTFBuilder builder(output, BBM, state.stack_map_info_map_,
                           state.load_constant_recorder_);
     TFParser tfparser(&builder);

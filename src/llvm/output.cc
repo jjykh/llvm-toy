@@ -17,7 +17,8 @@ Output::Output(CompilerState& state)
 
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
-void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
+void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
+                             bool v8cc) {
   int len;
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
@@ -44,7 +45,11 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters) {
       state_.module_, "main",
       functionType(taggedType(), params_types,
                    sizeof(params_types) / sizeof(LType), NotVariadic));
-  setFunctionCallingConv(state_.function_, LLVMV8CallConv);
+  if (v8cc)
+    setFunctionCallingConv(state_.function_, LLVMV8CallConv);
+  else
+    setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
+
   // FIXME: Add V8 to LLVM.
   LLVMSetGC(state_.function_, "coreclr");
 
