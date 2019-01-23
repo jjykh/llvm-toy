@@ -118,10 +118,6 @@ class CallResolver {
   inline Output& output() { return *output_; }
 
  private:
-  static const int kV8CCRegisterParameterCount = 12;
-  static const int kRootReg = 10;
-  static const int kFPReg = 11;
-
   void ResolveOperands(bool code, const OperandsVector& operands,
                        const RegistersForOperands& registers_for_operands,
                        bool tailcall);
@@ -963,6 +959,10 @@ static LValue buildAccessPointer(Output& output, LValue value, LValue offset,
   if (kind == LLVMIntegerTypeKind) {
     value = output.buildCast(LLVMIntToPtr, value, output.repo().ref8);
   }
+  // For ElementOffsetFromIndex ignores BitcastTaggedToWord.
+  if (typeOf(offset) == output.taggedType()) {
+    offset = output.buildCast(LLVMPtrToInt, offset, output.repo().intPtr);
+  }
   LValue pointer = output.buildGEPWithByteOffset(
       value, offset, pointerType(getMachineRepresentationType(output, rep)));
   return pointer;
@@ -1363,6 +1363,10 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
   auto it = operands.begin();
   auto impl = GetImpl(current_bb_);
   LValue function = impl->value(*(it++));
+  LLVMTypeKind kind = LLVMGetTypeKind(typeOf(function));
+  if (kind == LLVMIntegerTypeKind) {
+    function = output().buildCast(LLVMIntToPtr, function, output().repo().ref8);
+  }
   for (; it != operands.end(); ++it) {
     LValue val = impl->value(*it);
     LType val_type = typeOf(val);

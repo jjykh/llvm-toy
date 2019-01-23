@@ -23,28 +23,31 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
-  LType params_types[] = {taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          taggedType(),
-                          pointerType(taggedType()),
-                          pointerType(repo().ref8)};
+  std::vector<LType> params_types = {taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     pointerType(taggedType()),
+                                     pointerType(repo().ref8)};
+  EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
+
   for (auto& registerParameter : registerParameters) {
     if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);
       params_types[registerParameter.name] = registerParameter.type;
+    } else {
+      params_types.push_back(registerParameter.type);
     }
   }
   state_.function_ = addFunction(
-      state_.module_, "main",
-      functionType(taggedType(), params_types,
-                   sizeof(params_types) / sizeof(LType), NotVariadic));
+      state_.module_, "main", functionType(taggedType(), params_types.data(),
+                                           params_types.size(), NotVariadic));
   if (v8cc)
     setFunctionCallingConv(state_.function_, LLVMV8CallConv);
   else
@@ -75,10 +78,17 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       registerParameters_.push_back(rvalue);
     } else {
       // callee frame
-      LValue gep = buildGEPWithByteOffset(
-          fp_, constInt32((1 - registerParameter.name) * sizeof(void*)),
-          pointerType(taggedType()));
-      registerParameters_.push_back(buildLoad(gep));
+      if (state_.needs_frame_) {
+        LValue gep = buildGEPWithByteOffset(
+            fp_, constInt32((1 - registerParameter.name) * sizeof(void*)),
+            pointerType(taggedType()));
+        registerParameters_.push_back(buildLoad(gep));
+      } else {
+        LValue rvalue =
+            LLVMGetParam(state_.function_,
+                         kV8CCRegisterParameterCount + stack_parameter_count_);
+        registerParameters_.push_back(rvalue);
+      }
       stack_parameter_count_++;
     }
   }
