@@ -45,9 +45,10 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       params_types.push_back(registerParameter.type);
     }
   }
-  state_.function_ = addFunction(
-      state_.module_, "main", functionType(taggedType(), params_types.data(),
-                                           params_types.size(), NotVariadic));
+  state_.function_ =
+      addFunction(state_.module_, "main",
+                  functionType(taggedType(), params_types.data(),
+                               params_types.size(), NotVariadic));
   if (v8cc)
     setFunctionCallingConv(state_.function_, LLVMV8CallConv);
   else
