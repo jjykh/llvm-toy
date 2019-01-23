@@ -354,6 +354,7 @@ void Output::ensureLR() {
 }
 
 void Output::buildReturn(LValue value, LValue pop_count) {
+  // FIXME:(UC_linzj) this is ugly, needs to simplify.
   if (state_.needs_frame_) {
     if (!LLVMIsConstant(pop_count)) {
       char asm_content[] =
@@ -371,18 +372,32 @@ void Output::buildReturn(LValue value, LValue pop_count) {
     } else {
       int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
       int to_pop = pop_count_value + stack_parameter_count_;
-      char asm_content[] =
-          "mov sp, $0\n"
-          "ldmia sp!, {fp, lr}\n"
-          "add sp, sp, $1\n"
-          "bx lr\n";
-      char constraint[] = "r, i, {r0}, {r10}";
-      LValue func = LLVMGetInlineAsm(
-          functionType(repo().voidType, typeOf(fp_), repo().int32,
-                       typeOf(value), typeOf(root_)),
-          asm_content, sizeof(asm_content) - 1, constraint,
-          sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-      buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value, root_);
+      if (to_pop == 0) {
+        char asm_content[] =
+            "mov sp, $0\n"
+            "ldmia sp!, {fp, lr}\n"
+            "bx lr\n";
+        char constraint[] = "r, {r0}, {r10}";
+        LValue func = LLVMGetInlineAsm(
+            functionType(repo().voidType, typeOf(fp_), typeOf(value),
+                         typeOf(root_)),
+            asm_content, sizeof(asm_content) - 1, constraint,
+            sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+        buildCall(func, fp_, value, root_);
+      } else {
+        char asm_content[] =
+            "mov sp, $0\n"
+            "ldmia sp!, {fp, lr}\n"
+            "add sp, sp, $1\n"
+            "bx lr\n";
+        char constraint[] = "r, i, {r0}, {r10}";
+        LValue func = LLVMGetInlineAsm(
+            functionType(repo().voidType, typeOf(fp_), repo().int32,
+                         typeOf(value), typeOf(root_)),
+            asm_content, sizeof(asm_content) - 1, constraint,
+            sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+        buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value, root_);
+      }
     }
   } else {
     if (!LLVMIsConstant(pop_count)) {
@@ -397,18 +412,29 @@ void Output::buildReturn(LValue value, LValue pop_count) {
                                      false, LLVMInlineAsmDialectATT);
       buildCall(func, pop_count, value, root_);
     } else {
+      // FIXME:(UC_linzj): Should I pass fp_ so that fp stays intact?
       int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
       int to_pop = pop_count_value + stack_parameter_count_;
-      char asm_content[] =
-          "add sp, sp, $0\n"
-          "bx lr\n";
-      char constraint[] = "i, {r0}, {r10}";
-      LValue func = LLVMGetInlineAsm(functionType(repo().voidType, repo().int32,
-                                                  typeOf(value), typeOf(root_)),
-                                     asm_content, sizeof(asm_content) - 1,
-                                     constraint, sizeof(constraint) - 1, true,
-                                     false, LLVMInlineAsmDialectATT);
-      buildCall(func, constInt32(to_pop * sizeof(void*)), value, root_);
+      if (to_pop == 0) {
+        char asm_content[] = "bx lr\n";
+        char constraint[] = "{r0}, {r10}";
+        LValue func = LLVMGetInlineAsm(
+            functionType(repo().voidType, typeOf(value), typeOf(root_)),
+            asm_content, sizeof(asm_content) - 1, constraint,
+            sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+        buildCall(func, value, root_);
+      } else {
+        char asm_content[] =
+            "add sp, sp, $0\n"
+            "bx lr\n";
+        char constraint[] = "i, {r0}, {r10}";
+        LValue func = LLVMGetInlineAsm(
+            functionType(repo().voidType, repo().int32, typeOf(value),
+                         typeOf(root_)),
+            asm_content, sizeof(asm_content) - 1, constraint,
+            sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+        buildCall(func, constInt32(to_pop * sizeof(void*)), value, root_);
+      }
     }
   }
   buildUnreachable();
