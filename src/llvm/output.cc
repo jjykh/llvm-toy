@@ -58,8 +58,16 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   // build parameters
   char empty[] = "\0";
   char constraint[256];
-  root_ = LLVMGetParam(state_.function_, 10);
-  fp_ = LLVMGetParam(state_.function_, 11);
+  if (v8cc) {
+    root_ = LLVMGetParam(state_.function_, 10);
+    fp_ = LLVMGetParam(state_.function_, 11);
+  } else {
+    root_ = LLVMGetParam(state_.function_, 5);
+    char kEmpty[] = "";
+    char kConstraint[] = "={r11}";
+    fp_ = buildInlineAsm(functionType(pointerType(repo().ref8)), kEmpty, 0,
+                         kConstraint, sizeof(kConstraint) - 1, true);
+  }
   for (auto& registerParameter : registerParameters) {
     if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);

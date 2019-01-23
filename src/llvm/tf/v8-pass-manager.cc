@@ -147,7 +147,7 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                               GetLLVMType(output.repo(), location.GetType()));
     }
     output.initializeBuild(
-        input_desc, call_descriptor->AllocatableRegisters() & (1 << r7.code()));
+        input_desc, !call_descriptor->HasRestrictedAllocatableRegisters());
     tf_llvm::LLVMTFBuilder builder(output, BBM,
                                    compiler_state.stack_map_info_map_,
                                    compiler_state.load_constant_recorder_);
