@@ -420,6 +420,7 @@ void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
       EmitCallInstr(output().repo().patchpointVoidIntrinsic(),
                     patchpoint_operands.data(), patchpoint_operands.size());
   LLVMSetInstructionCallConv(patchpoint_ret, LLVMV8CallConv);
+  LLVMSetTailCall(patchpoint_ret, true);
 }
 
 bool TCCallResolver::isTailCall() { return true; }

@@ -15,6 +15,39 @@ Index: include/llvm/IR/CallingConv.h
      /// The highest possible calling convention ID. Must be some 2^k - 1.
      MaxID = 1023
    };
+Index: include/llvm/Support/TargetOpcodes.def
+===================================================================
+--- include/llvm/Support/TargetOpcodes.def	(revision 347537)
++++ include/llvm/Support/TargetOpcodes.def	(working copy)
+@@ -120,6 +120,7 @@
+ /// rewrite calls to runtimes with more efficient code sequences.
+ /// This also implies a stack map.
+ HANDLE_TARGET_OPCODE(PATCHPOINT)
++HANDLE_TARGET_OPCODE(TCPATCHPOINT)
+ 
+ /// This pseudo-instruction loads the stack guard value. Targets which need
+ /// to prevent the stack guard value or address from being spilled to the
+Index: include/llvm/Target/Target.td
+===================================================================
+--- include/llvm/Target/Target.td	(revision 347537)
++++ include/llvm/Target/Target.td	(working copy)
+@@ -1066,6 +1066,16 @@
+   let mayLoad = 1;
+   let usesCustomInserter = 1;
+ }
++def TCPATCHPOINT : StandardPseudoInstruction {
++  let OutOperandList = (outs);
++  let InOperandList = (ins i64imm:$id, i32imm:$nbytes, unknown:$callee,
++                       i32imm:$nargs, i32imm:$cc, variable_ops);
++  let hasSideEffects = 1;
++  let isCall = 1;
++  let mayLoad = 1;
++  let usesCustomInserter = 1;
++  let isReturn = 1;
++}
+ def STATEPOINT : StandardPseudoInstruction {
+   let OutOperandList = (outs);
+   let InOperandList = (ins variable_ops);
 Index: include/llvm-c/Core.h
 ===================================================================
 --- include/llvm-c/Core.h	(revision 347537)
@@ -78,6 +111,109 @@ Index: lib/AsmParser/LLToken.h
    kw_swiftcc,
    kw_preserve_mostcc,
    kw_preserve_allcc,
+Index: lib/CodeGen/LocalStackSlotAllocation.cpp
+===================================================================
+--- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 347537)
++++ lib/CodeGen/LocalStackSlotAllocation.cpp	(working copy)
+@@ -299,6 +299,7 @@
+       // range, so they don't need any updates.
+       if (MI.isDebugInstr() || MI.getOpcode() == TargetOpcode::STATEPOINT ||
+           MI.getOpcode() == TargetOpcode::STACKMAP ||
++          MI.getOpcode() == TargetOpcode::TCPATCHPOINT ||
+           MI.getOpcode() == TargetOpcode::PATCHPOINT)
+         continue;
+ 
+Index: lib/CodeGen/MachineVerifier.cpp
+===================================================================
+--- lib/CodeGen/MachineVerifier.cpp	(revision 347537)
++++ lib/CodeGen/MachineVerifier.cpp	(working copy)
+@@ -1097,6 +1097,8 @@
+   unsigned NumDefs = MCID.getNumDefs();
+   if (MCID.getOpcode() == TargetOpcode::PATCHPOINT)
+     NumDefs = (MONum == 0 && MO->isReg()) ? NumDefs : 0;
++  else if (MCID.getOpcode() == TargetOpcode::TCPATCHPOINT)
++    NumDefs = 0;
+ 
+   // The first MCID.NumDefs operands must be explicit register defines
+   if (MONum < NumDefs) {
+Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
+===================================================================
+--- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 347537)
++++ lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(working copy)
+@@ -809,7 +809,8 @@
+   const MCPhysReg *ScratchRegs = nullptr;
+ 
+   // Handle STACKMAP and PATCHPOINT specially and then use the generic code.
+-  if (Opc == TargetOpcode::STACKMAP || Opc == TargetOpcode::PATCHPOINT) {
++  if (Opc == TargetOpcode::STACKMAP || Opc == TargetOpcode::PATCHPOINT ||
++      Opc == TargetOpcode::TCPATCHPOINT) {
+     // Stackmaps do not have arguments and do not preserve their calling
+     // convention. However, to simplify runtime support, they clobber the same
+     // scratch registers as AnyRegCC.
+Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
+===================================================================
+--- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 347537)
++++ lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(working copy)
+@@ -540,6 +540,10 @@
+     NodeNumDefs = 0;
+     return;
+   }
++  if (POpc == TargetOpcode::TCPATCHPOINT) {
++    NodeNumDefs = 0;
++    return;
++  }
+   if (POpc == TargetOpcode::PATCHPOINT &&
+       Node->getValueType(0) == MVT::Other) {
+     // PATCHPOINT is defined to have one result, but it might really have none
+Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
+===================================================================
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 347537)
++++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
+@@ -8120,17 +8120,23 @@
+   TargetLowering::CallLoweringInfo CLI(DAG);
+   populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
+                            true);
++  CLI.IsTailCall = CS.isTailCall();
++  assert(CLI.IsTailCall && !HasDef && "TailCall should not has a return type");
+   std::pair<SDValue, SDValue> Result = lowerInvokable(CLI, EHPadBB);
++  SDNode *Call;
++  if (!CLI.IsTailCall) {
++    SDNode *CallEnd = Result.second.getNode();
++    if (HasDef && (CallEnd->getOpcode() == ISD::CopyFromReg))
++      CallEnd = CallEnd->getOperand(0).getNode();
+ 
+-  SDNode *CallEnd = Result.second.getNode();
+-  if (HasDef && (CallEnd->getOpcode() == ISD::CopyFromReg))
+-    CallEnd = CallEnd->getOperand(0).getNode();
+-
+-  /// Get a call instruction from the call sequence chain.
+-  /// Tail calls are not allowed.
+-  assert(CallEnd->getOpcode() == ISD::CALLSEQ_END &&
+-         "Expected a callseq node.");
+-  SDNode *Call = CallEnd->getOperand(0).getNode();
++    /// Get a call instruction from the call sequence chain.
++    /// Tail calls are not allowed.
++    assert(CallEnd->getOpcode() == ISD::CALLSEQ_END &&
++           "Expected a callseq node.");
++    Call = CallEnd->getOperand(0).getNode();
++  } else {
++    Call = CLI.Chain.getNode();
++  }
+   bool HasGlue = Call->getGluedNode();
+ 
+   // Replace the target specific call node with the patchable intrinsic.
+@@ -8201,8 +8207,9 @@
+     NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
+ 
+   // Replace the target specific call node with a PATCHPOINT node.
+-  MachineSDNode *MN = DAG.getMachineNode(TargetOpcode::PATCHPOINT,
+-                                         dl, NodeTys, Ops);
++  MachineSDNode *MN = DAG.getMachineNode(
++      CLI.IsTailCall ? TargetOpcode::TCPATCHPOINT : TargetOpcode::PATCHPOINT,
++      dl, NodeTys, Ops);
+ 
+   // Update the NodeMap.
+   if (HasDef) {
 Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
@@ -104,7 +240,18 @@ Index: lib/CodeGen/StackMaps.cpp
  #include <algorithm>
  #include <cassert>
  #include <cstdint>
-@@ -444,7 +445,7 @@
+@@ -372,7 +373,9 @@
+ }
+ 
+ void StackMaps::recordPatchPoint(const MachineInstr &MI) {
+-  assert(MI.getOpcode() == TargetOpcode::PATCHPOINT && "expected patchpoint");
++  assert(((MI.getOpcode() == TargetOpcode::PATCHPOINT) ||
++          (MI.getOpcode() == TargetOpcode::TCPATCHPOINT)) &&
++         "expected patchpoint");
+ 
+   PatchPointOpers opers(&MI);
+   const int64_t ID = opers.getID();
+@@ -444,7 +447,7 @@
      LLVM_DEBUG(dbgs() << WSMP << "function addr: " << FR.first
                        << " frame size: " << FR.second.StackSize
                        << " callsite count: " << FR.second.RecordCount << '\n');
@@ -113,6 +260,34 @@ Index: lib/CodeGen/StackMaps.cpp
      OS.EmitIntValue(FR.second.StackSize, 8);
      OS.EmitIntValue(FR.second.RecordCount, 8);
    }
+Index: lib/CodeGen/TargetInstrInfo.cpp
+===================================================================
+--- lib/CodeGen/TargetInstrInfo.cpp	(revision 347537)
++++ lib/CodeGen/TargetInstrInfo.cpp	(working copy)
+@@ -479,6 +479,7 @@
+     StartIdx = StackMapOpers(&MI).getVarIdx();
+     break;
+   }
++  case TargetOpcode::TCPATCHPOINT:
+   case TargetOpcode::PATCHPOINT: {
+     // For PatchPoint, the call args are not foldable (even if reported in the
+     // stackmap e.g. via anyregcc).
+@@ -573,6 +574,7 @@
+ 
+   if (MI.getOpcode() == TargetOpcode::STACKMAP ||
+       MI.getOpcode() == TargetOpcode::PATCHPOINT ||
++      MI.getOpcode() == TargetOpcode::TCPATCHPOINT ||
+       MI.getOpcode() == TargetOpcode::STATEPOINT) {
+     // Fold stackmap/patchpoint.
+     NewMI = foldPatchpoint(MF, MI, Ops, FI, *this);
+@@ -637,6 +639,7 @@
+   int FrameIndex = 0;
+ 
+   if ((MI.getOpcode() == TargetOpcode::STACKMAP ||
++       MI.getOpcode() == TargetOpcode::TCPATCHPOINT ||
+        MI.getOpcode() == TargetOpcode::PATCHPOINT ||
+        MI.getOpcode() == TargetOpcode::STATEPOINT) &&
+       isLoadFromStackSlot(LoadMI, FrameIndex)) {
 Index: lib/CodeGen/TargetPassConfig.cpp
 ===================================================================
 --- lib/CodeGen/TargetPassConfig.cpp	(revision 347537)
@@ -235,20 +410,21 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  }
  
  //===----------------------------------------------------------------------===//
-@@ -2032,6 +2042,12 @@
+@@ -2032,6 +2042,13 @@
    case ARM::PATCHABLE_TAIL_CALL:
      LowerPATCHABLE_TAIL_CALL(*MI);
      return;
 +  case TargetOpcode::STACKMAP:
 +    return LowerSTACKMAP(*OutStreamer, SM, *MI);
 +  case TargetOpcode::PATCHPOINT:
++  case TargetOpcode::TCPATCHPOINT:
 +    return LowerPATCHPOINT(*OutStreamer, SM, *MI);
 +  case TargetOpcode::STATEPOINT:
 +    return LowerSTATEPOINT(*OutStreamer, SM, *MI);
    }
  
    MCInst TmpInst;
-@@ -2040,6 +2056,106 @@
+@@ -2040,6 +2057,107 @@
    EmitToStreamer(*OutStreamer, TmpInst);
  }
  
@@ -276,6 +452,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
 +    if (MII == MBB.end() || MII->isCall() ||
 +        MII->getOpcode() == ARM::DBG_VALUE ||
 +        MII->getOpcode() == TargetOpcode::PATCHPOINT ||
++        MII->getOpcode() == TargetOpcode::TCPATCHPOINT ||
 +        MII->getOpcode() == TargetOpcode::STACKMAP)
 +      break;
 +    ++MII;
@@ -399,10 +576,11 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 347537)
 +++ lib/Target/ARM/ARMBaseInstrInfo.cpp	(working copy)
-@@ -717,6 +717,9 @@
+@@ -717,6 +717,10 @@
      return 0;
    case TargetOpcode::BUNDLE:
      return getInstBundleLength(MI);
++  case TargetOpcode::TCPATCHPOINT:
 +  case TargetOpcode::PATCHPOINT:
 +  case TargetOpcode::STATEPOINT:
 +    return MI.getOperand(1).getImm();
@@ -641,7 +819,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -9256,6 +9264,15 @@
+@@ -9256,6 +9264,16 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -652,12 +830,13 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 +
 +  case TargetOpcode::STACKMAP:
 +  case TargetOpcode::PATCHPOINT:
++  case TargetOpcode::TCPATCHPOINT:
 +    return emitPatchPoint(MI, BB);
 +
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13078,20 @@
+@@ -13061,6 +13079,20 @@
    return -1;
  }
  
