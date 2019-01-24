@@ -169,12 +169,46 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 347537)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -8120,17 +8120,23 @@
+@@ -8077,6 +8077,32 @@
+   FuncInfo.MF->getFrameInfo().setHasStackMap();
+ }
+ 
++static bool isPatchpointInTailCallPosition(ImmutableCallSite CS) {
++  const Instruction *I = CS.getInstruction();
++  const BasicBlock *ExitBB = I->getParent();
++  const TerminatorInst *Term = ExitBB->getTerminator();
++  const ReturnInst *Ret = dyn_cast<ReturnInst>(Term);
++  // If Term is not a ReturnInst, then it must be a UnreachableInst.
++  if (!Ret && !isa<UnreachableInst>(Term))
++    return false;
++  // Copy from isInTailCallPosition.
++  // If I will have a chain, make sure no other instruction that will have a
++  // chain interposes between I and the return.
++  if (I->mayHaveSideEffects() || I->mayReadFromMemory() ||
++      !isSafeToSpeculativelyExecute(I))
++    for (BasicBlock::const_iterator BBI = std::prev(ExitBB->end(), 2);; --BBI) {
++      if (&*BBI == I)
++        break;
++      // Debug info intrinsics do not get in the way of tail call optimization.
++      if (isa<DbgInfoIntrinsic>(BBI))
++        continue;
++      if (BBI->mayHaveSideEffects() || BBI->mayReadFromMemory() ||
++          !isSafeToSpeculativelyExecute(&*BBI))
++        return false;
++    }
++  return true;
++}
++
+ /// Lower llvm.experimental.patchpoint directly to its target opcode.
+ void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
+                                           const BasicBlock *EHPadBB) {
+@@ -8120,17 +8146,24 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
-+  CLI.IsTailCall = CS.isTailCall();
-+  assert(CLI.IsTailCall && !HasDef && "TailCall should not has a return type");
++  CLI.IsTailCall = isPatchpointInTailCallPosition(CS);
++  assert((!CLI.IsTailCall || !HasDef) &&
++         "TailCall should not has a return type");
    std::pair<SDValue, SDValue> Result = lowerInvokable(CLI, EHPadBB);
 +  SDNode *Call;
 +  if (!CLI.IsTailCall) {
@@ -202,7 +236,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8201,8 +8207,9 @@
+@@ -8201,8 +8234,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
