@@ -31,7 +31,7 @@ Index: include/llvm/Target/Target.td
 ===================================================================
 --- include/llvm/Target/Target.td	(revision 347537)
 +++ include/llvm/Target/Target.td	(working copy)
-@@ -1066,6 +1066,16 @@
+@@ -1066,6 +1066,17 @@
    let mayLoad = 1;
    let usesCustomInserter = 1;
  }
@@ -44,6 +44,7 @@ Index: include/llvm/Target/Target.td
 +  let mayLoad = 1;
 +  let usesCustomInserter = 1;
 +  let isReturn = 1;
++  let isTerminator = 1;
 +}
  def STATEPOINT : StandardPseudoInstruction {
    let OutOperandList = (outs);
