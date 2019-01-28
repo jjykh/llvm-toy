@@ -68,7 +68,7 @@ Index: include/llvm-c/Core.h
      @see llvm::llvm_is_multithreaded */
  LLVMBool LLVMIsMultithreaded(void);
  
-+LLVMBool LLVMGetStatepointName(LLVMTypeRef type, char* buffer, size_t n);
++LLVMBool LLVMGetStatepointName(LLVMTypeRef type, char *buffer, size_t n);
 +
  /**
   * @}
@@ -253,16 +253,32 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
-@@ -818,6 +818,9 @@
+@@ -818,6 +818,11 @@
  
      unsigned AS = ISP.getCalledValue()->getType()->getPointerAddressSpace();
      ActualCallee = DAG.getConstant(0, getCurSDLoc(), TLI.getPointerTy(DL, AS));
-+    if (auto* ConstCallee = dyn_cast<ConstantSDNode>(getValue(ISP.getCalledValue())))
-+      ActualCallee = DAG.getIntPtrConstant(ConstCallee->getZExtValue(), getCurSDLoc(),
-+                                     /*isTarget=*/true);
++    if (auto *ConstCallee =
++            dyn_cast<ConstantSDNode>(getValue(ISP.getCalledValue())))
++      ActualCallee =
++          DAG.getIntPtrConstant(ConstCallee->getZExtValue(), getCurSDLoc(),
++                                /*isTarget=*/true);
    } else {
      ActualCallee = getValue(ISP.getCalledValue());
    }
+Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
+===================================================================
+--- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 347537)
++++ lib/CodeGen/SelectionDAG/TargetLowering.cpp	(working copy)
+@@ -87,6 +87,9 @@
+     // (We look for a CopyFromReg reading a virtual register that is used
+     //  for the function live-in value of register Reg)
+     SDValue Value = OutVals[I];
++    // Ignore the undefined input.
++    if (Value->getOpcode() == ISD::UNDEF)
++      continue;
+     if (Value->getOpcode() != ISD::CopyFromReg)
+       return false;
+     unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
 --- lib/CodeGen/StackMaps.cpp	(revision 347537)
@@ -584,7 +600,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.h
    /// We need to emit labels even for promoted globals so that DWARF
    /// debug info can link properly.
 -  SmallPtrSet<const GlobalVariable*,2> EmittedPromotedGlobalLabels;
-+  SmallPtrSet<const GlobalVariable*, 2> EmittedPromotedGlobalLabels;
++  SmallPtrSet<const GlobalVariable *, 2> EmittedPromotedGlobalLabels;
  
 +  StackMaps SM;
 +
@@ -631,7 +647,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
        return CSR_GenericInt_SaveList;
      }
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
-+    return CSR_NoRegs_SaveList;
++    return CSR_V8CC_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8SBCC) {
 +    return CSR_NoRegs_SaveList;
    }
@@ -648,7 +664,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +213,16 @@
+@@ -205,6 +213,18 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -661,6 +677,8 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +    markSuperRegs(Reserved, ARM::R9);
 +    markSuperRegs(Reserved, ARM::R10);
 +    markSuperRegs(Reserved, ARM::R11);
++  } else if (F.getCallingConv() == CallingConv::V8CC) {
++    markSuperRegs(Reserved, ARM::R10);
 +  }
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
@@ -734,7 +752,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
-+def CSR_V8CC : CalleeSavedRegs<(add R11, R10)>;
++def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add R5, R6, R7, R8, R9, R10, R11,
 +                                     (sequence "D%u", 0, 31))>;
@@ -769,7 +787,7 @@ Index: lib/Target/ARM/ARMConstantIslandPass.cpp
  
 +bool ARMConstantIslands::replaceInlineAsm() {
 +  bool MadeChange = false;
-+  std::vector<MachineInstr*> toRemove;
++  std::vector<MachineInstr *> toRemove;
 +  for (MachineBasicBlock &MBB : *MF) {
 +    for (MachineInstr &MI : MBB) {
 +      if (MI.getOpcode() == TargetOpcode::INLINEASM) {
@@ -804,7 +822,7 @@ Index: lib/Target/ARM/ARMConstantIslandPass.cpp
 +      }
 +    }
 +  }
-+  for (MachineInstr* MI : toRemove) {
++  for (MachineInstr *MI : toRemove) {
 +    MI->eraseFromParent();
 +  }
 +  return MadeChange;
@@ -822,12 +840,183 @@ Index: lib/Target/ARM/ARMFastISel.cpp
      else
        return CC_ARM_APCS_GHC;
 +  case CallingConv::V8CC:
-+    return (Return ? RetCC_ARM_V8: CC_ARM_V8);
++    return (Return ? RetCC_ARM_V8 : CC_ARM_V8);
 +  case CallingConv::V8SBCC:
-+    return (Return ? RetCC_ARM_V8SB: CC_ARM_V8SB);
++    return (Return ? RetCC_ARM_V8SB : CC_ARM_V8SB);
    }
  }
  
+Index: lib/Target/ARM/ARMFrameLowering.cpp
+===================================================================
+--- lib/Target/ARM/ARMFrameLowering.cpp	(revision 347537)
++++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
+@@ -445,6 +445,12 @@
+     }
+   }
+ 
++  if (AFI->isJSStub()) {
++    GPRCS1Size += 4;
++  } else if (AFI->isJSFunction()) {
++    GPRCS1Size += 12;
++  }
++
+   // Move past area 1.
+   MachineBasicBlock::iterator LastPush = MBB.end(), GPRCS1Push, GPRCS2Push;
+   if (GPRCS1Size > 0) {
+@@ -559,7 +565,8 @@
+ 
+   if (NumBytes) {
+     // Adjust SP after all the callee-save spills.
+-    if (AFI->getNumAlignedDPRCS2Regs() == 0 &&
++    if (AFI->getNumAlignedDPRCS2Regs() == 0 && !AFI->isJSFunction() &&
++        !AFI->isJSStub() &&
+         tryFoldSPUpdateIntoPushPop(STI, MF, &*LastPush, NumBytes))
+       DefCFAOffsetCandidates.addExtraBytes(LastPush, NumBytes);
+     else {
+@@ -608,6 +615,19 @@
+           .addCFIIndex(CFIIndex)
+           .setMIFlags(MachineInstr::FrameSetup);
+     }
++    if (AFI->isJSStub()) {
++      MachineBasicBlock::iterator MI = AfterPush;
++      BuildMI(MBB, MI, dl, TII.get(ARM::MOVi), ARM::R12)
++          .addImm(22)
++          .add(predOps(ARMCC::AL))
++          .add(condCodeOp());
++      BuildMI(MBB, MI, dl, TII.get(ARM::STR_PRE_IMM), ARM::SP)
++          .addReg(ARM::R12, RegState::Kill)
++          .addReg(ARM::SP)
++          .setMIFlags(MachineInstr::NoFlags)
++          .addImm(-4)
++          .add(predOps(ARMCC::AL));
++    }
+   }
+ 
+   // Now that the prologue's actual instructions are finalised, we can insert
+@@ -1054,7 +1074,9 @@
+   if (MBB.end() != MI) {
+     DL = MI->getDebugLoc();
+     unsigned RetOpcode = MI->getOpcode();
+-    isTailCall = (RetOpcode == ARM::TCRETURNdi || RetOpcode == ARM::TCRETURNri);
++    isTailCall =
++        (RetOpcode == ARM::TCRETURNdi || RetOpcode == ARM::TCRETURNri ||
++         RetOpcode == TargetOpcode::TCPATCHPOINT);
+     isInterrupt =
+         RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
+     isTrap =
+@@ -1428,8 +1450,18 @@
+     ARM::t2STR_PRE : ARM::STR_PRE_IMM;
+   unsigned FltOpc = ARM::VSTMDDB_UPD;
+   unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
+-  emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea1Register, 0,
+-               MachineInstr::FrameSetup);
++  if (AFI->isJSFunction()) {
++    std::vector<CalleeSavedInfo> FakeCSI;
++    FakeCSI.emplace_back(ARM::R0, 0);
++    FakeCSI.emplace_back(ARM::R1, 0);
++    FakeCSI.emplace_back(ARM::R7, 0);
++    std::copy(CSI.begin(), CSI.end(), std::back_inserter(FakeCSI));
++    emitPushInst(MBB, MI, FakeCSI, PushOpc, PushOneOpc, false,
++                 &isARMArea1Register, 0, MachineInstr::FrameSetup);
++  } else {
++    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea1Register,
++                 0, MachineInstr::FrameSetup);
++  }
+   emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
+                MachineInstr::FrameSetup);
+   emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
+@@ -1460,7 +1492,6 @@
+   // registers. Do that here instead.
+   if (NumAlignedDPRCS2Regs)
+     emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
+-
+   unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
+   unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
+   unsigned FltOpc = ARM::VLDMDIA_UPD;
+@@ -1610,6 +1641,21 @@
+   MachineRegisterInfo &MRI = MF.getRegInfo();
+   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+   (void)TRI;  // Silence unused warning in non-assert builds.
++
++  const Function &F = MF.getFunction();
++  if (F.hasFnAttribute("js-function-call"))
++    AFI->setJSFunction(true);
++  else if (F.hasFnAttribute("js-stub-call"))
++    AFI->setJSStub(true);
++
++  if (AFI->isJSFunction() || AFI->isJSStub()) {
++    assert((F.getCallingConv() == CallingConv::V8CC) ||
++           (F.getCallingConv() == CallingConv::V8SBCC));
++    MFI.setFrameAddressIsTaken(true);
++    SavedRegs.set(ARM::R11);
++    SavedRegs.set(ARM::LR);
++    CanEliminateFrame = false;
++  }
+   unsigned FramePtr = RegInfo->getFrameRegister(MF);
+ 
+   // Spill R4 if Thumb2 function requires stack realignment - it will be used as
+@@ -1782,7 +1828,10 @@
+     AFI->setHasStackFrame(true);
+ 
+     if (HasFP) {
+-      SavedRegs.set(FramePtr);
++      if (!SavedRegs.test(FramePtr)) {
++        SavedRegs.set(FramePtr);
++        NumGPRSpills++;
++      }
+       // If the frame pointer is required by the ABI, also spill LR so that we
+       // emit a complete frame record.
+       if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
+@@ -1796,7 +1845,6 @@
+       auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
+       if (FPPos != UnspilledCS1GPRs.end())
+         UnspilledCS1GPRs.erase(FPPos);
+-      NumGPRSpills++;
+       if (FramePtr == ARM::R7)
+         CS1Spilled = true;
+     }
+@@ -2499,3 +2547,25 @@
+   MF.verify();
+ #endif
+ }
++
++bool ARMFrameLowering::assignCalleeSavedSpillSlots(
++    MachineFunction &MF, const TargetRegisterInfo *TRI,
++    std::vector<CalleeSavedInfo> &CSI) const {
++  ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++  // default handle.
++  if (!AFI->isJSStub() && !AFI->isJSFunction())
++    return false;
++  assert(CSI.size() == 2 && CSI[0].getReg() == ARM::LR &&
++         CSI[1].getReg() == ARM::R11);
++  MachineFrameInfo &MFI = MF.getFrameInfo();
++  CSI[0].setFrameIdx(MFI.CreateFixedSpillStackObject(4, -4));
++  CSI[1].setFrameIdx(MFI.CreateFixedSpillStackObject(4, -8));
++  if (AFI->isJSStub()) {
++    MFI.CreateFixedSpillStackObject(4, -12);
++  } else {
++    MFI.CreateFixedSpillStackObject(4, -12); // cp
++    MFI.CreateFixedSpillStackObject(4, -16); // function
++    MFI.CreateFixedSpillStackObject(4, -20); // arg count.
++  }
++  return true;
++}
+Index: lib/Target/ARM/ARMFrameLowering.h
+===================================================================
+--- lib/Target/ARM/ARMFrameLowering.h	(revision 347537)
++++ lib/Target/ARM/ARMFrameLowering.h	(working copy)
+@@ -65,6 +65,11 @@
+     return true;
+   }
+ 
++  bool
++  assignCalleeSavedSpillSlots(MachineFunction &MF,
++                              const TargetRegisterInfo *TRI,
++                              std::vector<CalleeSavedInfo> &CSI) const override;
++
+ private:
+   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+                     const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMISelLowering.cpp	(revision 347537)
@@ -848,9 +1037,9 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    default:
      report_fatal_error("Unsupported calling convention");
 +  case CallingConv::V8SBCC:
-+    return (Return ? RetCC_ARM_V8SB: CC_ARM_V8SB);
++    return (Return ? RetCC_ARM_V8SB : CC_ARM_V8SB);
 +  case CallingConv::V8CC:
-+    return (Return ? RetCC_ARM_V8: CC_ARM_V8);
++    return (Return ? RetCC_ARM_V8 : CC_ARM_V8);
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
@@ -908,6 +1097,31 @@ Index: lib/Target/ARM/ARMISelLowering.h
      SDValue ReconstructShuffle(SDValue Op, SelectionDAG &DAG) const;
  
      SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
+Index: lib/Target/ARM/ARMMachineFunctionInfo.h
+===================================================================
+--- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 347537)
++++ lib/Target/ARM/ARMMachineFunctionInfo.h	(working copy)
+@@ -127,6 +127,9 @@
+   /// The amount the literal pool has been increasedby due to promoted globals.
+   int PromotedGlobalsIncrease = 0;
+ 
++  bool IsJSFunction = false;
++  bool IsJSStub = false;
++
+ public:
+   ARMFunctionInfo() = default;
+ 
+@@ -239,6 +242,10 @@
+   void setPromotedConstpoolIncrease(int Sz) {
+     PromotedGlobalsIncrease = Sz;
+   }
++  bool isJSFunction() const { return IsJSFunction; }
++  bool isJSStub() const { return IsJSStub; }
++  void setJSFunction(bool s) { IsJSFunction = s; }
++  void setJSStub(bool s) { IsJSStub = s; }
+ };
+ 
+ } // end namespace llvm
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 347537)
