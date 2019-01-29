@@ -27,6 +27,7 @@
     macro(subWithOverflow32, "llvm.ssub.with.overflow.i32", functionType(structType(context_, int32, boolean), int32, int32)) \
     macro(subWithOverflow64, "llvm.ssub.with.overflow.i64", functionType(structType(context_, int64, boolean), int64, int64)) \
     macro(stackSave, "llvm.stacksave", functionType(ref8)) \
+    macro(readRegister, "llvm.read_register.i32", functionType(int32, metaType)) \
     macro(trap, "llvm.trap", functionType(voidType)) \
     macro(x86SSE2CvtTSD2SI, "llvm.x86.sse2.cvttsd2si", functionType(int32, vectorType(doubleType, 2))) \
     macro(expect, "llvm.expect.i1", functionType(int1, int1, int1))

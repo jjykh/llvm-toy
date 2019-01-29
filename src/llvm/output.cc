@@ -19,6 +19,8 @@ Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
+  static const int kFPRegNum = 77;
+  static const int kLRRegNum = 10;
   int len;
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
@@ -37,10 +39,11 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     fp_ = LLVMGetParam(state_.function_, 11);
   } else {
     root_ = LLVMGetParam(state_.function_, 5);
-    char kEmpty[] = "";
-    char kConstraint[] = "={r11}";
-    fp_ = buildInlineAsm(functionType(pointerType(repo().ref8)), kEmpty, 0,
-                         kConstraint, sizeof(kConstraint) - 1, true);
+    LValue fp_meta = LLVMMetadataAsValue(
+        state_.context_, LLVMValueAsMetadata(constInt32(kFPRegNum)));
+    fp_ = buildCast(LLVMIntToPtr,
+                    buildCall(repo().readRegisterIntrinsic(), fp_meta),
+                    pointerType(repo().ref8));
   }
   for (auto& registerParameter : registerParameters) {
     if (registerParameter.name >= 0) {
@@ -63,9 +66,12 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       stack_parameter_count_++;
     }
   }
-  len = snprintf(constraint, 256, "={%s}", "lr");
-  lr_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
-                       constraint, len, true);
+
+  LValue lr_meta = LLVMMetadataAsValue(
+      state_.context_, LLVMValueAsMetadata(constInt32(kLRRegNum)));
+  lr_ = buildCast(LLVMIntToPtr,
+                  buildCall(repo().readRegisterIntrinsic(), lr_meta),
+                  pointerType(repo().ref8));
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,

@@ -1082,7 +1082,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -9256,6 +9264,16 @@
+@@ -9256,6 +9264,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -1093,13 +1093,14 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 +
 +  case TargetOpcode::STACKMAP:
 +  case TargetOpcode::PATCHPOINT:
-+  case TargetOpcode::TCPATCHPOINT:
 +    return emitPatchPoint(MI, BB);
++  case TargetOpcode::TCPATCHPOINT:
++    return TargetLoweringBase::emitPatchPoint(MI, BB);
 +
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13079,20 @@
+@@ -13061,6 +13080,20 @@
    return -1;
  }
  

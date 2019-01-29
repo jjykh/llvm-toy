@@ -26,6 +26,7 @@ CommonValues::CommonValues(LContext context)
       // address space 1 means gc recognizable.
       taggedType(
           LLVMPointerType(LLVMStructCreateNamed(context, "TaggedStruct"), 1)),
+      metaType(LLVMMetadataTypeInContext(context)),
       booleanTrue(constInt(boolean, true, ZeroExtend)),
       booleanFalse(constInt(boolean, false, ZeroExtend)),
       int8Zero(constInt(int8, 0, SignExtend)),
