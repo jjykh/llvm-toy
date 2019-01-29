@@ -158,13 +158,17 @@ int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
 
 int CodeGeneratorLLVM::HandleReturn(const ReturnInfo* info,
                                     const StackMaps::Record&) {
+  int instruction_count = 2;
   if (info->pop_count_is_constant()) {
-    masm_.add(sp, sp, Operand(info->constant() * 4));
+    if (info->constant() != 0)
+      masm_.add(sp, sp, Operand(info->constant() * 4));
+    else
+      instruction_count = 1;
   } else {
     masm_.add(sp, sp, Operand(r1, LSL, 2));
   }
   masm_.bx(lr);
-  return 2;
+  return instruction_count;
 }
 
 int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,

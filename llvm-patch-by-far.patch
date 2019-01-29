@@ -649,7 +649,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    return CSR_V8CC_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8SBCC) {
-+    return CSR_NoRegs_SaveList;
++    return CSR_V8SBCC_SaveList;
    }
  
    if (STI.getTargetLowering()->supportSwiftError() &&
@@ -748,14 +748,13 @@ Index: lib/Target/ARM/ARMCallingConv.td
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
  
-@@ -248,6 +302,11 @@
+@@ -248,6 +302,10 @@
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
 +def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
 +
-+def CSR_V8SBCC : CalleeSavedRegs<(add R5, R6, R7, R8, R9, R10, R11,
-+                                     (sequence "D%u", 0, 31))>;
++def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5)>;
 +
  // R8 is used to pass swifterror, remove it from CSR.
  def CSR_AAPCS_SwiftError : CalleeSavedRegs<(sub CSR_AAPCS, R8)>;
@@ -922,7 +921,19 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    }
  
    // Now that the prologue's actual instructions are finalised, we can insert
-@@ -1054,7 +1078,9 @@
+@@ -806,6 +830,11 @@
+                  AFI->getGPRCalleeSavedArea2Size() +
+                  AFI->getDPRCalleeSavedGapSize() +
+                  AFI->getDPRCalleeSavedAreaSize());
++    if (AFI->isJSStub()) {
++      NumBytes += 4;
++    } else if (AFI->isJSFunction()) {
++      NumBytes += 12;
++    }
+ 
+     // Reset SP based on frame pointer only if the stack frame extends beyond
+     // frame pointer stack slot or target is ELF and the function has FP.
+@@ -1054,7 +1083,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -933,7 +944,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1428,8 +1454,18 @@
+@@ -1428,8 +1459,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -954,7 +965,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1460,7 +1496,6 @@
+@@ -1460,7 +1501,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -962,7 +973,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1610,6 +1645,20 @@
+@@ -1610,6 +1650,20 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -983,7 +994,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1782,7 +1831,10 @@
+@@ -1782,7 +1836,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -995,7 +1006,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1796,7 +1848,6 @@
+@@ -1796,7 +1853,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1003,7 +1014,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2499,3 +2550,25 @@
+@@ -2499,3 +2555,25 @@
    MF.verify();
  #endif
  }

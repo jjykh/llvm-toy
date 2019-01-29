@@ -518,7 +518,8 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
       output().constInt32(4 * instructions_count),
       constNull(output().repo().ref8), output().constInt32(7), base, offset,
-      isolate, remembered_set_action, save_fp_mode, output().root(), stub);
+      isolate, remembered_set_action, save_fp_mode,
+      LLVMGetUndef(typeOf(output().root())), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(
       new StackMapInfo(StackMapInfoType::kStoreBarrier));
@@ -1517,21 +1518,24 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
 
 void LLVMTFBuilder::VisitReturn(int id, int pop_count,
                                 const OperandsVector& operands) {
+  int instructions_count = 2;
   if (operands.size() == 1) {
     LValue return_value = GetImpl(current_bb_)->value(operands[0]);
     LValue pop_count_value = GetImpl(current_bb_)->value(pop_count);
     std::unique_ptr<StackMapInfo> info(new ReturnInfo());
     ReturnInfo* rinfo = static_cast<ReturnInfo*>(info.get());
     if (LLVMIsConstant(pop_count_value)) {
-      int pop_count_constant = LLVMConstIntGetZExtValue(pop_count_value);
+      int pop_count_constant = LLVMConstIntGetZExtValue(pop_count_value) +
+                               output().stack_parameter_count();
       rinfo->set_pop_count_is_constant(true);
-      rinfo->set_constant(pop_count_constant +
-                          output().stack_parameter_count());
+      rinfo->set_constant(pop_count_constant);
       pop_count_value = LLVMGetUndef(output().repo().intPtr);
+      if (pop_count_constant == 0) instructions_count = 1;
     }
     int patchid = state_point_id_next_++;
     output().buildCall(output().repo().patchpointVoidIntrinsic(),
-                       output().constInt64(patchid), output().constInt32(8),
+                       output().constInt64(patchid),
+                       output().constInt32(instructions_count * 4),
                        constNull(output().repo().ref8), output().constInt32(2),
                        return_value, pop_count_value);
     output().buildUnreachable();
