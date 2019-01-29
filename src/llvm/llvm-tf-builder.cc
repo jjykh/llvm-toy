@@ -304,7 +304,6 @@ void CallResolver::ResolveOperands(
     SetOperandValue(reg, llvm_val);
   }
   // setup artifact operands' value
-  SetOperandValue(kRootReg, output().root());
   SetOperandValue(kFPReg, output().fp());
   int target_reg = FindNextReg();
   SetOperandValue(target_reg, target_);
@@ -402,15 +401,9 @@ TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
                    need_frame) {}
 
 void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
-  int addition_branch_instructions = 0;
-  if (need_frame())
-    addition_branch_instructions += 2;
-  else
-    output().ensureLR();
   std::vector<LValue> patchpoint_operands;
   patchpoint_operands.push_back(output().constInt64(patchid()));
-  patchpoint_operands.push_back(output().constInt32(
-      4 * (location_count() + addition_branch_instructions)));
+  patchpoint_operands.push_back(output().constInt32(4 * location_count()));
   patchpoint_operands.push_back(constNull(output().repo().ref8));
   patchpoint_operands.push_back(
       output().constInt32(operand_values().size()));  // # call params
@@ -527,7 +520,8 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       constNull(output().repo().ref8), output().constInt32(7), base, offset,
       isolate, remembered_set_action, save_fp_mode, output().root(), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
-  std::unique_ptr<StackMapInfo> info(new StoreBarrierInfo());
+  std::unique_ptr<StackMapInfo> info(
+      new StackMapInfo(StackMapInfoType::kStoreBarrier));
 #if defined(UC_3_0)
   stack_map_info_map_->emplace(patchid, std::move(info));
 #else
@@ -1523,10 +1517,30 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
 
 void LLVMTFBuilder::VisitReturn(int id, int pop_count,
                                 const OperandsVector& operands) {
-  if (operands.size() == 1)
-    output().buildReturn(GetImpl(current_bb_)->value(operands[0]),
-                         GetImpl(current_bb_)->value(pop_count));
-  else
+  if (operands.size() == 1) {
+    LValue return_value = GetImpl(current_bb_)->value(operands[0]);
+    LValue pop_count_value = GetImpl(current_bb_)->value(pop_count);
+    std::unique_ptr<StackMapInfo> info(new ReturnInfo());
+    ReturnInfo* rinfo = static_cast<ReturnInfo*>(info.get());
+    if (LLVMIsConstant(pop_count_value)) {
+      int pop_count_constant = LLVMConstIntGetZExtValue(pop_count_value);
+      rinfo->set_pop_count_is_constant(true);
+      rinfo->set_constant(pop_count_constant +
+                          output().stack_parameter_count());
+      pop_count_value = LLVMGetUndef(output().repo().intPtr);
+    }
+    int patchid = state_point_id_next_++;
+    output().buildCall(output().repo().patchpointVoidIntrinsic(),
+                       output().constInt64(patchid), output().constInt32(8),
+                       constNull(output().repo().ref8), output().constInt32(2),
+                       return_value, pop_count_value);
+    output().buildUnreachable();
+#if defined(UC_3_0)
+    stack_map_info_map_->emplace(patchid, std::move(info));
+#else
+    stack_map_info_map_->insert(std::make_pair(patchid, std::move(info)));
+#endif
+  } else
     __builtin_trap();
 }
 }  // namespace tf_llvm

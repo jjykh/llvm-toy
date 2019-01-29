@@ -136,6 +136,11 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     tf_llvm::CompilerState compiler_state("test");
     compiler_state.code_kind_ = static_cast<int>(kind);
     compiler_state.needs_frame_ = BBM.needs_frame();
+    if (call_descriptor->IsJSFunctionCall()) {
+      compiler_state.prologue_kind_ = PrologueKind::JSFunctionCall;
+    } else {
+      compiler_state.prologue_kind_ = PrologueKind::Stub;
+    }
 
     tf_llvm::Output output(compiler_state);
     tf_llvm::RegisterParameterDesc input_desc;
@@ -160,18 +165,17 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     const ByteBuffer& code = compiler_state.codeSectionList_.front();
     int spill_count =
         FindSpillSlotCount(reinterpret_cast<const uint32_t*>(code.data()));
-    if (spill_count > 0 && !compiler_state.needs_frame_) {
-      BBM.set_needs_frame(true);
-      continue;
-    }
-    if (call_descriptor->IsJSFunctionCall()) {
-      CHECK(call_descriptor->PushArgumentCount());
-      compiler_state.frame_slot_count_ =
-          spill_count + 5;  // arg count?, function, context, fp, sp
-      compiler_state.prologue_kind_ = PrologueKind::JSFunctionCall;
-    } else {
-      compiler_state.frame_slot_count_ = spill_count + 3;  // marker, fp, sp
-      compiler_state.prologue_kind_ = PrologueKind::Stub;
+
+    switch (compiler_state.prologue_kind_) {
+      case PrologueKind::JSFunctionCall:
+        compiler_state.frame_slot_count_ =
+            spill_count + 5;  // arg count?, function, context, fp, sp
+        break;
+      case PrologueKind::Stub:
+        compiler_state.frame_slot_count_ = spill_count + 3;  // marker, fp, sp
+        break;
+      default:
+        UNREACHABLE();
     }
 #if 0
     disassemble(compiler_state);

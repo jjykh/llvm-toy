@@ -31,6 +31,7 @@ class CodeGeneratorLLVM {
   int HandleRecordStubCodeLocation();
   int HandleCall(const CallInfo*, const StackMaps::Record&);
   int HandleStoreBarrier(const StackMaps::Record&);
+  int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
   void ProcessCode(const uint32_t* code_start, const uint32_t* code_end,
@@ -113,9 +114,6 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
   auto call_paramters_iterator = call_info->locations().begin();
   int call_target_reg = *(call_paramters_iterator++);
   int pc_offset = masm_.pc_offset();
-  if (needs_frame_ && call_info->tailcall()) {
-    masm_.LeaveFrame(StackFrame::STUB);
-  }
   for (; call_paramters_iterator != call_info->locations().end();
        ++call_paramters_iterator) {
     masm_.push(Register::from_code(*call_paramters_iterator));
@@ -134,10 +132,15 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     for (auto& location : record.locations) {
       if (location.kind != StackMaps::Location::Indirect) continue;
       // only understand stack slot
-      CHECK(location.dwarfReg == 13);
-      // Remove the effect from safepoint-table.cc
-      safepoint.DefinePointerSlot(
-          slot_count_ - 1 - location.offset / kPointerSize, &zone_);
+      if (location.dwarfReg == 13) {
+        // Remove the effect from safepoint-table.cc
+        safepoint.DefinePointerSlot(
+            slot_count_ - 1 - location.offset / kPointerSize, &zone_);
+      } else {
+        CHECK(location.dwarfReg == 11);
+        safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1,
+                                    &zone_);
+      }
     }
   }
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
@@ -151,6 +154,17 @@ int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   if (!needs_frame_) masm_.Pop(lr);
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
+}
+
+int CodeGeneratorLLVM::HandleReturn(const ReturnInfo* info,
+                                    const StackMaps::Record&) {
+  if (info->pop_count_is_constant()) {
+    masm_.add(sp, sp, Operand(info->constant() * 4));
+  } else {
+    masm_.add(sp, sp, Operand(r1, LSL, 2));
+  }
+  masm_.bx(lr);
+  return 2;
 }
 
 int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
@@ -172,6 +186,9 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), *record);
     case StackMapInfoType::kStoreBarrier:
       return HandleStoreBarrier(*record);
+    case StackMapInfoType::kReturn:
+      return HandleReturn(static_cast<const ReturnInfo*>(stack_map_info),
+                          *record);
   }
   UNREACHABLE();
 }
@@ -197,19 +214,6 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
 
   slot_count_ = state.frame_slot_count_;
   int incremental = 0;
-  if (needs_frame_) {
-    switch (state.prologue_kind_) {
-      case PrologueKind::JSFunctionCall:
-        masm_.Prologue();
-        masm_.Push(kJavaScriptCallArgCountRegister);
-        break;
-      case PrologueKind::Stub:
-        masm_.StubPrologue(StackFrame::STUB);
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
   int base_offset = masm_.pc_offset();
   {
     Assembler::BlockConstPoolScope block_const_pool(&masm_);
@@ -320,6 +324,7 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
     switch (stack_map_info->GetType()) {
       case StackMapInfoType::kCallInfo:
       case StackMapInfoType::kStoreBarrier:
+      case StackMapInfoType::kReturn:
         break;
       default:
         UNREACHABLE();

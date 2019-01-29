@@ -23,37 +23,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
-  std::vector<LType> params_types = {taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     pointerType(taggedType()),
-                                     pointerType(repo().ref8)};
-  EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
-
-  for (auto& registerParameter : registerParameters) {
-    if (registerParameter.name >= 0) {
-      EMASSERT(registerParameter.name < 10);
-      params_types[registerParameter.name] = registerParameter.type;
-    } else {
-      params_types.push_back(registerParameter.type);
-    }
-  }
-  state_.function_ =
-      addFunction(state_.module_, "main",
-                  functionType(taggedType(), params_types.data(),
-                               params_types.size(), NotVariadic));
-  if (v8cc)
-    setFunctionCallingConv(state_.function_, LLVMV8CallConv);
-  else
-    setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
-
+  initializeFunction(registerParameters, v8cc);
   // FIXME: Add V8 to LLVM.
   LLVMSetGC(state_.function_, "coreclr");
 
@@ -96,6 +66,58 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   len = snprintf(constraint, 256, "={%s}", "lr");
   lr_ = buildInlineAsm(functionType(pointerType(repo().ref8)), empty, 0,
                        constraint, len, true);
+}
+
+void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
+                                bool v8cc) {
+  std::vector<LType> params_types = {taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     taggedType(),
+                                     pointerType(taggedType()),
+                                     pointerType(repo().ref8)};
+  EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
+
+  for (auto& registerParameter : registerParameters) {
+    if (registerParameter.name >= 0) {
+      EMASSERT(registerParameter.name < 10);
+      params_types[registerParameter.name] = registerParameter.type;
+    } else {
+      params_types.push_back(registerParameter.type);
+    }
+  }
+  state_.function_ =
+      addFunction(state_.module_, "main",
+                  functionType(taggedType(), params_types.data(),
+                               params_types.size(), NotVariadic));
+  if (v8cc)
+    setFunctionCallingConv(state_.function_, LLVMV8CallConv);
+  else
+    setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
+
+  if (state_.needs_frame_) {
+    LLVMAttributeRef attribute;
+    static const char kJSFunctionCall[] = "js-function-call";
+    static const char kJSStubCall[] = "js-stub-call";
+    switch (state_.prologue_kind_) {
+      case PrologueKind::JSFunctionCall:
+        LLVMAddTargetDependentFunctionAttr(state_.function_, kJSFunctionCall,
+                                           nullptr);
+        break;
+      case PrologueKind::Stub:
+        LLVMAddTargetDependentFunctionAttr(state_.function_, kJSStubCall,
+                                           nullptr);
+        break;
+      default:
+        __builtin_trap();
+    }
+  }
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -362,13 +384,13 @@ void Output::buildReturn(LValue value, LValue pop_count) {
           "ldmia sp!, {fp, lr}\n"
           "add sp, sp, r2, lsl #2\n"
           "bx lr\n";
-      char constraint[] = "r, {r2}, {r0}, {r10}";
-      LValue func = LLVMGetInlineAsm(
-          functionType(repo().voidType, typeOf(fp_), repo().int32,
-                       typeOf(value), typeOf(root_)),
-          asm_content, sizeof(asm_content) - 1, constraint,
-          sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-      buildCall(func, fp_, pop_count, value, root_);
+      char constraint[] = "r, {r2}, {r0}";
+      LValue func = LLVMGetInlineAsm(functionType(repo().voidType, typeOf(fp_),
+                                                  repo().int32, typeOf(value)),
+                                     asm_content, sizeof(asm_content) - 1,
+                                     constraint, sizeof(constraint) - 1, true,
+                                     false, LLVMInlineAsmDialectATT);
+      buildCall(func, fp_, pop_count, value);
     } else {
       int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
       int to_pop = pop_count_value + stack_parameter_count_;
@@ -377,26 +399,25 @@ void Output::buildReturn(LValue value, LValue pop_count) {
             "mov sp, $0\n"
             "ldmia sp!, {fp, lr}\n"
             "bx lr\n";
-        char constraint[] = "r, {r0}, {r10}";
+        char constraint[] = "r, {r0}";
         LValue func = LLVMGetInlineAsm(
-            functionType(repo().voidType, typeOf(fp_), typeOf(value),
-                         typeOf(root_)),
+            functionType(repo().voidType, typeOf(fp_), typeOf(value)),
             asm_content, sizeof(asm_content) - 1, constraint,
             sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-        buildCall(func, fp_, value, root_);
+        buildCall(func, fp_, value);
       } else {
         char asm_content[] =
             "mov sp, $0\n"
             "ldmia sp!, {fp, lr}\n"
             "add sp, sp, $1\n"
             "bx lr\n";
-        char constraint[] = "r, i, {r0}, {r10}";
+        char constraint[] = "r, i, {r0}";
         LValue func = LLVMGetInlineAsm(
             functionType(repo().voidType, typeOf(fp_), repo().int32,
-                         typeOf(value), typeOf(root_)),
+                         typeOf(value)),
             asm_content, sizeof(asm_content) - 1, constraint,
             sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-        buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value, root_);
+        buildCall(func, fp_, constInt32(to_pop * sizeof(void*)), value);
       }
     }
   } else {
@@ -404,36 +425,34 @@ void Output::buildReturn(LValue value, LValue pop_count) {
       char asm_content[] =
           "add sp, sp, r2, lsl #2\n"
           "bx lr\n";
-      char constraint[] = "{r2}, {r0}, {r10}";
-      LValue func = LLVMGetInlineAsm(functionType(repo().voidType, repo().int32,
-                                                  typeOf(value), typeOf(root_)),
-                                     asm_content, sizeof(asm_content) - 1,
-                                     constraint, sizeof(constraint) - 1, true,
-                                     false, LLVMInlineAsmDialectATT);
-      buildCall(func, pop_count, value, root_);
+      char constraint[] = "{r2}, {r0}";
+      LValue func = LLVMGetInlineAsm(
+          functionType(repo().voidType, repo().int32, typeOf(value)),
+          asm_content, sizeof(asm_content) - 1, constraint,
+          sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
+      buildCall(func, pop_count, value);
     } else {
       // FIXME:(UC_linzj): Should I pass fp_ so that fp stays intact?
       int pop_count_value = LLVMConstIntGetZExtValue(pop_count);
       int to_pop = pop_count_value + stack_parameter_count_;
       if (to_pop == 0) {
         char asm_content[] = "bx lr\n";
-        char constraint[] = "{r0}, {r10}";
+        char constraint[] = "{r0}";
         LValue func = LLVMGetInlineAsm(
-            functionType(repo().voidType, typeOf(value), typeOf(root_)),
-            asm_content, sizeof(asm_content) - 1, constraint,
-            sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-        buildCall(func, value, root_);
+            functionType(repo().voidType, typeOf(value)), asm_content,
+            sizeof(asm_content) - 1, constraint, sizeof(constraint) - 1, true,
+            false, LLVMInlineAsmDialectATT);
+        buildCall(func, value);
       } else {
         char asm_content[] =
             "add sp, sp, $0\n"
             "bx lr\n";
-        char constraint[] = "i, {r0}, {r10}";
+        char constraint[] = "i, {r0}";
         LValue func = LLVMGetInlineAsm(
-            functionType(repo().voidType, repo().int32, typeOf(value),
-                         typeOf(root_)),
+            functionType(repo().voidType, repo().int32, typeOf(value)),
             asm_content, sizeof(asm_content) - 1, constraint,
             sizeof(constraint) - 1, true, false, LLVMInlineAsmDialectATT);
-        buildCall(func, constInt32(to_pop * sizeof(void*)), value, root_);
+        buildCall(func, constInt32(to_pop * sizeof(void*)), value);
       }
     }
   }

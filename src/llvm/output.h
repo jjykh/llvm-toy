@@ -25,6 +25,7 @@ class Output {
   Output(CompilerState& state);
   ~Output();
   void initializeBuild(const RegisterParameterDesc&, bool v8cc);
+  void initializeFunction(const RegisterParameterDesc&, bool v8cc);
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
   void positionBefore(LValue);
@@ -111,6 +112,7 @@ class Output {
   }
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
+  inline int stack_parameter_count() const { return stack_parameter_count_; }
 
  private:
   CompilerState& state_;

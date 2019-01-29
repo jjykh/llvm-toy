@@ -11,8 +11,10 @@ CallInfo::CallInfo(LocationVector&& locations)
       locations_(std::move(locations)),
       tailcall_(false) {}
 
-StoreBarrierInfo::StoreBarrierInfo()
-    : StackMapInfo(StackMapInfoType::kStoreBarrier) {}
+ReturnInfo::ReturnInfo()
+    : StackMapInfo(StackMapInfoType::kReturn),
+      pop_count_is_constant_(false),
+      constant_(0) {}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

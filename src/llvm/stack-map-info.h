@@ -16,7 +16,8 @@ enum class StackMapInfoType {
   kModuloExternalReferenceLocation,
   kRecordStubCodeLocation,
   kCallInfo,
-  kStoreBarrier
+  kStoreBarrier,
+  kReturn
 };
 
 class StackMapInfo {
@@ -44,10 +45,18 @@ class CallInfo final : public StackMapInfo {
   bool tailcall_;
 };
 
-class StoreBarrierInfo final : public StackMapInfo {
+class ReturnInfo final : public StackMapInfo {
  public:
-  StoreBarrierInfo();
-  ~StoreBarrierInfo() override = default;
+  ReturnInfo();
+  ~ReturnInfo() override = default;
+  inline bool pop_count_is_constant() const { return pop_count_is_constant_; }
+  inline void set_pop_count_is_constant(bool b) { pop_count_is_constant_ = b; }
+  inline int constant() const { return constant_; }
+  inline void set_constant(int constant) { constant_ = constant; }
+
+ private:
+  bool pop_count_is_constant_;
+  int constant_;
 };
 
 // By zuojian.lzj, should be int64_t. But I believe there will not be any number
