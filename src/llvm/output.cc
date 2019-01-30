@@ -38,6 +38,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     root_ = LLVMGetParam(state_.function_, 5);
     fp_ = LLVMGetParam(state_.function_, 6);
   }
+  std::vector<LValue> stack_parameters;
   for (auto& registerParameter : registerParameters) {
     if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);
@@ -48,10 +49,19 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       LValue rvalue =
           LLVMGetParam(state_.function_,
                        kV8CCRegisterParameterCount + stack_parameter_count_);
-      registerParameters_.push_back(rvalue);
+      stack_parameters.push_back(rvalue);
+      registerParameters_.push_back(nullptr);
       stack_parameter_count_++;
     }
   }
+  auto j = stack_parameters.rbegin();
+  for (auto i = registerParameters_.begin(); i != registerParameters_.end();
+       ++i) {
+    if (*i != nullptr) continue;
+    *i = *j;
+    ++j;
+  }
+  EMASSERT(j == stack_parameters.rend());
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
