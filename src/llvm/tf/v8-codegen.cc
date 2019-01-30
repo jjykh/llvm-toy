@@ -149,9 +149,7 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
 
 int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   int pc_offset = masm_.pc_offset();
-  if (!needs_frame_) masm_.Push(lr);
-  masm_.blx(ip);
-  if (!needs_frame_) masm_.Pop(lr);
+  masm_.blx(Register::from_code(r.locations[0].dwarfReg));
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }

@@ -101,7 +101,6 @@ class Output {
   void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
   void buildReturn(LValue, LValue pop_count);
-  void ensureLR();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
@@ -121,7 +120,6 @@ class Output {
   LBasicBlock prologue_;
   LValue root_;
   LValue fp_;
-  LValue lr_;
   size_t stack_parameter_count_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;

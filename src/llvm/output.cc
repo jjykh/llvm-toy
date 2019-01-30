@@ -12,15 +12,12 @@ Output::Output(CompilerState& state)
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
-      lr_(nullptr),
       stack_parameter_count_(0) {}
 
 Output::~Output() { LLVMDisposeBuilder(builder_); }
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
-  static const int kFPRegNum = 77;
-  static const int kLRRegNum = 10;
   int len;
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
@@ -39,11 +36,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     fp_ = LLVMGetParam(state_.function_, 11);
   } else {
     root_ = LLVMGetParam(state_.function_, 5);
-    LValue fp_meta = LLVMMetadataAsValue(
-        state_.context_, LLVMValueAsMetadata(constInt32(kFPRegNum)));
-    fp_ = buildCast(LLVMIntToPtr,
-                    buildCall(repo().readRegisterIntrinsic(), fp_meta),
-                    pointerType(repo().ref8));
+    fp_ = LLVMGetParam(state_.function_, 6);
   }
   for (auto& registerParameter : registerParameters) {
     if (registerParameter.name >= 0) {
@@ -66,12 +59,6 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       stack_parameter_count_++;
     }
   }
-
-  LValue lr_meta = LLVMMetadataAsValue(
-      state_.context_, LLVMValueAsMetadata(constInt32(kLRRegNum)));
-  lr_ = buildCast(LLVMIntToPtr,
-                  buildCall(repo().readRegisterIntrinsic(), lr_meta),
-                  pointerType(repo().ref8));
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
@@ -369,16 +356,6 @@ LValue Output::getStatePointFunction(LType callee_type) {
 
 LValue Output::buildExtractValue(LValue aggVal, unsigned index) {
   return tf_llvm::buildExtractValue(builder_, aggVal, index);
-}
-
-void Output::ensureLR() {
-  char constraint[256];
-  char empty[] = "\0";
-  int len = snprintf(constraint, 256, "{%s}", "lr");
-  LValue function = LLVMGetInlineAsm(
-      functionType(repo().voidType, pointerType(repo().ref8)), empty, 0,
-      constraint, len, true, false, LLVMInlineAsmDialectATT);
-  buildCall(function, lr_);
 }
 
 void Output::buildReturn(LValue value, LValue pop_count) {

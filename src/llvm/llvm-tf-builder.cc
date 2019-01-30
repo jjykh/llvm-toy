@@ -502,11 +502,6 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
   int instructions_count = 1;
   int patchid = patch_point_id_;
   // will not be true again.
-  if (!needs_frame_) {
-    // 2 for save/restore lr
-    instructions_count += 2;
-    output().ensureLR();
-  }
   LValue isolate = output().buildLoadMagic(
       output().repo().ref8,
       LoadConstantRecorder::IsolateExternalReferenceMagic());
@@ -519,7 +514,7 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       output().constInt32(4 * instructions_count),
       constNull(output().repo().ref8), output().constInt32(7), base, offset,
       isolate, remembered_set_action, save_fp_mode,
-      LLVMGetUndef(typeOf(output().root())), stub);
+      LLVMGetUndef(typeOf(output().root())), output().fp(), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(
       new StackMapInfo(StackMapInfoType::kStoreBarrier));
