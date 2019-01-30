@@ -45,17 +45,10 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       registerParameters_.push_back(rvalue);
     } else {
       // callee frame
-      if (state_.needs_frame_) {
-        LValue gep = buildGEPWithByteOffset(
-            fp_, constInt32((1 - registerParameter.name) * sizeof(void*)),
-            pointerType(taggedType()));
-        registerParameters_.push_back(buildLoad(gep));
-      } else {
-        LValue rvalue =
-            LLVMGetParam(state_.function_,
-                         kV8CCRegisterParameterCount + stack_parameter_count_);
-        registerParameters_.push_back(rvalue);
-      }
+      LValue rvalue =
+          LLVMGetParam(state_.function_,
+                       kV8CCRegisterParameterCount + stack_parameter_count_);
+      registerParameters_.push_back(rvalue);
       stack_parameter_count_++;
     }
   }
