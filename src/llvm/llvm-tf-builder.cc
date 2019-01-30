@@ -512,7 +512,7 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
   LValue call = output().buildCall(
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
       output().constInt32(4 * instructions_count),
-      constNull(output().repo().ref8), output().constInt32(7), base, offset,
+      constNull(output().repo().ref8), output().constInt32(8), base, offset,
       isolate, remembered_set_action, save_fp_mode,
       LLVMGetUndef(typeOf(output().root())), output().fp(), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
