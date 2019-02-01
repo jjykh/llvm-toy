@@ -279,6 +279,51 @@ Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
      if (Value->getOpcode() != ISD::CopyFromReg)
        return false;
      unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
+Index: lib/CodeGen/ShrinkWrap.cpp
+===================================================================
+--- lib/CodeGen/ShrinkWrap.cpp	(revision 347537)
++++ lib/CodeGen/ShrinkWrap.cpp	(working copy)
+@@ -157,6 +157,8 @@
+   /// Current MachineFunction.
+   MachineFunction *MachineFunc;
+ 
++  const BitVector *Reserved;
++
+   /// Check if \p MI uses or defines a callee-saved register or
+   /// a frame index. If this is the case, this means \p MI must happen
+   /// after Save and before Restore.
+@@ -204,6 +206,9 @@
+     CurrentCSRs.clear();
+     MachineFunc = &MF;
+ 
++    const BitVector &RR = MF.getRegInfo().getReservedRegs();
++    Reserved = &RR;
++
+     ++NumFunc;
+   }
+ 
+@@ -264,6 +269,8 @@
+     LLVM_DEBUG(dbgs() << "Frame instruction: " << MI << '\n');
+     return true;
+   }
++  const MachineFunction &MF = *MI.getParent()->getParent();
++  const MachineRegisterInfo &MRI = MF.getRegInfo();
+   for (const MachineOperand &MO : MI.operands()) {
+     bool UseOrDefCSR = false;
+     if (MO.isReg()) {
+@@ -280,8 +287,10 @@
+       // separately. An SP mentioned by a call instruction, we can ignore,
+       // though, as it's harmless and we do not want to effectively disable tail
+       // calls by forcing the restore point to post-dominate them.
+-      UseOrDefCSR = (!MI.isCall() && PhysReg == SP) ||
+-                    RCI.getLastCalleeSavedAlias(PhysReg);
++      UseOrDefCSR =
++          (!MI.isCall() && PhysReg == SP) ||
++          (RCI.getLastCalleeSavedAlias(PhysReg) &&
++           (!Reserved->test(PhysReg) || MRI.isPhysRegModified(PhysReg)));
+     } else if (MO.isRegMask()) {
+       // Check if this regmask clobbers any of the CSRs.
+       for (unsigned Reg : getCurrentCSRs(RS)) {
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
 --- lib/CodeGen/StackMaps.cpp	(revision 347537)
