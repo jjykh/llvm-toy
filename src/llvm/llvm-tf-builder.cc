@@ -122,6 +122,11 @@ class CallResolver {
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
   inline size_t location_count() const { return locations_.size(); }
+  inline int call_instruction_bytes() const {
+    // locations[0] must be the callee. If greater than 1, then an extra stmdb
+    // is needed.
+    return location_count() > 1 ? 8 : 4;
+  }
   inline std::vector<LValue>& operand_values() { return operand_values_; }
   inline std::vector<LType>& operand_value_types() {
     return operand_value_types_;
@@ -309,9 +314,19 @@ void CallResolver::ResolveOperands(
   SetOperandValue(target_reg, target_);
   locations_.push_back(target_reg);
 
+  std::vector<int> allocated_regs;
+
+  for (size_t i = 0; i != stack_operands.size(); ++i) {
+    int reg = FindNextReg();
+    EMASSERT(reg >= 0);
+    allocated_regs.push_back(reg);
+  }
+
+  auto reg_iterator = allocated_regs.rbegin();
+
   for (auto operand : stack_operands) {
     LValue llvm_val = GetImpl(current_bb_)->value(operand);
-    int reg = FindNextReg();
+    int reg = *(reg_iterator++);
     SetOperandValue(reg, llvm_val);
     locations_.push_back(reg);
   }
@@ -329,7 +344,7 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
                    operand_value_types().size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
   statepoint_operands.push_back(output().constInt64(patchid()));
-  statepoint_operands.push_back(output().constInt32(4 * (location_count())));
+  statepoint_operands.push_back(output().constInt32(call_instruction_bytes()));
   statepoint_operands.push_back(constNull(callee_type));
   statepoint_operands.push_back(
       output().constInt32(operand_values().size()));      // # call params
@@ -403,7 +418,7 @@ TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
 void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
   std::vector<LValue> patchpoint_operands;
   patchpoint_operands.push_back(output().constInt64(patchid()));
-  patchpoint_operands.push_back(output().constInt32(4 * location_count()));
+  patchpoint_operands.push_back(output().constInt32(call_instruction_bytes()));
   patchpoint_operands.push_back(constNull(output().repo().ref8));
   patchpoint_operands.push_back(
       output().constInt32(operand_values().size()));  // # call params
