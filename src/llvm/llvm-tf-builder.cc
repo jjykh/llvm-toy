@@ -1011,7 +1011,9 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
       buildAccessPointer(output(), GetImpl(current_bb_)->value(base),
                          GetImpl(current_bb_)->value(offset), rep);
   LValue value = output().buildLoad(pointer);
-  if (typeOf(pointer) != pointerType(output().taggedType()))
+  LType pointer_type = typeOf(pointer);
+  if ((pointer_type != pointerType(output().taggedType()) &&
+       (pointer_type != pointerType(output().repo().doubleType))))
     LLVMSetAlignment(value, 1);
   LType castType = nullptr;
   LLVMOpcode opcode;
@@ -1075,7 +1077,9 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
       __builtin_trap();
   }
   LValue val = output().buildStore(llvm_val, pointer);
-  if (typeOf(pointer) != pointerType(output().taggedType()))
+  LType pointer_type = typeOf(pointer);
+  if ((pointer_type != pointerType(output().taggedType()) &&
+       (pointer_type != pointerType(output().repo().doubleType))))
     LLVMSetAlignment(val, 1);
   // store should not be recorded, whatever.
   GetImpl(current_bb_)->set_value(id, val);
