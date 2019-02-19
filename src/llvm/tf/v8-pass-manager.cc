@@ -88,9 +88,9 @@ static void disassemble(CompilerState& state) {
   }
 }
 
-static int FindSpillSlotCount(const uint32_t* pc) {
-  const int kMaxFindCount = 10;
-  for (int i = 0; i < kMaxFindCount; ++i, ++pc) {
+static int FindSpillSlotCount(const uint32_t* pc, size_t size) {
+  size /= 4;
+  for (int i = 0; i < size; ++i, ++pc) {
     const uint32_t code = *pc;
     // Is sub, $sp, $sp
     if (0 == ((code & ~0xfffff) ^ 0xe2400000) && (13 == ((code >> 12) & 15)) &&
@@ -163,8 +163,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
 #endif
     tf_llvm::compile(compiler_state);
     const ByteBuffer& code = compiler_state.codeSectionList_.front();
-    int spill_count =
-        FindSpillSlotCount(reinterpret_cast<const uint32_t*>(code.data()));
+    int spill_count = FindSpillSlotCount(
+        reinterpret_cast<const uint32_t*>(code.data()), code.size());
 
     switch (compiler_state.prologue_kind_) {
       case PrologueKind::JSFunctionCall:
