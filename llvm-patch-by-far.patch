@@ -253,21 +253,24 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
-@@ -534,11 +534,11 @@
+@@ -532,13 +532,14 @@
+   // arrays interwoven with each (lowered) base pointer immediately followed by
+   // it's (lowered) derived pointer.  i.e
    // (base[0], ptr[0], base[1], ptr[1], ...)
++  bool LiveInOnly = SI.CLI.CallConv == CallingConv::V8CC;
    for (unsigned i = 0; i < SI.Bases.size(); ++i) {
      const Value *Base = SI.Bases[i];
 -    lowerIncomingStatepointValue(Builder.getValue(Base), /*LiveInOnly*/ false,
-+    lowerIncomingStatepointValue(Builder.getValue(Base), /*LiveInOnly*/ true,
++    lowerIncomingStatepointValue(Builder.getValue(Base), LiveInOnly,
                                   Ops, Builder);
  
      const Value *Ptr = SI.Ptrs[i];
 -    lowerIncomingStatepointValue(Builder.getValue(Ptr), /*LiveInOnly*/ false,
-+    lowerIncomingStatepointValue(Builder.getValue(Ptr), /*LiveInOnly*/ true,
++    lowerIncomingStatepointValue(Builder.getValue(Ptr), LiveInOnly,
                                   Ops, Builder);
    }
  
-@@ -818,6 +818,11 @@
+@@ -818,6 +819,11 @@
  
      unsigned AS = ISP.getCalledValue()->getType()->getPointerAddressSpace();
      ActualCallee = DAG.getConstant(0, getCurSDLoc(), TLI.getPointerTy(DL, AS));
