@@ -253,6 +253,20 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
+@@ -534,11 +534,11 @@
+   // (base[0], ptr[0], base[1], ptr[1], ...)
+   for (unsigned i = 0; i < SI.Bases.size(); ++i) {
+     const Value *Base = SI.Bases[i];
+-    lowerIncomingStatepointValue(Builder.getValue(Base), /*LiveInOnly*/ false,
++    lowerIncomingStatepointValue(Builder.getValue(Base), /*LiveInOnly*/ true,
+                                  Ops, Builder);
+ 
+     const Value *Ptr = SI.Ptrs[i];
+-    lowerIncomingStatepointValue(Builder.getValue(Ptr), /*LiveInOnly*/ false,
++    lowerIncomingStatepointValue(Builder.getValue(Ptr), /*LiveInOnly*/ true,
+                                  Ops, Builder);
+   }
+ 
 @@ -818,6 +818,11 @@
  
      unsigned AS = ISP.getCalledValue()->getType()->getPointerAddressSpace();
