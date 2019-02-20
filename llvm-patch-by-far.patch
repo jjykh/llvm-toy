@@ -1162,11 +1162,13 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13080,20 @@
+@@ -13061,6 +13080,22 @@
    return -1;
  }
  
-+const MCPhysReg *ARMTargetLowering::getScratchRegisters(CallingConv::ID) const {
++const MCPhysReg *ARMTargetLowering::getScratchRegisters(CallingConv::ID CC) const {
++  if (CC == CallingConv::V8SBCC)
++    return nullptr;
 +  static const MCPhysReg ScratchRegs[] = {ARM::R12, 0};
 +  return ScratchRegs;
 +}
