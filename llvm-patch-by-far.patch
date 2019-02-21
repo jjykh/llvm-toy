@@ -112,6 +112,29 @@ Index: lib/AsmParser/LLToken.h
    kw_swiftcc,
    kw_preserve_mostcc,
    kw_preserve_allcc,
+Index: lib/CodeGen/InlineSpiller.cpp
+===================================================================
+--- lib/CodeGen/InlineSpiller.cpp	(revision 347537)
++++ lib/CodeGen/InlineSpiller.cpp	(working copy)
+@@ -474,6 +474,18 @@
+         if (HSpiller.rmFromMergeableSpills(MI, StackSlot))
+           --NumSpills;
+       }
++      // Handle STATEPOINT, PATCHPOINT
++      switch (MI.getOpcode()) {
++      case TargetOpcode::STATEPOINT:
++      case TargetOpcode::PATCHPOINT: {
++        // Analyze instruction.
++        SmallVector<std::pair<MachineInstr *, unsigned>, 8> Ops;
++        MIBundleOperands(MI).analyzeVirtReg(Reg, &Ops);
++        foldMemoryOperand(Ops);
++      } break;
++      default:
++        break;
++      }
+     }
+   } while (!WorkList.empty());
+ }
 Index: lib/CodeGen/LocalStackSlotAllocation.cpp
 ===================================================================
 --- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 347537)
@@ -253,7 +276,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
-@@ -532,13 +532,14 @@
+@@ -532,14 +532,15 @@
    // arrays interwoven with each (lowered) base pointer immediately followed by
    // it's (lowered) derived pointer.  i.e
    // (base[0], ptr[0], base[1], ptr[1], ...)
@@ -261,15 +284,18 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    for (unsigned i = 0; i < SI.Bases.size(); ++i) {
      const Value *Base = SI.Bases[i];
 -    lowerIncomingStatepointValue(Builder.getValue(Base), /*LiveInOnly*/ false,
-+    lowerIncomingStatepointValue(Builder.getValue(Base), LiveInOnly,
-                                  Ops, Builder);
+-                                 Ops, Builder);
++    lowerIncomingStatepointValue(Builder.getValue(Base), LiveInOnly, Ops,
++                                 Builder);
  
      const Value *Ptr = SI.Ptrs[i];
 -    lowerIncomingStatepointValue(Builder.getValue(Ptr), /*LiveInOnly*/ false,
-+    lowerIncomingStatepointValue(Builder.getValue(Ptr), LiveInOnly,
-                                  Ops, Builder);
+-                                 Ops, Builder);
++    lowerIncomingStatepointValue(Builder.getValue(Ptr), LiveInOnly, Ops,
++                                 Builder);
    }
  
+   // If there are any explicit spill slots passed to the statepoint, record
 @@ -818,6 +819,11 @@
  
      unsigned AS = ISP.getCalledValue()->getType()->getPointerAddressSpace();
@@ -1162,11 +1188,12 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13080,22 @@
+@@ -13061,6 +13080,23 @@
    return -1;
  }
  
-+const MCPhysReg *ARMTargetLowering::getScratchRegisters(CallingConv::ID CC) const {
++const MCPhysReg *
++ARMTargetLowering::getScratchRegisters(CallingConv::ID CC) const {
 +  if (CC == CallingConv::V8SBCC)
 +    return nullptr;
 +  static const MCPhysReg ScratchRegs[] = {ARM::R12, 0};
