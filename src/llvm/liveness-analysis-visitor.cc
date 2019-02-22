@@ -504,7 +504,7 @@ void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
 void LivenessAnalysisVisitor::VisitReturn(int id, int pop_count,
                                           const OperandsVector& operands) {
   Define(id);
-  Define(pop_count);
+  AddIfNotInDefines(pop_count);
   for (int e : operands) {
     AddIfNotInDefines(e);
   }
