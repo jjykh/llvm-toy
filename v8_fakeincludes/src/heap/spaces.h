@@ -4,7 +4,7 @@
 namespace v8 {
 namespace internal {
 class MemoryChunk {
-public:
+ public:
   using Flags = uintptr_t;
   static const intptr_t kSizeOffset = 0;
   static const intptr_t kFlagsOffset = kSizeOffset + kSizetSize;
@@ -78,9 +78,8 @@ public:
 
   static const Flags kPointersFromHereAreInterestingMask =
       POINTERS_FROM_HERE_ARE_INTERESTING;
-
 };
-}
-}
+}  // namespace internal
+}  // namespace v8
 
 #endif  // SPACES_H

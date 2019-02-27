@@ -32,7 +32,6 @@ struct CompilerState {
   LLVMValueRef function_;
   LLVMContextRef context_;
   void* entryPoint_;
-  size_t frame_slot_count_;
   int code_kind_;
   PrologueKind prologue_kind_;
   bool needs_frame_;

@@ -217,7 +217,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
               state.load_constant_recorder_);
   ProcessRecordMap(rm, state.stack_map_info_map_);
 
-  slot_count_ = state.frame_slot_count_;
+  slot_count_ = sm.stackSize() / kPointerSize;
   int incremental = 0;
   int base_offset = masm_.pc_offset();
   {

@@ -4,11 +4,11 @@
 namespace v8 {
 namespace internal {
 class Code {
-public:
+ public:
   static const size_t kHeaderSize = 64;
 };
 class HeapNumber {
-public:
+ public:
   static const uint32_t kSignMask = 0x80000000u;
   static const uint32_t kExponentMask = 0x7ff00000u;
   static const uint32_t kMantissaMask = 0xfffffu;
@@ -20,8 +20,7 @@ public:
       (kExponentMask >> kExponentShift) - kExponentBias;
   static const int kMantissaBitsInTopWord = 20;
   static const int kNonMantissaBitsInTopWord = 12;
-
 };
-}
-}
+}  // namespace internal
+}  // namespace v8
 #endif  // OBJECTS_H

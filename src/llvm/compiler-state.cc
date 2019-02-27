@@ -11,7 +11,6 @@ CompilerState::CompilerState(const char* moduleName)
       function_(nullptr),
       context_(nullptr),
       entryPoint_(nullptr),
-      frame_slot_count_(0),
       code_kind_(0),
       prologue_kind_(PrologueKind::Unset),
       needs_frame_(false) {
