@@ -69,11 +69,7 @@ class Output {
   LValue buildPhi(LType type);
   LValue buildAlloca(LType);
 
-  inline LValue buildCall(LValue function, const LValue* args,
-                          unsigned numArgs) {
-    return LLVMBuildCall(builder_, function, const_cast<LValue*>(args), numArgs,
-                         "");
-  }
+  LValue buildCall(LValue function, const LValue* args, unsigned numArgs);
 
   template <typename VectorType>
   inline LValue buildCall(LValue function, const VectorType& vector) {
@@ -91,6 +87,9 @@ class Output {
     return buildCall(function, argsArray, sizeof(argsArray) / sizeof(LValue));
   }
 
+  LValue buildInvoke(LValue function, const LValue* args, unsigned numArgs,
+                     LBasicBlock then, LBasicBlock exception);
+
   LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
   LValue buildBitCast(LValue val, LType type);
   LValue buildPointerCast(LValue val, LType type);
@@ -101,6 +100,7 @@ class Output {
   void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
   void buildReturn(LValue, LValue pop_count);
+  LValue buildLandingPad();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }

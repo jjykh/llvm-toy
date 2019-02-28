@@ -72,6 +72,7 @@ struct CallDescriptor {
   V(Switch, (int id, int val, const OperandsVector& blocks))                  \
   V(IfValue, (int id, int val))                                               \
   V(IfDefault, (int id))                                                      \
+  V(IfException, (int id))                                                    \
   V(HeapConstant, (int id, int64_t magic))                                    \
   V(SmiConstant, (int id, void* smi_value))                                   \
   V(Float64Constant, (int id, double value))                                  \
@@ -81,6 +82,8 @@ struct CallDescriptor {
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call, (int id, bool code, const CallDescriptor& call_desc,                \
            const OperandsVector& operands))                                   \
+  V(Invoke, (int id, bool code, const CallDescriptor& call_desc,              \
+             const OperandsVector& operands, int then, int exception))        \
   V(CallWithCallerSavedRegisters, (int id, const OperandsVector& operands))   \
   V(TailCall, (int id, bool code, const CallDescriptor& call_desc,            \
                const OperandsVector& operands))

@@ -449,6 +449,8 @@ void LivenessAnalysisVisitor::VisitIfValue(int id, int val) {}
 
 void LivenessAnalysisVisitor::VisitIfDefault(int id) {}
 
+void LivenessAnalysisVisitor::VisitIfException(int id) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitHeapConstant(int id, int64_t magic) {
   Define(id);
 }
@@ -475,6 +477,22 @@ void LivenessAnalysisVisitor::VisitCall(int id, bool code,
     AddIfNotInDefines(e);
   }
   basicBlockManager().set_needs_frame(true);
+}
+
+void LivenessAnalysisVisitor::VisitInvoke(int id, bool code,
+                                          const CallDescriptor&,
+                                          const OperandsVector& operands,
+                                          int then, int exception) {
+  Define(id);
+  for (int e : operands) {
+    AddIfNotInDefines(e);
+  }
+  basicBlockManager().set_needs_frame(true);
+  BasicBlock* successor_bb = basicBlockManager().ensureBB(then);
+  BasicBlock* exception_bb = basicBlockManager().ensureBB(exception);
+  current_basic_block_->successors().push_back(successor_bb);
+  current_basic_block_->successors().push_back(exception_bb);
+  EndBlock();
 }
 
 void LivenessAnalysisVisitor::VisitCallWithCallerSavedRegisters(

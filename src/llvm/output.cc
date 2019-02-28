@@ -444,6 +444,28 @@ void Output::buildReturn(LValue value, LValue pop_count) {
   }
   buildUnreachable();
 }
+
+LValue Output::buildCall(LValue function, const LValue* args,
+                         unsigned numArgs) {
+  return LLVMBuildCall(builder_, function, const_cast<LValue*>(args), numArgs,
+                       "");
+}
+
+LValue Output::buildInvoke(LValue function, const LValue* args,
+                           unsigned numArgs, LBasicBlock then,
+                           LBasicBlock exception) {
+  return LLVMBuildInvoke(builder_, function, const_cast<LValue*>(args), numArgs,
+                         then, exception, "");
+}
+
+LValue Output::buildLandingPad() {
+  LValue function = repo().fakePersonalityIntrinsic();
+  LType landing_type = repo().tokenType;
+  LValue landing_pad =
+      LLVMBuildLandingPad(builder_, landing_type, function, 0, "");
+  LLVMSetCleanup(landing_pad, true);
+  return landing_pad;
+}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

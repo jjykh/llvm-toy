@@ -16,6 +16,19 @@ namespace internal {
 namespace tf_llvm {
 
 namespace {
+class HandlerEmitter {
+ public:
+  HandlerEmitter() = default;
+  ~HandlerEmitter() = default;
+  void RecordInvoke(int patchid, int code_offset);
+  void RecordHandler(int code_offset, int target_patch_id);
+  void Emit(Isolate*, Handle<Code>);
+
+ private:
+  std::unordered_map<int, int> invoke_map_;
+  std::vector<std::pair<int, int>> handlers_;
+};
+
 class CodeGeneratorLLVM {
  public:
   CodeGeneratorLLVM(Isolate*);
@@ -30,6 +43,7 @@ class CodeGeneratorLLVM {
   int HandleModuloExternalReferenceLocation();
   int HandleRecordStubCodeLocation();
   int HandleCall(const CallInfo*, const StackMaps::Record&);
+  int HandleException(const ExceptionInfo*, const StackMaps::Record&);
   int HandleStoreBarrier(const StackMaps::Record&);
   int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
@@ -59,10 +73,35 @@ class CodeGeneratorLLVM {
   RecordReferenceMap record_reference_map_;
   InfoStorage info_storage_;
   ConstantLocationSet constant_location_set_;
+  HandlerEmitter handler_emitter_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
   bool needs_frame_ = false;
 };
+
+void HandlerEmitter::RecordInvoke(int patchid, int code_offset) {
+  invoke_map_.insert(std::make_pair(patchid, code_offset));
+}
+
+void HandlerEmitter::RecordHandler(int code_offset, int target_patch_id) {
+  handlers_.emplace_back(code_offset, target_patch_id);
+}
+
+void HandlerEmitter::Emit(Isolate* isolate, Handle<Code> code) {
+  Handle<HandlerTable> table =
+      Handle<HandlerTable>::cast(isolate->factory()->NewFixedArray(
+          HandlerTable::LengthForReturn(static_cast<int>(handlers_.size())),
+          TENURED));
+  for (size_t i = 0; i < handlers_.size(); ++i) {
+    auto& handler_pair = handlers_[i];
+    // find via target_patch_id
+    auto found = invoke_map_.find(handler_pair.second);
+    EMASSERT(found != invoke_map_.end());
+    table->SetReturnOffset(static_cast<int>(i), found->second);
+    table->SetReturnHandler(static_cast<int>(i), handler_pair.first);
+  }
+  code->set_handler_table(*table);
+}
 
 CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
     : isolate_(isolate),
@@ -122,11 +161,11 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
   }
   if (reg_list != 0) masm_.stm(db_w, sp, reg_list);
 
-  if (!call_info->tailcall())
+  if (!call_info->is_tailcall())
     masm_.blx(Register::from_code(call_target_reg));
   else
     masm_.bx(Register::from_code(call_target_reg));
-  if (!call_info->tailcall()) {
+  if (!call_info->is_tailcall()) {
     // record safepoint
     // FIXME: (UC_linzj) kLazyDeopt is abusing, pass frame-state flags to
     // determine.
@@ -146,8 +185,19 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
       }
     }
   }
+  if (call_info->is_invoke()) {
+    handler_emitter_.RecordInvoke(record.patchpointID, masm_.pc_offset());
+  }
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
+}
+
+int CodeGeneratorLLVM::HandleException(const ExceptionInfo* exception_info,
+                                       const StackMaps::Record& record) {
+  masm_.nop();
+  handler_emitter_.RecordHandler(masm_.pc_offset(),
+                                 exception_info->target_patch_id());
+  return 1;
 }
 
 int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
@@ -189,6 +239,9 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
       return HandleRecordStubCodeLocation();
     case StackMapInfoType::kCallInfo:
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), *record);
+    case StackMapInfoType::kException:
+      return HandleException(static_cast<const ExceptionInfo*>(stack_map_info),
+                             *record);
     case StackMapInfoType::kStoreBarrier:
       return HandleStoreBarrier(*record);
     case StackMapInfoType::kReturn:
@@ -251,6 +304,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   new_object->set_safepoint_table_offset(
       safepoint_table_builder_.GetCodeOffset());
   new_object->set_is_turbofanned(true);
+  handler_emitter_.Emit(isolate_, new_object);
   return new_object;
 }
 
@@ -330,6 +384,7 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
       case StackMapInfoType::kCallInfo:
       case StackMapInfoType::kStoreBarrier:
       case StackMapInfoType::kReturn:
+      case StackMapInfoType::kException:
         break;
       default:
         UNREACHABLE();

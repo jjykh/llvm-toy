@@ -543,6 +543,9 @@ void TFParser::HandleCall(int id, const std::string& properties,
   visitor_->VisitCall(id, is_code, calldesc, operands);
 }
 
+void TFParser::HandleInvoke(int id, const std::string& properties,
+                            const OperandsVector& operands) {}
+
 void TFParser::HandleCallWithCallerSavedRegisters(
     int id, const OperandsVector& operands) {
   __builtin_unreachable();

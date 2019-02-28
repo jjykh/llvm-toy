@@ -22,7 +22,8 @@ class ScheduleEmitter final {
   void VisitBlock(compiler::BasicBlock*, TFVisitor*);
   void VisitBlockControl(compiler::BasicBlock*, TFVisitor*);
   void VisitNode(compiler::Node*, TFVisitor*);
-  void VisitCall(compiler::Node*, TFVisitor*, bool tail);
+  void VisitCall(compiler::Node*, TFVisitor*, bool tail, int successor_bid = -1,
+                 int exception_bid = -1);
   void VisitCCall(compiler::Node*, TFVisitor*);
 
  private:
@@ -35,10 +36,12 @@ class ScheduleEmitter final {
 
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
                                 Heap::RootListIndex* index_return);
+  bool ShouldEmitCall(compiler::Node* node);
 
   Isolate* isolate_;
   compiler::Schedule* schedule_;
   compiler::CallDescriptor* incoming_descriptor_;
+  compiler::BasicBlock* current_block_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

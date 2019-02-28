@@ -6,6 +6,7 @@
 #include "src/compiler/machine-operator.h"
 #include "src/compiler/node.h"
 #include "src/compiler/schedule.h"
+#include "src/llvm/log.h"
 #include "src/llvm/tf/tf-visitor.h"
 #include "src/objects-inl.h"
 
@@ -16,7 +17,8 @@ ScheduleEmitter::ScheduleEmitter(Isolate* isolate, compiler::Schedule* schedule,
                                  compiler::CallDescriptor* incoming_descriptor)
     : isolate_(isolate),
       schedule_(schedule),
-      incoming_descriptor_(incoming_descriptor) {}
+      incoming_descriptor_(incoming_descriptor),
+      current_block_(nullptr) {}
 
 ScheduleEmitter::~ScheduleEmitter() {}
 
@@ -67,7 +69,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitIfDefault(node->id());
       return;
     case compiler::IrOpcode::kIfException:
-      UNREACHABLE();
+      visitor->VisitIfException(node->id());
+      return;
     case compiler::IrOpcode::kFinishRegion:
       UNREACHABLE();
     case compiler::IrOpcode::kParameter: {
@@ -151,7 +154,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     }
       return;
     case compiler::IrOpcode::kCall:
-      VisitCall(node, visitor, false);
+      // Only handle when node != invoke
+      if (ShouldEmitCall(node)) VisitCall(node, visitor, false);
       return;
     case compiler::IrOpcode::kCallWithCallerSavedRegisters:
       VisitCCall(node, visitor);
@@ -865,6 +869,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
 }
 
 void ScheduleEmitter::VisitBlock(compiler::BasicBlock* bb, TFVisitor* visitor) {
+  current_block_ = bb;
   int id = bb->rpo_number();
   OperandsVector predecessors;
   for (auto pred : bb->predecessors()) {
@@ -895,8 +900,13 @@ void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
     case compiler::BasicBlock::kGoto:
       visitor->VisitGoto(block->SuccessorAt(0)->rpo_number());
       return;
-    case compiler::BasicBlock::kCall:
-      UNREACHABLE();
+    case compiler::BasicBlock::kCall: {
+      compiler::BasicBlock* success = block->SuccessorAt(0);
+      compiler::BasicBlock* exception = block->SuccessorAt(1);
+      VisitCall(input, visitor, false, success->rpo_number(),
+                exception->rpo_number());
+    }
+      return;
     case compiler::BasicBlock::kTailCall:
       VisitCall(input, visitor, true);
       return;
@@ -943,7 +953,9 @@ void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
 }
 
 void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
-                                bool tail) {
+                                bool tail, int successor_bid,
+                                int exception_bid) {
+  EMASSERT(!tail || ((successor_bid == -1) && (exception_bid == -1)));
   const compiler::CallDescriptor* descriptor =
       compiler::CallDescriptorOf(node->op());
   if (!strcmp(descriptor->debug_name(), "c-call")) {
@@ -981,7 +993,11 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   }
   call_desc.return_count = descriptor->ReturnCount();
   if (!tail) {
-    visitor->VisitCall(node->id(), code, call_desc, operands);
+    if (successor_bid == -1)
+      visitor->VisitCall(node->id(), code, call_desc, operands);
+    else
+      visitor->VisitInvoke(node->id(), code, call_desc, operands, successor_bid,
+                           exception_bid);
   } else {
     visitor->VisitTailCall(node->id(), code, call_desc, operands);
   }
@@ -994,6 +1010,13 @@ void ScheduleEmitter::VisitCCall(compiler::Node* node, TFVisitor* visitor) {
     operands.push_back(node->InputAt(i)->id());
   }
   visitor->VisitCallWithCallerSavedRegisters(node->id(), operands);
+}
+
+bool ScheduleEmitter::ShouldEmitCall(compiler::Node* node) {
+  if (current_block_->SuccessorCount() != 1) return true;
+  compiler::BasicBlock* next = current_block_->successors()[0];
+  if (next->control_input() == node) return false;
+  return true;
 }
 
 }  // namespace tf_llvm

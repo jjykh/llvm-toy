@@ -23,13 +23,31 @@ struct NotMergedPhiDesc {
   LValue phi;
 };
 
+struct GCRelocateDesc {
+  int value;
+  int where;
+  GCRelocateDesc(int v, int w) : value(v), where(w) {}
+};
+
+struct PredecessorCallInfo {
+  std::vector<GCRelocateDesc> gc_relocates;
+  LValue call_value = nullptr;
+  int call_id = -1;
+  int return_count = 0;
+  int target_patch_id = 0;
+};
+
 struct LLVMTFBuilderBasicBlockImpl {
   std::vector<NotMergedPhiDesc> not_merged_phis;
   std::unordered_map<int, LValue> values_;
+  PredecessorCallInfo call_info;
+
   LBasicBlock native_bb = nullptr;
   LBasicBlock continuation = nullptr;
+  LValue landing_pad = nullptr;
   bool started = false;
   bool ended = false;
+  bool exception_block = false;
 
   inline void set_value(int nid, LValue value) { values_[nid] = value; }
 
@@ -106,8 +124,7 @@ void StartBuild(BasicBlock* bb, Output& output) {
 class CallResolver {
  public:
   CallResolver(BasicBlock* current_bb, Output& output, int id,
-               StackMapInfoMap* stack_map_info_map, int patchid,
-               bool need_frame);
+               StackMapInfoMap* stack_map_info_map, int patchid);
   ~CallResolver() = default;
   void Resolve(bool code, const CallDescriptor& call_desc,
                const OperandsVector& operands);
@@ -116,9 +133,8 @@ class CallResolver {
   virtual LValue EmitCallInstr(LValue function, LValue* operands,
                                size_t operands_count);
   virtual void BuildCall(const CallDescriptor& call_desc);
-  virtual bool isTailCall() { return false; }
+  virtual void PopulateCallInfo(CallInfo*) {}
   inline Output& output() { return *output_; }
-  inline bool need_frame() { return need_frame_; }
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
   inline size_t location_count() const { return locations_.size(); }
@@ -137,6 +153,7 @@ class CallResolver {
                        const RegistersForOperands& registers_for_operands);
   void UpdateAfterStatePoint(const CallDescriptor& call_desc,
                              LValue statepoint_ret);
+  void EmitToSuccessors(std::vector<LValue>&);
   void PopulateToStackMap();
   inline CallInfo::LocationVector&& release_location() {
     return std::move(locations_);
@@ -156,20 +173,33 @@ class CallResolver {
   int id_;
   int next_reg_;
   int patchid_;
-  int gc_parameter_start_;
-  bool need_frame_;
 };
 
 class TCCallResolver final : public CallResolver {
  public:
   TCCallResolver(BasicBlock* current_bb, Output& output, int id,
-                 StackMapInfoMap* stack_map_info_map, int patchid,
-                 bool need_frame);
+                 StackMapInfoMap* stack_map_info_map, int patchid);
   ~TCCallResolver() = default;
 
  private:
   void BuildCall(const CallDescriptor& call_desc) override;
-  bool isTailCall() override;
+  void PopulateCallInfo(CallInfo*) override;
+};
+
+class InvokeResolver final : public CallResolver {
+ public:
+  InvokeResolver(BasicBlock* current_bb, Output& output, int id,
+                 StackMapInfoMap* stack_map_info_map, int patchid,
+                 BasicBlock* then, BasicBlock* exception);
+  ~InvokeResolver() = default;
+
+ private:
+  LValue EmitCallInstr(LValue function, LValue* operands,
+                       size_t operands_count) override;
+  void PopulateCallInfo(CallInfo*) override;
+
+  BasicBlock* then_bb_;
+  BasicBlock* exception_bb_;
 };
 
 class ContinuationResolver {
@@ -231,8 +261,7 @@ class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
 };
 
 CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
-                           StackMapInfoMap* stack_map_info_map, int patchid,
-                           bool need_frame)
+                           StackMapInfoMap* stack_map_info_map, int patchid)
     : operand_values_(kV8CCRegisterParameterCount,
                       LLVMGetUndef(output.repo().intPtr)),
       operand_value_types_(kV8CCRegisterParameterCount, output.repo().intPtr),
@@ -242,9 +271,7 @@ CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
       target_(nullptr),
       id_(id),
       next_reg_(0),
-      patchid_(patchid),
-      gc_parameter_start_(0),
-      need_frame_(need_frame) {}
+      patchid_(patchid) {}
 
 int CallResolver::FindNextReg() {
   if (next_reg_ < 0) return -1;
@@ -353,18 +380,8 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
     statepoint_operands.push_back(operand_value);
   statepoint_operands.push_back(output().constInt32(0));  // # transition args
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
-  gc_parameter_start_ = statepoint_operands.size();
   // push current defines
-  auto& successor_liveins = current_bb_->successors().front()->liveins();
-  auto& values = GetImpl(current_bb_)->values();
-  for (int livein : successor_liveins) {
-    if (livein == id_) continue;
-    auto found = values.find(livein);
-    EMASSERT(found != values.end());
-    LValue to_gc = found->second;
-    if (typeOf(to_gc) != output().taggedType()) continue;
-    statepoint_operands.push_back(to_gc);
-  }
+  EmitToSuccessors(statepoint_operands);
   LValue statepoint_ret =
       EmitCallInstr(output().getStatePointFunction(callee_type),
                     statepoint_operands.data(), statepoint_operands.size());
@@ -372,36 +389,47 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
   UpdateAfterStatePoint(call_desc, statepoint_ret);
 }
 
+void CallResolver::EmitToSuccessors(std::vector<LValue>& statepoint_operands) {
+  // value, pos
+  std::unordered_map<int, int> position_map;
+  auto& values = GetImpl(current_bb_)->values();
+  for (BasicBlock* successor : current_bb_->successors()) {
+    auto impl = EnsureImpl(successor);
+    auto& successor_liveins = successor->liveins();
+    for (int livein : successor_liveins) {
+      if (livein == id_) continue;
+      auto found = values.find(livein);
+      EMASSERT(found != values.end());
+      LValue to_gc = found->second;
+      if (typeOf(to_gc) != output().taggedType()) continue;
+      auto pair = position_map.insert(
+          std::make_pair(livein, statepoint_operands.size()));
+      if (pair.second) {
+        statepoint_operands.emplace_back(to_gc);
+      }
+      impl->call_info.gc_relocates.emplace_back(livein, pair.first->second);
+    }
+  }
+}
+
 void CallResolver::UpdateAfterStatePoint(const CallDescriptor& call_desc,
                                          LValue statepoint_ret) {
-  auto& successor_liveins = current_bb_->successors().front()->liveins();
-  auto& values = GetImpl(current_bb_)->values();
-  int gc_parameter = gc_parameter_start_;
-  for (int livein : successor_liveins) {
-    if (livein == id_) continue;
-    auto found = values.find(livein);
-    LValue to_gc = found->second;
-    if (typeOf(to_gc) != output().taggedType()) continue;
-    LValue relocated = output().buildCall(
-        output().repo().gcRelocateIntrinsic(), statepoint_ret,
-        output().constInt32(gc_parameter), output().constInt32(gc_parameter));
-    found->second = relocated;
-    gc_parameter++;
+  BasicBlock* successor = current_bb_->successors().front();
+  GetImpl(successor)->call_info.call_id = id_;
+  GetImpl(successor)->call_info.call_value = statepoint_ret;
+  GetImpl(successor)->call_info.return_count = call_desc.return_count;
+  if (current_bb_->successors().size() == 2) {
+    BasicBlock* exception = current_bb_->successors()[1];
+    GetImpl(exception)->exception_block = true;
+    GetImpl(exception)->call_info.target_patch_id = patchid_;
   }
-
-  LValue intrinsic = output().repo().gcResultIntrinsic();
-  if (call_desc.return_count == 2) {
-    intrinsic = output().repo().gcResult2Intrinsic();
-  }
-  LValue ret = output().buildCall(intrinsic, statepoint_ret);
-  GetImpl(current_bb_)->set_value(id_, ret);
 }
 
 void CallResolver::PopulateToStackMap() {
   // save patch point info
   std::unique_ptr<StackMapInfo> info(
       new CallInfo(std::move(release_location())));
-  static_cast<CallInfo*>(info.get())->set_tailcall(isTailCall());
+  PopulateCallInfo(static_cast<CallInfo*>(info.get()));
 #if defined(UC_3_0)
   stack_map_info_map_->emplace(patchid_, std::move(info));
 #else
@@ -410,10 +438,8 @@ void CallResolver::PopulateToStackMap() {
 }
 
 TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
-                               StackMapInfoMap* stack_map_info_map, int patchid,
-                               bool need_frame)
-    : CallResolver(current_bb, output, id, stack_map_info_map, patchid,
-                   need_frame) {}
+                               StackMapInfoMap* stack_map_info_map, int patchid)
+    : CallResolver(current_bb, output, id, stack_map_info_map, patchid) {}
 
 void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
   std::vector<LValue> patchpoint_operands;
@@ -430,11 +456,31 @@ void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
   LLVMSetInstructionCallConv(patchpoint_ret, LLVMV8CallConv);
 }
 
-bool TCCallResolver::isTailCall() { return true; }
+void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
+  callinfo->set_is_tailcall(true);
+}
 
 LValue CallResolver::EmitCallInstr(LValue function, LValue* operands,
                                    size_t operands_count) {
   return output().buildCall(function, operands, operands_count);
+}
+
+InvokeResolver::InvokeResolver(BasicBlock* current_bb, Output& output, int id,
+                               StackMapInfoMap* stack_map_info_map, int patchid,
+                               BasicBlock* then, BasicBlock* exception)
+    : CallResolver(current_bb, output, id, stack_map_info_map, patchid),
+      then_bb_(then),
+      exception_bb_(exception) {}
+
+LValue InvokeResolver::EmitCallInstr(LValue function, LValue* operands,
+                                     size_t operands_count) {
+  return output().buildInvoke(function, operands, operands_count,
+                              GetNativeBB(then_bb_),
+                              GetNativeBB(exception_bb_));
+}
+
+void InvokeResolver::PopulateCallInfo(CallInfo* info) {
+  info->set_is_invoke(true);
 }
 
 ContinuationResolver::ContinuationResolver(BasicBlock* bb, Output& output,
@@ -727,8 +773,33 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
     BasicBlock* pred = bb->predecessors()[0];
     EMASSERT(IsBBStartedToBuild(pred));
     for (int live : bb->liveins()) {
+      if (live == GetImpl(bb)->call_info.call_id) continue;
       LValue value = GetImpl(pred)->value(live);
       GetImpl(bb)->set_value(live, value);
+    }
+    PredecessorCallInfo& callinfo = GetImpl(bb)->call_info;
+    LValue call_value = callinfo.call_value;
+    if (GetImpl(bb)->exception_block) {
+      LValue landing_pad = output().buildLandingPad();
+      GetImpl(bb)->landing_pad = landing_pad;
+      call_value = landing_pad;
+    }
+    auto& values = GetImpl(bb)->values();
+    for (auto& gc_relocate : callinfo.gc_relocates) {
+      auto found = values.find(gc_relocate.value);
+      LValue relocated =
+          output().buildCall(output().repo().gcRelocateIntrinsic(), call_value,
+                             output().constInt32(gc_relocate.where),
+                             output().constInt32(gc_relocate.where));
+      found->second = relocated;
+    }
+    if (callinfo.call_id != -1) {
+      LValue intrinsic = output().repo().gcResultIntrinsic();
+      if (callinfo.return_count == 2) {
+        intrinsic = output().repo().gcResult2Intrinsic();
+      }
+      LValue ret = output().buildCall(intrinsic, callinfo.call_value);
+      GetImpl(current_bb_)->set_value(callinfo.call_id, ret);
     }
     return;
   }
@@ -825,13 +896,13 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
                            const OperandsVector& operands, bool tailcall) {
   std::unique_ptr<CallResolver> call_resolver;
   if (!tailcall)
-    call_resolver.reset(new CallResolver(
-        current_bb_, output(), id, stack_map_info_map_, state_point_id_next_++,
-        basic_block_manager().needs_frame()));
+    call_resolver.reset(new CallResolver(current_bb_, output(), id,
+                                         stack_map_info_map_,
+                                         state_point_id_next_++));
   else
-    call_resolver.reset(new TCCallResolver(
-        current_bb_, output(), id, stack_map_info_map_, state_point_id_next_++,
-        basic_block_manager().needs_frame()));
+    call_resolver.reset(new TCCallResolver(current_bb_, output(), id,
+                                           stack_map_info_map_,
+                                           state_point_id_next_++));
   call_resolver->Resolve(code, call_desc, operands);
 }
 
@@ -1347,6 +1418,35 @@ void LLVMTFBuilder::VisitIfValue(int id, int val) {
 
 void LLVMTFBuilder::VisitIfDefault(int id) {}
 
+void LLVMTFBuilder::VisitIfException(int id) {
+  std::vector<LValue> statepoint_operands;
+  LType ret_type = output().repo().taggedType;
+  LType callee_function_type = functionType(ret_type);
+  LType callee_type = pointerType(callee_function_type);
+  int patchid = state_point_id_next_++;
+  statepoint_operands.push_back(output().constInt64(patchid));
+  statepoint_operands.push_back(output().constInt32(4));
+  statepoint_operands.push_back(constNull(callee_type));
+  statepoint_operands.push_back(output().constInt32(0));  // # call params
+  statepoint_operands.push_back(output().constInt32(0));  // flags
+  statepoint_operands.push_back(output().constInt32(0));  // # transition args
+  statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
+  LValue result = output().buildCall(
+      output().getStatePointFunction(callee_type), statepoint_operands.data(),
+      statepoint_operands.size());
+  LLVMSetInstructionCallConv(result, LLVMV8CallConv);
+  LValue exception =
+      output().buildCall(output().repo().gcResultIntrinsic(), result);
+  GetImpl(current_bb_)->set_value(id, exception);
+  std::unique_ptr<StackMapInfo> info(
+      new ExceptionInfo(GetImpl(current_bb_)->call_info.target_patch_id));
+#if defined(UC_3_0)
+  stack_map_info_map_->emplace(patchid, std::move(info));
+#else
+  stack_map_info_map_->insert(std::make_pair(patchid, std::move(info)));
+#endif
+}
+
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   LValue value = output().buildLoadMagic(output().taggedType(), magic);
   GetImpl(current_bb_)->set_value(id, value);
@@ -1399,6 +1499,19 @@ void LLVMTFBuilder::VisitTailCall(int id, bool code,
                                   const CallDescriptor& call_desc,
                                   const OperandsVector& operands) {
   DoTailCall(id, code, call_desc, operands);
+}
+
+void LLVMTFBuilder::VisitInvoke(int id, bool code,
+                                const CallDescriptor& call_desc,
+                                const OperandsVector& operands, int then,
+                                int exception) {
+  BasicBlock* then_bb = basic_block_manager().ensureBB(then);
+  BasicBlock* exception_bb = basic_block_manager().ensureBB(exception);
+  EnsureNativeBB(then_bb, output());
+  EnsureNativeBB(exception_bb, output());
+  InvokeResolver resolver(current_bb_, output(), id, stack_map_info_map_,
+                          state_point_id_next_++, then_bb, exception_bb);
+  resolver.Resolve(code, call_desc, operands);
 }
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
