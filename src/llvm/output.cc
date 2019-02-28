@@ -132,9 +132,6 @@ void Output::positionBefore(LValue value) {
 LValue Output::constInt32(int i) {
   return v8::internal::tf_llvm::constInt(repo_.int32, i);
 }
-LValue Output::constInt1(int i) {
-  return v8::internal::tf_llvm::constInt(repo_.int1, i);
-}
 
 LValue Output::constInt64(long long l) {
   return v8::internal::tf_llvm::constInt(repo_.int64, l);

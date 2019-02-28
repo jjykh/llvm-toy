@@ -239,7 +239,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
                                 node->InputAt(1)->id());
       return;
     case compiler::IrOpcode::kWord32Clz:
-      UNREACHABLE();
+      visitor->VisitWord32Clz(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kWord32Ctz:
       UNREACHABLE();
     case compiler::IrOpcode::kWord32ReverseBits:

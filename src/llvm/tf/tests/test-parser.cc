@@ -48,6 +48,7 @@ class TestParserVisitor : public TFVisitor {
   void VisitWord32And(int id, int e1, int e2) override;
   void VisitWord32Or(int id, int e1, int e2) override;
   void VisitWord32Equal(int id, int e1, int e2) override;
+  void VisitWord32Clz(int id, int e) override;
   void VisitFloat64Add(int id, int e1, int e2) override;
   void VisitFloat64Sub(int id, int e1, int e2) override;
   void VisitFloat64Mul(int id, int e1, int e2) override;
@@ -380,6 +381,12 @@ void TestParserVisitor::VisitWord32Equal(int id, int e1, int e2) {
   cout << id << ":"
        << "VisitWord32Equal"
        << "  e1: " << e1 << "  e2:" << e2 << endl;
+}
+
+void TestParserVisitor::VisitWord32Clz(int id, int e) {
+  cout << id << ":"
+       << "Word32Clz"
+       << "  e: " << e << endl;
 }
 
 void TestParserVisitor::VisitFloat64Add(int id, int e1, int e2) {

@@ -16,7 +16,6 @@ class CommonValues {
 
   const LType voidType;
   const LType boolean;
-  const LType int1;
   const LType int8;
   const LType int16;
   const LType int32;

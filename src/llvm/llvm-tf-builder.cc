@@ -633,7 +633,7 @@ void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
   LValue cmp_val =
       output().buildICmp(LLVMIntSGE, subed, output().constInt32(0x7ffffffe));
   cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
-                               output().constInt1(0));
+                               output().repo().booleanFalse);
   output().buildCondBr(cmp_val, slow_bb, impl_->continuation);
   to_merge_value_.push_back(maybe_return);
   to_merge_block_.push_back(old_continuation_);
@@ -912,7 +912,7 @@ LValue LLVMTFBuilder::EnsureWord32(LValue v) {
   if (kind == LLVMPointerTypeKind) {
     return output().buildCast(LLVMPtrToInt, v, output().repo().int32);
   }
-  if (type == output().repo().int1) {
+  if (type == output().repo().boolean) {
     return output().buildCast(LLVMZExt, v, output().repo().int32);
   }
   EMASSERT(type == output().repo().int32);
@@ -940,7 +940,7 @@ LValue LLVMTFBuilder::EnsurePhiInput(BasicBlock* pred, int index, LType type) {
         output().buildCast(LLVMPtrToInt, val, output().repo().intPtr);
     return ret_val;
   }
-  if ((value_type == output().repo().int1) &&
+  if ((value_type == output().repo().boolean) &&
       (type == output().repo().intPtr)) {
     output().positionBefore(terminator);
     LValue ret_val = output().buildCast(LLVMZExt, val, output().repo().intPtr);
@@ -1053,7 +1053,7 @@ static LType getMachineRepresentationType(Output& output,
       dstType = output.repo().doubleType;
       break;
     case MachineRepresentation::kBit:
-      dstType = output.repo().int1;
+      dstType = output.repo().boolean;
       break;
     default:
       LLVM_BUILTIN_TRAP;
@@ -1345,6 +1345,13 @@ void LLVMTFBuilder::VisitWord32Equal(int id, int e1, int e2) {
   GetImpl(current_bb_)->set_value(id, result);
 }
 
+void LLVMTFBuilder::VisitWord32Clz(int id, int e) {
+  LValue e_value = EnsureWord32(GetImpl(current_bb_)->value(e));
+  LValue result = output().buildCall(output().repo().ctlz32Intrinsic(), e_value,
+                                     output().repo().booleanTrue);
+  GetImpl(current_bb_)->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitInt32LessThanOrEqual(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(GetImpl(current_bb_)->value(e1));
   LValue e2_value = EnsureWord32(GetImpl(current_bb_)->value(e2));
@@ -1387,11 +1394,12 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   LValue cmp_val = GetImpl(current_bb_)->value(cmp);
   if (typeOf(cmp_val) == output().repo().intPtr) {
     // need to trunc before continue
-    cmp_val = output().buildCast(LLVMTrunc, cmp_val, output().repo().int1);
+    cmp_val = output().buildCast(LLVMTrunc, cmp_val, output().repo().boolean);
   }
   if (expected_value != -1) {
     cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
-                                 output().constInt1(expected_value));
+                                 expected_value ? output().repo().booleanTrue
+                                                : output().repo().booleanFalse);
   }
   output().buildCondBr(cmp_val, GetNativeBB(bbTrue), GetNativeBB(bbFalse));
   EndCurrentBlock();

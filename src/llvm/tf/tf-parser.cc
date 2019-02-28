@@ -448,6 +448,13 @@ void TFParser::HandleWord32Equal(int id, const std::string& properties,
   visitor_->VisitWord32Equal(id, operands[0], operands[1]);
 }
 
+void TFParser::HandleWord32Clz(int id, const std::string& properties,
+                               const OperandsVector& operands) {
+  if (1 != operands.size())
+    ParserError("wrong operands number for Word32Equal");
+  visitor_->VisitWord32Clz(id, operands[0]);
+}
+
 void TFParser::HandleInt32LessThanOrEqual(int id, const std::string& properties,
                                           const OperandsVector& operands) {
   if (2 != operands.size())

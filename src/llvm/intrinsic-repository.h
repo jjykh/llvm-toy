@@ -30,7 +30,7 @@
     macro(fakePersonality, "fake_personality", functionType(voidType)) \
     macro(trap, "llvm.trap", functionType(voidType)) \
     macro(x86SSE2CvtTSD2SI, "llvm.x86.sse2.cvttsd2si", functionType(int32, vectorType(doubleType, 2))) \
-    macro(expect, "llvm.expect.i1", functionType(int1, int1, int1))
+    macro(expect, "llvm.expect.i1", functionType(boolean, boolean, boolean))
 
 // clang-format on
 namespace v8 {

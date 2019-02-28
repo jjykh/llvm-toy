@@ -399,6 +399,11 @@ void LivenessAnalysisVisitor::VisitWord32Equal(int id, int e1, int e2) {
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitWord32Clz(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitInt32LessThanOrEqual(int id, int e1,
                                                         int e2) {
   Define(id);

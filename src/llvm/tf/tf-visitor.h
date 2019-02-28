@@ -58,6 +58,7 @@ struct CallDescriptor {
   V(Word32Or, (int id, int e1, int e2))                                       \
   V(Word32Xor, (int id, int e1, int e2))                                      \
   V(Word32Equal, (int id, int e1, int e2))                                    \
+  V(Word32Clz, (int id, int e))                                               \
   V(Float64Add, (int id, int e1, int e2))                                     \
   V(Float64Sub, (int id, int e1, int e2))                                     \
   V(Float64Mul, (int id, int e1, int e2))                                     \

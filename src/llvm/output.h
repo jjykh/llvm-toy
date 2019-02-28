@@ -29,7 +29,6 @@ class Output {
   LBasicBlock appendBasicBlock(const char* name = nullptr);
   void positionToBBEnd(LBasicBlock);
   void positionBefore(LValue);
-  LValue constInt1(int);
   LValue constInt32(int);
   LValue constIntPtr(intptr_t);
   LValue constInt64(long long);
