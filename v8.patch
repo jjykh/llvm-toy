@@ -1,0 +1,803 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index cf3c455093..c68157e972 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -6,11 +6,13 @@
+ if (uc_build_v8_is_shared) {
+   is_component_build = true
+ }
++
+ #endif
+ 
+ import("//build/config/android/config.gni")
+ import("//build/config/arm.gni")
+ import("//build/config/dcheck_always_on.gni")
++
+ #import("//build/config/host_byteorder.gni")
+ #import("//build/config/jumbo.gni")
+ import("//build/config/mips.gni")
+@@ -159,6 +161,9 @@ if (v8_enable_v8_checks == "") {
+ if (v8_check_microtasks_scopes_consistency == "") {
+   v8_check_microtasks_scopes_consistency = is_debug || dcheck_always_on
+ }
++if (current_toolchain == v8_snapshot_toolchain) {
++  v8_enable_disassembler = true
++}
+ 
+ # Specifies if the target build is a simulator build. Comparing target cpu
+ # with v8 target cpu to not affect simulator builds for making cross-compile
+@@ -539,6 +544,17 @@ config("toolchain") {
+   }
+ }
+ 
++config("llvm_configs") {
++  include_dirs = [ "src/llvm/include" ]
++  libs = [
++    "LLVM-7"
++  ]
++  defines = [ "LLVMLOG_LEVEL=1" ]
++  ldflags = [ "-Wl,-rpath,../../v8/lib" ]
++
++  lib_dirs = [ "lib/" ]
++}
++
+ # Configs for code coverage with gcov. Separate configs for cflags and ldflags
+ # to selectively influde cflags in non-test targets only.
+ config("v8_gcov_coverage_cflags") {
+@@ -1108,6 +1124,50 @@ v8_source_set("v8_initializers") {
+   }
+ 
+   configs = [ ":internal_config" ]
++
++  if (current_toolchain == v8_snapshot_toolchain) {
++    configs += [ ":llvm_configs" ]
++    sources += [
++      "src/llvm/abbreviated-types.h",
++      "src/llvm/abbreviations.h",
++      "src/llvm/basic-block-manager.cc",
++      "src/llvm/basic-block-manager.h",
++      "src/llvm/basic-block.cc",
++      "src/llvm/basic-block.h",
++      "src/llvm/common-values.cc",
++      "src/llvm/common-values.h",
++      "src/llvm/compile.cc",
++      "src/llvm/compile.h",
++      "src/llvm/compiler-state.cc",
++      "src/llvm/compiler-state.h",
++      "src/llvm/initialize-llvm.cc",
++      "src/llvm/initialize-llvm.h",
++      "src/llvm/intrinsic-repository.cc",
++      "src/llvm/intrinsic-repository.h",
++      "src/llvm/liveness-analysis-visitor.cc",
++      "src/llvm/liveness-analysis-visitor.h",
++      "src/llvm/llvm-headers.h",
++      "src/llvm/llvm-tf-builder.cc",
++      "src/llvm/llvm-tf-builder.h",
++      "src/llvm/load-constant-recorder.cc",
++      "src/llvm/load-constant-recorder.h",
++      "src/llvm/log.cpp",
++      "src/llvm/log.h",
++      "src/llvm/output.cc",
++      "src/llvm/output.h",
++      "src/llvm/stack-maps.cc",
++      "src/llvm/stack-maps.h",
++      "src/llvm/stack-map-info.cc",
++      "src/llvm/stack-map-info.h",
++      "src/llvm/tf/schedule-emitter.cc",
++      "src/llvm/tf/schedule-emitter.h",
++      "src/llvm/tf/v8-codegen.h",
++      "src/llvm/tf/v8-codegen.cc",
++      "src/llvm/tf/v8-pass-manager.h",
++      "src/llvm/tf/v8-pass-manager.cc",
++      "src/llvm/tf/tf-visitor.h",
++    ]
++  }
+ }
+ 
+ v8_source_set("v8_init") {
+@@ -2441,6 +2501,9 @@ v8_source_set("v8_base") {
+     sources += [ "$target_gen_dir/debug-support.cc" ]
+     deps += [ ":postmortem-metadata" ]
+   }
++  if (current_toolchain == v8_snapshot_toolchain) {
++    configs += [ ":llvm_configs" ]
++  }
+ }
+ 
+ v8_component("v8_libbase") {
+@@ -2680,7 +2743,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
+       "src/snapshot/mksnapshot.cc",
+     ]
+ 
+-    configs = [ ":internal_config" ]
++    configs = [
++      ":internal_config",
++      ":llvm_configs",
++    ]
+ 
+     deps = [
+       ":v8_base",
+diff --git a/gni/v8.gni b/gni/v8.gni
+index 1f499c9cd5..b73c30d962 100644
+--- a/gni/v8.gni
++++ b/gni/v8.gni
+@@ -90,7 +90,7 @@ if (is_debug && !v8_optimized_debug) {
+   # TODO(crbug.com/621335) Rework this so that we don't have the confusion
+   # between "optimize_speed" and "optimize_max".
+   if (is_posix && !is_android && !using_sanitizer) {
+-    v8_add_configs += [ "//build/config/compiler:optimize_speed" ]
++    v8_add_configs += [ "//build/config/compiler:no_optimize" ]
+   } else {
+     v8_add_configs += [ "//build/config/compiler:optimize_max" ]
+     #if UC_BUILD_OPTIMIZE_SIZE
+diff --git a/src/arm/assembler-arm.cc b/src/arm/assembler-arm.cc
+index eccb4d22bd..f3bcb1ebc4 100644
+--- a/src/arm/assembler-arm.cc
++++ b/src/arm/assembler-arm.cc
+@@ -649,6 +649,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
+   DCHECK(IsLdrRegisterImmediate(instr));
+   bool positive = offset >= 0;
+   if (!positive) offset = -offset;
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  CHECK(is_uint12(offset));
++#endif
+   DCHECK(is_uint12(offset));
+   // Set bit indicating whether the offset should be added.
+   instr = (instr & ~B23) | (positive ? B23 : 0);
+diff --git a/src/arm/assembler-arm.h b/src/arm/assembler-arm.h
+index 536731978b..65d9934bc5 100644
+--- a/src/arm/assembler-arm.h
++++ b/src/arm/assembler-arm.h
+@@ -1718,7 +1718,15 @@ class Assembler : public AssemblerBase {
+   void next(Label* L);
+ 
+   // Record reloc info for current pc_
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++ public:
+   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
++  void reset_pc(int pc_offset) { pc_ = buffer_ + pc_offset; }
++
++ private:
++#else
++  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
++#endif
+   void ConstantPoolAddEntry(int position, RelocInfo::Mode rmode,
+                             intptr_t value);
+   void ConstantPoolAddEntry(int position, Double value);
+diff --git a/src/arm/disasm-arm.cc b/src/arm/disasm-arm.cc
+index 83081f1b66..12ab856761 100644
+--- a/src/arm/disasm-arm.cc
++++ b/src/arm/disasm-arm.cc
+@@ -1337,7 +1337,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+             Format(instr, "sbfx'cond 'rd, 'rm, 'f");
+           }
+         } else {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++          Unknown(instr);
++#else
+           UNREACHABLE();
++#endif
+         }
+       } else if (!instr->HasW() && (instr->Bits(6, 4) == 0x1)) {
+         uint32_t lsbit = static_cast<uint32_t>(instr->Bits(11, 7));
+diff --git a/src/builtins/builtins-math-gen.cc b/src/builtins/builtins-math-gen.cc
+index 3e22a138eb..9897f2b3f8 100644
+--- a/src/builtins/builtins-math-gen.cc
++++ b/src/builtins/builtins-math-gen.cc
+@@ -194,6 +194,9 @@ void MathBuiltinsAssembler::MathMaxMin(
+ 
+ // ES6 #sec-math.acos
+ TF_BUILTIN(MathAcos, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Acos);
+@@ -201,6 +204,9 @@ TF_BUILTIN(MathAcos, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.acosh
+ TF_BUILTIN(MathAcosh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Acosh);
+@@ -208,6 +214,9 @@ TF_BUILTIN(MathAcosh, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.asin
+ TF_BUILTIN(MathAsin, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Asin);
+@@ -215,6 +224,9 @@ TF_BUILTIN(MathAsin, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.asinh
+ TF_BUILTIN(MathAsinh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Asinh);
+@@ -222,6 +234,9 @@ TF_BUILTIN(MathAsinh, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.atan
+ TF_BUILTIN(MathAtan, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Atan);
+@@ -229,6 +244,9 @@ TF_BUILTIN(MathAtan, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.atanh
+ TF_BUILTIN(MathAtanh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Atanh);
+@@ -236,6 +254,9 @@ TF_BUILTIN(MathAtanh, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.atan2
+ TF_BUILTIN(MathAtan2, CodeStubAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* y = Parameter(Descriptor::kY);
+   Node* x = Parameter(Descriptor::kX);
+@@ -249,6 +270,9 @@ TF_BUILTIN(MathAtan2, CodeStubAssembler) {
+ 
+ // ES6 #sec-math.ceil
+ TF_BUILTIN(MathCeil, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathRoundingOperation(context, x, &CodeStubAssembler::Float64Ceil);
+@@ -256,6 +280,9 @@ TF_BUILTIN(MathCeil, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.cbrt
+ TF_BUILTIN(MathCbrt, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cbrt);
+@@ -321,6 +348,9 @@ TF_BUILTIN(MathClz32, CodeStubAssembler) {
+ 
+ // ES6 #sec-math.cos
+ TF_BUILTIN(MathCos, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cos);
+@@ -328,6 +358,9 @@ TF_BUILTIN(MathCos, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.cosh
+ TF_BUILTIN(MathCosh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cosh);
+@@ -335,6 +368,9 @@ TF_BUILTIN(MathCosh, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.exp
+ TF_BUILTIN(MathExp, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Exp);
+@@ -342,6 +378,9 @@ TF_BUILTIN(MathExp, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.expm1
+ TF_BUILTIN(MathExpm1, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Expm1);
+@@ -349,6 +388,9 @@ TF_BUILTIN(MathExpm1, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.floor
+ TF_BUILTIN(MathFloor, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathRoundingOperation(context, x, &CodeStubAssembler::Float64Floor);
+@@ -356,6 +398,9 @@ TF_BUILTIN(MathFloor, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.fround
+ TF_BUILTIN(MathFround, CodeStubAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   Node* x_value = TruncateTaggedToFloat64(context, x);
+@@ -367,6 +412,9 @@ TF_BUILTIN(MathFround, CodeStubAssembler) {
+ 
+ // ES6 #sec-math.imul
+ TF_BUILTIN(MathImul, CodeStubAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   Node* y = Parameter(Descriptor::kY);
+@@ -379,6 +427,9 @@ TF_BUILTIN(MathImul, CodeStubAssembler) {
+ 
+ // ES6 #sec-math.log
+ TF_BUILTIN(MathLog, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log);
+@@ -386,6 +437,9 @@ TF_BUILTIN(MathLog, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.log1p
+ TF_BUILTIN(MathLog1p, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log1p);
+@@ -393,6 +447,9 @@ TF_BUILTIN(MathLog1p, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.log10
+ TF_BUILTIN(MathLog10, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log10);
+@@ -400,6 +457,9 @@ TF_BUILTIN(MathLog10, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.log2
+ TF_BUILTIN(MathLog2, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log2);
+@@ -407,6 +467,9 @@ TF_BUILTIN(MathLog2, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.pow
+ TF_BUILTIN(MathPow, CodeStubAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kBase);
+   Node* y = Parameter(Descriptor::kExponent);
+@@ -478,6 +541,9 @@ TF_BUILTIN(MathSign, CodeStubAssembler) {
+ 
+ // ES6 #sec-math.sin
+ TF_BUILTIN(MathSin, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sin);
+@@ -485,6 +551,9 @@ TF_BUILTIN(MathSin, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.sinh
+ TF_BUILTIN(MathSinh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sinh);
+@@ -492,6 +561,9 @@ TF_BUILTIN(MathSinh, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.sqrt
+ TF_BUILTIN(MathSqrt, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sqrt);
+@@ -499,6 +571,9 @@ TF_BUILTIN(MathSqrt, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.tan
+ TF_BUILTIN(MathTan, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Tan);
+@@ -506,6 +581,9 @@ TF_BUILTIN(MathTan, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.tanh
+ TF_BUILTIN(MathTanh, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* context = Parameter(Descriptor::kContext);
+   Node* x = Parameter(Descriptor::kX);
+   MathUnaryOperation(context, x, &CodeStubAssembler::Float64Tanh);
+@@ -520,6 +598,9 @@ TF_BUILTIN(MathTrunc, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.max
+ TF_BUILTIN(MathMax, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   // TODO(ishell): use constants from Descriptor once the JSFunction linkage
+   // arguments are reordered.
+   Node* context = Parameter(BuiltinDescriptor::kContext);
+@@ -529,6 +610,9 @@ TF_BUILTIN(MathMax, MathBuiltinsAssembler) {
+ 
+ // ES6 #sec-math.min
+ TF_BUILTIN(MathMin, MathBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   // TODO(ishell): use constants from Descriptor once the JSFunction linkage
+   // arguments are reordered.
+   Node* context = Parameter(BuiltinDescriptor::kContext);
+diff --git a/src/builtins/builtins-sharedarraybuffer-gen.cc b/src/builtins/builtins-sharedarraybuffer-gen.cc
+index a9e851ff87..56aaff70a1 100644
+--- a/src/builtins/builtins-sharedarraybuffer-gen.cc
++++ b/src/builtins/builtins-sharedarraybuffer-gen.cc
+@@ -143,6 +143,9 @@ void SharedArrayBufferBuiltinsAssembler::DebugSanityCheckAtomicIndex(
+ #endif
+ 
+ TF_BUILTIN(AtomicsLoad, SharedArrayBufferBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* array = Parameter(Descriptor::kArray);
+   Node* index = Parameter(Descriptor::kIndex);
+   Node* context = Parameter(Descriptor::kContext);
+@@ -199,6 +202,9 @@ TF_BUILTIN(AtomicsLoad, SharedArrayBufferBuiltinsAssembler) {
+ }
+ 
+ TF_BUILTIN(AtomicsStore, SharedArrayBufferBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* array = Parameter(Descriptor::kArray);
+   Node* index = Parameter(Descriptor::kIndex);
+   Node* value = Parameter(Descriptor::kValue);
+@@ -253,6 +259,9 @@ TF_BUILTIN(AtomicsStore, SharedArrayBufferBuiltinsAssembler) {
+ }
+ 
+ TF_BUILTIN(AtomicsExchange, SharedArrayBufferBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* array = Parameter(Descriptor::kArray);
+   Node* index = Parameter(Descriptor::kIndex);
+   Node* value = Parameter(Descriptor::kValue);
+@@ -326,6 +335,9 @@ TF_BUILTIN(AtomicsExchange, SharedArrayBufferBuiltinsAssembler) {
+ }
+ 
+ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   Node* array = Parameter(Descriptor::kArray);
+   Node* index = Parameter(Descriptor::kIndex);
+   Node* old_value = Parameter(Descriptor::kOldValue);
+@@ -408,7 +420,19 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
+ #endif  // V8_TARGET_ARCH_MIPS || V8_TARGET_ARCH_MIPS64 || V8_TARGET_ARCH_PPC64
+         // || V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_S390 || V8_TARGET_ARCH_S390X
+ }
+-
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++#define BINOP_BUILTIN(op)                                       \
++  TF_BUILTIN(Atomics##op, SharedArrayBufferBuiltinsAssembler) { \
++    state()->set_llvm_enabled(false);                           \
++    Node* array = Parameter(Descriptor::kArray);                \
++    Node* index = Parameter(Descriptor::kIndex);                \
++    Node* value = Parameter(Descriptor::kValue);                \
++    Node* context = Parameter(Descriptor::kContext);            \
++    AtomicBinopBuiltinCommon(array, index, value, context,      \
++                             &CodeAssembler::Atomic##op,        \
++                             Runtime::kAtomics##op);            \
++  }
++#else
+ #define BINOP_BUILTIN(op)                                       \
+   TF_BUILTIN(Atomics##op, SharedArrayBufferBuiltinsAssembler) { \
+     Node* array = Parameter(Descriptor::kArray);                \
+@@ -419,6 +443,8 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
+                              &CodeAssembler::Atomic##op,        \
+                              Runtime::kAtomics##op);            \
+   }
++#endif
++
+ BINOP_BUILTIN(Add)
+ BINOP_BUILTIN(Sub)
+ BINOP_BUILTIN(And)
+diff --git a/src/builtins/builtins-typedarray-gen.cc b/src/builtins/builtins-typedarray-gen.cc
+index a58f3a4093..e6d7030d19 100644
+--- a/src/builtins/builtins-typedarray-gen.cc
++++ b/src/builtins/builtins-typedarray-gen.cc
+@@ -22,7 +22,11 @@ namespace internal {
+ class TypedArrayBuiltinsAssembler : public CodeStubAssembler {
+  public:
+   explicit TypedArrayBuiltinsAssembler(compiler::CodeAssemblerState* state)
+-      : CodeStubAssembler(state) {}
++      : CodeStubAssembler(state) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++    state->set_llvm_enabled(false);
++#endif
++  }
+ 
+  protected:
+   void GenerateTypedArrayPrototypeGetter(Node* context, Node* receiver,
+diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
+index aa3ba47197..f3ac08ee97 100644
+--- a/src/compiler/code-assembler.cc
++++ b/src/compiler/code-assembler.cc
+@@ -23,6 +23,10 @@
+ #include "src/utils.h"
+ #include "src/zone/zone.h"
+ 
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++#include "src/llvm/tf/v8-pass-manager.h"
++#endif
++
+ #define REPEAT_1_TO_2(V, T) V(T) V(T, T)
+ #define REPEAT_1_TO_3(V, T) REPEAT_1_TO_2(V, T) V(T, T, T)
+ #define REPEAT_1_TO_4(V, T) REPEAT_1_TO_3(V, T) V(T, T, T, T)
+@@ -74,7 +78,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
+       kind_(kind),
+       name_(name),
+       code_generated_(false),
+-      variables_(zone) {}
++      variables_(zone) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  set_llvm_enabled(true);
++#endif
++}
+ 
+ CodeAssemblerState::~CodeAssemblerState() {}
+ 
+@@ -146,6 +154,13 @@ void CodeAssembler::CallEpilogue() {
+   if (state_->call_epilogue_) {
+     state_->call_epilogue_();
+   }
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  if (state_->is_llvm_enabled()) {
++    Label force_break(this);
++    Goto(&force_break);
++    Bind(&force_break);
++  }
++#endif
+ }
+ 
+ // static
+@@ -154,6 +169,38 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state) {
+ 
+   RawMachineAssembler* rasm = state->raw_assembler_.get();
+   Schedule* schedule = rasm->Export();
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  if (state->is_llvm_enabled()) {
++    tf_llvm::V8PassManager pass_manager;
++    state->code_generated_ = true;
++    Handle<Code> code =
++        pass_manager.Run(rasm->isolate(), schedule, rasm->call_descriptor(),
++                         state->name(), state->kind_);
++#if 0
++    code->Print();
++    {
++      JumpOptimizationInfo jump_opt;
++      bool should_optimize_jumps =
++          rasm->isolate()->serializer_enabled() && FLAG_turbo_rewrite_far_jumps;
++
++      Handle<Code> code = Pipeline::GenerateCodeForCodeStub(
++          rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
++          state->kind_, state->name_, should_optimize_jumps ? &jump_opt : nullptr);
++
++      if (jump_opt.is_optimizable()) {
++        jump_opt.set_optimizing();
++
++        // Regenerate machine code
++        code = Pipeline::GenerateCodeForCodeStub(
++            rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
++            state->kind_, state->name_, &jump_opt);
++      }
++      code->Print();
++    }
++#endif
++    return code;
++  }
++#endif
+ 
+   JumpOptimizationInfo jump_opt;
+   bool should_optimize_jumps =
+diff --git a/src/compiler/code-assembler.h b/src/compiler/code-assembler.h
+index d29423558c..9e0c12ea69 100644
+--- a/src/compiler/code-assembler.h
++++ b/src/compiler/code-assembler.h
+@@ -999,6 +999,10 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
+ 
+   const char* name() const { return name_; }
+   int parameter_count() const;
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  void set_llvm_enabled(bool enable) { llvm_enabled_ = enable; }
++  bool is_llvm_enabled() const { return llvm_enabled_; }
++#endif
+ 
+ #if DEBUG
+   void PrintCurrentBlock(std::ostream& os);
+@@ -1022,6 +1026,9 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
+   ZoneSet<CodeAssemblerVariable::Impl*> variables_;
+   CodeAssemblerCallback call_prologue_;
+   CodeAssemblerCallback call_epilogue_;
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  bool llvm_enabled_ = false;
++#endif
+ 
+   DISALLOW_COPY_AND_ASSIGN(CodeAssemblerState);
+ };
+diff --git a/src/objects.cc b/src/objects.cc
+index de0d4fd1ef..66944a5b61 100644
+--- a/src/objects.cc
++++ b/src/objects.cc
+@@ -14733,6 +14733,9 @@ void Code::Disassemble(const char* name, std::ostream& os) {  // NOLINT
+     if (kind() == OPTIMIZED_FUNCTION) {
+       HandlerTable::cast(handler_table())->HandlerTableReturnPrint(os);
+     }
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++    HandlerTable::cast(handler_table())->HandlerTableReturnPrint(os);
++#endif
+     os << "\n";
+   }
+ 
+diff --git a/src/snapshot/deserializer.cc b/src/snapshot/deserializer.cc
+index 1eb15d6c38..ff93af3df5 100644
+--- a/src/snapshot/deserializer.cc
++++ b/src/snapshot/deserializer.cc
+@@ -588,7 +588,11 @@ bool Deserializer::ReadData(Object** current, Object** limit, int source_space,
+ #undef ALL_SPACES
+ 
+       case kSkip: {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++        int size = source_.GetSkipInt();
++#else
+         int size = source_.GetInt();
++#endif
+         current = reinterpret_cast<Object**>(
+             reinterpret_cast<intptr_t>(current) + size);
+         break;
+@@ -687,7 +691,11 @@ bool Deserializer::ReadData(Object** current, Object** limit, int source_space,
+       }
+ 
+       case kApiReference: {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++        int skip = source_.GetSkipInt();
++#else
+         int skip = source_.GetInt();
++#endif
+         current = reinterpret_cast<Object**>(
+             reinterpret_cast<Address>(current) + skip);
+         uint32_t reference_id = static_cast<uint32_t>(source_.GetInt());
+@@ -818,7 +826,11 @@ Object** Deserializer::ReadDataCase(Isolate* isolate, Object** current,
+       new_object = isolate->partial_snapshot_cache()->at(cache_index);
+       emit_write_barrier = isolate->heap()->InNewSpace(new_object);
+     } else if (where == kExternalReference) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++      int skip = source_.GetSkipInt();
++#else
+       int skip = source_.GetInt();
++#endif
+       current =
+           reinterpret_cast<Object**>(reinterpret_cast<Address>(current) + skip);
+       uint32_t reference_id = static_cast<uint32_t>(source_.GetInt());
+diff --git a/src/snapshot/serializer.cc b/src/snapshot/serializer.cc
+index 9db7d798a5..1f47ce350c 100644
+--- a/src/snapshot/serializer.cc
++++ b/src/snapshot/serializer.cc
+@@ -715,7 +715,11 @@ void Serializer<AllocatorT>::ObjectSerializer::VisitExternalReference(
+   } else {
+     sink_->Put(kExternalReference + kPlain + kStartOfObject, "ExternalRef");
+   }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  sink_->PutSkipInt(skip, "SkipB4ExternalRef");
++#else
+   sink_->PutInt(skip, "SkipB4ExternalRef");
++#endif
+   sink_->PutInt(encoded_reference.index(), "reference index");
+   bytes_processed_so_far_ += kPointerSize;
+ }
+@@ -734,7 +738,11 @@ void Serializer<AllocatorT>::ObjectSerializer::VisitExternalReference(
+     sink_->Put(kExternalReference + how_to_code + kStartOfObject,
+                "ExternalRef");
+   }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  sink_->PutSkipInt(skip, "SkipB4ExternalRef");
++#else
+   sink_->PutInt(skip, "SkipB4ExternalRef");
++#endif
+   DCHECK_NOT_NULL(target);  // Code does not reference null.
+   sink_->PutInt(encoded_reference.index(), "reference index");
+   bytes_processed_so_far_ += rinfo->target_address_size();
+diff --git a/src/snapshot/serializer.h b/src/snapshot/serializer.h
+index 1fe607b530..882375735e 100644
+--- a/src/snapshot/serializer.h
++++ b/src/snapshot/serializer.h
+@@ -194,10 +194,17 @@ class Serializer : public SerializerDeserializer {
+       int skip, BuiltinReferenceSerializationMode mode = kDefault);
+ 
+   inline void FlushSkip(int skip) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++    if (skip != 0) {
++      sink_.Put(kSkip, "SkipFromSerializeObject");
++      sink_.PutSkipInt(skip, "SkipDistanceFromSerializeObject");
++    }
++#else
+     if (skip != 0) {
+       sink_.Put(kSkip, "SkipFromSerializeObject");
+       sink_.PutInt(skip, "SkipDistanceFromSerializeObject");
+     }
++#endif
+   }
+ 
+   ExternalReferenceEncoder::Value EncodeExternalReference(Address addr) {
+diff --git a/src/snapshot/snapshot-source-sink.h b/src/snapshot/snapshot-source-sink.h
+index 584f86a760..7116627f26 100644
+--- a/src/snapshot/snapshot-source-sink.h
++++ b/src/snapshot/snapshot-source-sink.h
+@@ -60,6 +60,18 @@ class SnapshotByteSource final {
+     return answer;
+   }
+ 
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  inline int GetSkipInt() {
++    // This way of decoding variable-length encoded integers does not
++    // suffer from branch mispredictions.
++    DCHECK(position_ + 3 < length_);
++    int answer;
++    memcpy(&answer, data_ + position_, sizeof(answer));
++    Advance(sizeof(int));
++    return answer;
++  }
++#endif
++
+   // Returns length.
+   int GetBlob(const byte** data);
+ 
+@@ -96,6 +108,12 @@ class SnapshotByteSink {
+ 
+   void PutInt(uintptr_t integer, const char* description);
+   void PutRaw(const byte* data, int number_of_bytes, const char* description);
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  void PutSkipInt(int integer, const char* description) {
++    PutRaw(reinterpret_cast<const byte*>(&integer), sizeof(integer),
++           description);
++  }
++#endif
+   int Position() const { return static_cast<int>(data_.size()); }
+ 
+   const std::vector<byte>* data() const { return &data_; }
