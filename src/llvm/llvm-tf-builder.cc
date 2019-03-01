@@ -1270,7 +1270,17 @@ void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
 void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
   LValue e1_value = EnsureWord32(GetImpl(current_bb_)->value(e1));
   LValue e2_value = EnsureWord32(GetImpl(current_bb_)->value(e2));
+#if 0
   LValue result = output().buildSDiv(e1_value, e2_value);
+#else
+  LValue e1_double =
+      output().buildCast(LLVMSIToFP, e1_value, output().repo().doubleType);
+  LValue e2_double =
+      output().buildCast(LLVMSIToFP, e2_value, output().repo().doubleType);
+  LValue result_double = output().buildFDiv(e1_double, e2_double);
+  LValue result =
+      output().buildCast(LLVMFPToSI, result_double, output().repo().int32);
+#endif
   GetImpl(current_bb_)->set_value(id, result);
 }
 

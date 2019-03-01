@@ -1,5 +1,5 @@
 diff --git a/BUILD.gn b/BUILD.gn
-index cf3c455093..c68157e972 100644
+index cf3c455093..810d0cf4e5 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -6,11 +6,13 @@
@@ -16,25 +16,35 @@ index cf3c455093..c68157e972 100644
  #import("//build/config/host_byteorder.gni")
  #import("//build/config/jumbo.gni")
  import("//build/config/mips.gni")
-@@ -159,6 +161,9 @@ if (v8_enable_v8_checks == "") {
- if (v8_check_microtasks_scopes_consistency == "") {
+@@ -138,6 +140,7 @@ declare_args() {
+   # Temporary flag to allow embedders to update their microtasks scopes
+   # while rolling in a new version of V8.
+   v8_check_microtasks_scopes_consistency = ""
++  v8_enable_llvm = false
+ }
+ 
+ # Derived defaults.
+@@ -160,6 +163,13 @@ if (v8_check_microtasks_scopes_consistency == "") {
    v8_check_microtasks_scopes_consistency = is_debug || dcheck_always_on
  }
-+if (current_toolchain == v8_snapshot_toolchain) {
+ 
++if (uc_build_tf_llvm_backend && current_toolchain == v8_snapshot_toolchain) {
++  v8_enable_llvm = true
++}
++if (v8_enable_llvm) {
 +  v8_enable_disassembler = true
 +}
- 
++
  # Specifies if the target build is a simulator build. Comparing target cpu
  # with v8 target cpu to not affect simulator builds for making cross-compile
-@@ -539,6 +544,17 @@ config("toolchain") {
+ # snapshots.
+@@ -539,6 +549,15 @@ config("toolchain") {
    }
  }
  
 +config("llvm_configs") {
 +  include_dirs = [ "src/llvm/include" ]
-+  libs = [
-+    "LLVM-7"
-+  ]
++  libs = [ "LLVM-7" ]
 +  defines = [ "LLVMLOG_LEVEL=1" ]
 +  ldflags = [ "-Wl,-rpath,../../v8/lib" ]
 +
@@ -44,12 +54,12 @@ index cf3c455093..c68157e972 100644
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1108,6 +1124,50 @@ v8_source_set("v8_initializers") {
+@@ -1108,6 +1127,50 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
 +
-+  if (current_toolchain == v8_snapshot_toolchain) {
++  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
 +    sources += [
 +      "src/llvm/abbreviated-types.h",
@@ -79,33 +89,33 @@ index cf3c455093..c68157e972 100644
 +      "src/llvm/log.h",
 +      "src/llvm/output.cc",
 +      "src/llvm/output.h",
-+      "src/llvm/stack-maps.cc",
-+      "src/llvm/stack-maps.h",
 +      "src/llvm/stack-map-info.cc",
 +      "src/llvm/stack-map-info.h",
++      "src/llvm/stack-maps.cc",
++      "src/llvm/stack-maps.h",
 +      "src/llvm/tf/schedule-emitter.cc",
 +      "src/llvm/tf/schedule-emitter.h",
-+      "src/llvm/tf/v8-codegen.h",
-+      "src/llvm/tf/v8-codegen.cc",
-+      "src/llvm/tf/v8-pass-manager.h",
-+      "src/llvm/tf/v8-pass-manager.cc",
 +      "src/llvm/tf/tf-visitor.h",
++      "src/llvm/tf/v8-codegen.cc",
++      "src/llvm/tf/v8-codegen.h",
++      "src/llvm/tf/v8-pass-manager.cc",
++      "src/llvm/tf/v8-pass-manager.h",
 +    ]
 +  }
  }
  
  v8_source_set("v8_init") {
-@@ -2441,6 +2501,9 @@ v8_source_set("v8_base") {
+@@ -2441,6 +2504,9 @@ v8_source_set("v8_base") {
      sources += [ "$target_gen_dir/debug-support.cc" ]
      deps += [ ":postmortem-metadata" ]
    }
-+  if (current_toolchain == v8_snapshot_toolchain) {
++  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
 +  }
  }
  
  v8_component("v8_libbase") {
-@@ -2680,7 +2743,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
+@@ -2680,7 +2746,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
        "src/snapshot/mksnapshot.cc",
      ]
  
