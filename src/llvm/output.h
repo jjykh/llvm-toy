@@ -98,7 +98,6 @@ class Output {
   LValue buildLoadMagic(LType, int64_t magic);
   void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
-  void buildReturn(LValue, LValue pop_count);
   LValue buildLandingPad();
 
   inline IntrinsicRepository& repo() { return repo_; }

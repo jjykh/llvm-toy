@@ -17,8 +17,7 @@ enum class StackMapInfoType {
   kRecordStubCodeLocation,
   kCallInfo,
   kStoreBarrier,
-  kReturn,
-  kException
+  kReturn
 };
 
 class StackMapInfo {
@@ -40,13 +39,10 @@ class CallInfo final : public StackMapInfo {
   const LocationVector& locations() const { return locations_; }
   bool is_tailcall() const { return is_tailcall_; }
   void set_is_tailcall(bool _tailcall) { is_tailcall_ = _tailcall; }
-  bool is_invoke() const { return is_invoke_; }
-  void set_is_invoke(bool i) { is_invoke_ = i; }
 
  private:
   LocationVector locations_;
   bool is_tailcall_;
-  bool is_invoke_;
 };
 
 class ReturnInfo final : public StackMapInfo {
@@ -61,16 +57,6 @@ class ReturnInfo final : public StackMapInfo {
  private:
   bool pop_count_is_constant_;
   int constant_;
-};
-
-class ExceptionInfo final : public StackMapInfo {
- public:
-  explicit ExceptionInfo(int target_patch_id);
-  ~ExceptionInfo() override = default;
-  int target_patch_id() const { return target_patch_id_; }
-
- private:
-  int target_patch_id_;
 };
 
 // By zuojian.lzj, should be int64_t. But I believe there will not be any number

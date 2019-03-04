@@ -45,6 +45,8 @@ static uint8_t* mmAllocateDataSection(void* opaqueState, uintptr_t size,
   EMASSERT((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
   if (!strcmp(sectionName, SECTION_NAME("llvm_stackmaps"))) {
     state.stackMapsSection_ = &bb;
+  } else if (!strcmp(sectionName, SECTION_NAME("ARM.extab"))) {
+    state.exception_table_ = &bb;
   }
 
   return const_cast<uint8_t*>(bb.data());

@@ -13,7 +13,7 @@ typedef uint16_t DWARFRegister;
 
 class DataView {
  public:
-  DataView(const uint8_t* data) : data_(data) {}
+  explicit DataView(const uint8_t* data) : data_(data) {}
   template <typename T>
   T read(unsigned& off, bool littenEndian) {
     EMASSERT(littenEndian == true);
@@ -22,7 +22,7 @@ class DataView {
     return t;
   }
 
- private:
+ protected:
   const uint8_t* data_;
 };
 

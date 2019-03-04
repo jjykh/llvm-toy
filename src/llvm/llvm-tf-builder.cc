@@ -196,7 +196,6 @@ class InvokeResolver final : public CallResolver {
  private:
   LValue EmitCallInstr(LValue function, LValue* operands,
                        size_t operands_count) override;
-  void PopulateCallInfo(CallInfo*) override;
 
   BasicBlock* then_bb_;
   BasicBlock* exception_bb_;
@@ -477,10 +476,6 @@ LValue InvokeResolver::EmitCallInstr(LValue function, LValue* operands,
   return output().buildInvoke(function, operands, operands_count,
                               GetNativeBB(then_bb_),
                               GetNativeBB(exception_bb_));
-}
-
-void InvokeResolver::PopulateCallInfo(CallInfo* info) {
-  info->set_is_invoke(true);
 }
 
 ContinuationResolver::ContinuationResolver(BasicBlock* bb, Output& output,
@@ -1449,6 +1444,7 @@ void LLVMTFBuilder::VisitIfValue(int id, int val) {
 void LLVMTFBuilder::VisitIfDefault(int id) {}
 
 void LLVMTFBuilder::VisitIfException(int id) {
+#if 0
   std::vector<LValue> statepoint_operands;
   LType ret_type = output().repo().taggedType;
   LType callee_function_type = functionType(ret_type);
@@ -1467,14 +1463,13 @@ void LLVMTFBuilder::VisitIfException(int id) {
   LLVMSetInstructionCallConv(result, LLVMV8CallConv);
   LValue exception =
       output().buildCall(output().repo().gcResultIntrinsic(), result);
-  GetImpl(current_bb_)->set_value(id, exception);
-  std::unique_ptr<StackMapInfo> info(
-      new ExceptionInfo(GetImpl(current_bb_)->call_info.target_patch_id));
-#if defined(UC_3_0)
-  stack_map_info_map_->emplace(patchid, std::move(info));
-#else
-  stack_map_info_map_->insert(std::make_pair(patchid, std::move(info)));
 #endif
+  char kEmpty[] = "\0";
+  char kConstraint[] = "={r0}";
+  LValue exception =
+      output().buildInlineAsm(functionType(output().taggedType()), kEmpty, 0,
+                              kConstraint, sizeof(kConstraint) - 1, true);
+  GetImpl(current_bb_)->set_value(id, exception);
 }
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {

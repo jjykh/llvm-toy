@@ -28,6 +28,7 @@ struct CompilerState {
   StackMapInfoMap stack_map_info_map_;
   LoadConstantRecorder load_constant_recorder_;
   ByteBuffer* stackMapsSection_;
+  ByteBuffer* exception_table_;
   LLVMModuleRef module_;
   LLVMValueRef function_;
   LLVMContextRef context_;

@@ -7,6 +7,7 @@ namespace tf_llvm {
 
 CompilerState::CompilerState(const char* moduleName)
     : stackMapsSection_(nullptr),
+      exception_table_(nullptr),
       module_(nullptr),
       function_(nullptr),
       context_(nullptr),
