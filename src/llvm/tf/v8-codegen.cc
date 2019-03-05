@@ -68,7 +68,7 @@ class CodeGeneratorLLVM {
 // Adjust for LLVM's callseq_end, which will emit a SDNode
 // Copy r0. And it will becomes a defined instruction if register allocator
 // allocates result other than r0.
-void AdjustCallSite(int* callsite, const byte* instruction_start) {
+inline void AdjustCallSite(int* callsite, const byte* instruction_start) {
   int callsite_adj = *callsite;
   const Instr* where =
       reinterpret_cast<const Instr*>(instruction_start + callsite_adj);
@@ -77,6 +77,17 @@ void AdjustCallSite(int* callsite, const byte* instruction_start) {
     callsite_adj -= sizeof(Instr);
   }
   *callsite = callsite_adj;
+}
+
+// Adjust for LLVM's unmergeable block, which results in a branch.
+inline void AdjustHandler(int* handler, const byte* instruction_start) {
+  int handler_adj = *handler;
+  const Instr* where =
+      reinterpret_cast<const Instr*>(instruction_start + handler_adj);
+  if (Assembler::IsBranch(*where)) {
+    handler_adj = handler_adj + Assembler::GetBranchOffset(*where) + 8;
+  }
+  *handler = handler_adj;
 }
 
 void EmitHandlerTable(const CompilerState& state, Isolate* isolate,
@@ -95,6 +106,7 @@ void EmitHandlerTable(const CompilerState& state, Isolate* isolate,
     int callsite, handler;
     std::tie(callsite, handler) = callsite_handler_pairs[i];
     AdjustCallSite(&callsite, code->instruction_start());
+    AdjustHandler(&handler, code->instruction_start());
     table->SetReturnOffset(static_cast<int>(i), callsite);
     table->SetReturnHandler(static_cast<int>(i), handler);
   }
