@@ -1,5 +1,5 @@
 diff --git a/BUILD.gn b/BUILD.gn
-index cf3c455093..810d0cf4e5 100644
+index cf3c455093..b16bef5590 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -6,11 +6,13 @@
@@ -54,7 +54,7 @@ index cf3c455093..810d0cf4e5 100644
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1108,6 +1127,50 @@ v8_source_set("v8_initializers") {
+@@ -1108,6 +1127,52 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
@@ -74,6 +74,8 @@ index cf3c455093..810d0cf4e5 100644
 +      "src/llvm/compile.h",
 +      "src/llvm/compiler-state.cc",
 +      "src/llvm/compiler-state.h",
++      "src/llvm/exception-table-arm.cc",
++      "src/llvm/exception-table-arm.h",
 +      "src/llvm/initialize-llvm.cc",
 +      "src/llvm/initialize-llvm.h",
 +      "src/llvm/intrinsic-repository.cc",
@@ -105,7 +107,7 @@ index cf3c455093..810d0cf4e5 100644
  }
  
  v8_source_set("v8_init") {
-@@ -2441,6 +2504,9 @@ v8_source_set("v8_base") {
+@@ -2441,6 +2506,9 @@ v8_source_set("v8_base") {
      sources += [ "$target_gen_dir/debug-support.cc" ]
      deps += [ ":postmortem-metadata" ]
    }
@@ -115,7 +117,7 @@ index cf3c455093..810d0cf4e5 100644
  }
  
  v8_component("v8_libbase") {
-@@ -2680,7 +2746,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
+@@ -2680,7 +2748,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
        "src/snapshot/mksnapshot.cc",
      ]
  
@@ -685,129 +687,3 @@ index de0d4fd1ef..66944a5b61 100644
      os << "\n";
    }
  
-diff --git a/src/snapshot/deserializer.cc b/src/snapshot/deserializer.cc
-index 1eb15d6c38..ff93af3df5 100644
---- a/src/snapshot/deserializer.cc
-+++ b/src/snapshot/deserializer.cc
-@@ -588,7 +588,11 @@ bool Deserializer::ReadData(Object** current, Object** limit, int source_space,
- #undef ALL_SPACES
- 
-       case kSkip: {
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+        int size = source_.GetSkipInt();
-+#else
-         int size = source_.GetInt();
-+#endif
-         current = reinterpret_cast<Object**>(
-             reinterpret_cast<intptr_t>(current) + size);
-         break;
-@@ -687,7 +691,11 @@ bool Deserializer::ReadData(Object** current, Object** limit, int source_space,
-       }
- 
-       case kApiReference: {
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+        int skip = source_.GetSkipInt();
-+#else
-         int skip = source_.GetInt();
-+#endif
-         current = reinterpret_cast<Object**>(
-             reinterpret_cast<Address>(current) + skip);
-         uint32_t reference_id = static_cast<uint32_t>(source_.GetInt());
-@@ -818,7 +826,11 @@ Object** Deserializer::ReadDataCase(Isolate* isolate, Object** current,
-       new_object = isolate->partial_snapshot_cache()->at(cache_index);
-       emit_write_barrier = isolate->heap()->InNewSpace(new_object);
-     } else if (where == kExternalReference) {
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+      int skip = source_.GetSkipInt();
-+#else
-       int skip = source_.GetInt();
-+#endif
-       current =
-           reinterpret_cast<Object**>(reinterpret_cast<Address>(current) + skip);
-       uint32_t reference_id = static_cast<uint32_t>(source_.GetInt());
-diff --git a/src/snapshot/serializer.cc b/src/snapshot/serializer.cc
-index 9db7d798a5..1f47ce350c 100644
---- a/src/snapshot/serializer.cc
-+++ b/src/snapshot/serializer.cc
-@@ -715,7 +715,11 @@ void Serializer<AllocatorT>::ObjectSerializer::VisitExternalReference(
-   } else {
-     sink_->Put(kExternalReference + kPlain + kStartOfObject, "ExternalRef");
-   }
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+  sink_->PutSkipInt(skip, "SkipB4ExternalRef");
-+#else
-   sink_->PutInt(skip, "SkipB4ExternalRef");
-+#endif
-   sink_->PutInt(encoded_reference.index(), "reference index");
-   bytes_processed_so_far_ += kPointerSize;
- }
-@@ -734,7 +738,11 @@ void Serializer<AllocatorT>::ObjectSerializer::VisitExternalReference(
-     sink_->Put(kExternalReference + how_to_code + kStartOfObject,
-                "ExternalRef");
-   }
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+  sink_->PutSkipInt(skip, "SkipB4ExternalRef");
-+#else
-   sink_->PutInt(skip, "SkipB4ExternalRef");
-+#endif
-   DCHECK_NOT_NULL(target);  // Code does not reference null.
-   sink_->PutInt(encoded_reference.index(), "reference index");
-   bytes_processed_so_far_ += rinfo->target_address_size();
-diff --git a/src/snapshot/serializer.h b/src/snapshot/serializer.h
-index 1fe607b530..882375735e 100644
---- a/src/snapshot/serializer.h
-+++ b/src/snapshot/serializer.h
-@@ -194,10 +194,17 @@ class Serializer : public SerializerDeserializer {
-       int skip, BuiltinReferenceSerializationMode mode = kDefault);
- 
-   inline void FlushSkip(int skip) {
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+    if (skip != 0) {
-+      sink_.Put(kSkip, "SkipFromSerializeObject");
-+      sink_.PutSkipInt(skip, "SkipDistanceFromSerializeObject");
-+    }
-+#else
-     if (skip != 0) {
-       sink_.Put(kSkip, "SkipFromSerializeObject");
-       sink_.PutInt(skip, "SkipDistanceFromSerializeObject");
-     }
-+#endif
-   }
- 
-   ExternalReferenceEncoder::Value EncodeExternalReference(Address addr) {
-diff --git a/src/snapshot/snapshot-source-sink.h b/src/snapshot/snapshot-source-sink.h
-index 584f86a760..7116627f26 100644
---- a/src/snapshot/snapshot-source-sink.h
-+++ b/src/snapshot/snapshot-source-sink.h
-@@ -60,6 +60,18 @@ class SnapshotByteSource final {
-     return answer;
-   }
- 
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+  inline int GetSkipInt() {
-+    // This way of decoding variable-length encoded integers does not
-+    // suffer from branch mispredictions.
-+    DCHECK(position_ + 3 < length_);
-+    int answer;
-+    memcpy(&answer, data_ + position_, sizeof(answer));
-+    Advance(sizeof(int));
-+    return answer;
-+  }
-+#endif
-+
-   // Returns length.
-   int GetBlob(const byte** data);
- 
-@@ -96,6 +108,12 @@ class SnapshotByteSink {
- 
-   void PutInt(uintptr_t integer, const char* description);
-   void PutRaw(const byte* data, int number_of_bytes, const char* description);
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+  void PutSkipInt(int integer, const char* description) {
-+    PutRaw(reinterpret_cast<const byte*>(&integer), sizeof(integer),
-+           description);
-+  }
-+#endif
-   int Position() const { return static_cast<int>(data_.size()); }
- 
-   const std::vector<byte>* data() const { return &data_; }

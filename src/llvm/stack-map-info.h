@@ -9,12 +9,6 @@ namespace internal {
 namespace tf_llvm {
 
 enum class StackMapInfoType {
-  kHeapConstant,
-  kExternalReference,
-  kCodeConstant,
-  kIsolateExternalReferenceLocation,
-  kModuloExternalReferenceLocation,
-  kRecordStubCodeLocation,
   kCallInfo,
   kStoreBarrier,
   kReturn

@@ -24,24 +24,15 @@ class CodeGeneratorLLVM {
   Handle<Code> Generate(const CompilerState& state);
 
  private:
-  int HandleHeapConstant();
-  int HandleExternalReference();
-  int HandleCodeConstant();
-  int HandleIsolateExternalReferenceLocation();
-  int HandleModuloExternalReferenceLocation();
-  int HandleRecordStubCodeLocation();
   int HandleCall(const CallInfo*, const StackMaps::Record&);
   int HandleStoreBarrier(const StackMaps::Record&);
   int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
-  void ProcessCode(const uint32_t* code_start, const uint32_t* code_end,
-                   const LoadConstantRecorder&);
+  void PostProcessCode(const uint32_t* code_start, const uint32_t* code_end,
+                       const LoadConstantRecorder&);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
-  void InsertLoadConstantInfoIfNeeded(
-      int constant_pc_offset, int pc_offset, StackMapInfoType type,
-      StackMapInfoType* location_type = nullptr);
 
   struct RecordReference {
     const StackMaps::Record* record;
@@ -51,15 +42,11 @@ class CodeGeneratorLLVM {
   };
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
-  typedef std::unordered_set<uint32_t> ConstantLocationSet;
-  typedef std::vector<std::unique_ptr<StackMapInfo>> InfoStorage;
   Isolate* isolate_;
   Zone zone_;
   MacroAssembler masm_;
   SafepointTableBuilder safepoint_table_builder_;
   RecordReferenceMap record_reference_map_;
-  InfoStorage info_storage_;
-  ConstantLocationSet constant_location_set_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
   bool needs_frame_ = false;
@@ -118,45 +105,6 @@ CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
       zone_(isolate->allocator(), "llvm"),
       masm_(isolate, nullptr, 0, CodeObjectRequired::kYes),
       safepoint_table_builder_(&zone_) {}
-
-int CodeGeneratorLLVM::HandleHeapConstant() {
-  masm_.RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
-  masm_.dd(reference_instruction_);
-  return 1;
-}
-
-int CodeGeneratorLLVM::HandleExternalReference() {
-  masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-  masm_.dd(reference_instruction_);
-  return 1;
-}
-
-int CodeGeneratorLLVM::HandleCodeConstant() {
-  masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
-  masm_.dd(reference_instruction_);
-  return 1;
-}
-
-int CodeGeneratorLLVM::HandleIsolateExternalReferenceLocation() {
-  ExternalReference isolate_external_reference =
-      ExternalReference::isolate_address(isolate_);
-  masm_.dd(reinterpret_cast<intptr_t>(isolate_external_reference.address()));
-  return 1;
-}
-
-int CodeGeneratorLLVM::HandleModuloExternalReferenceLocation() {
-  ExternalReference modulo_reference =
-      ExternalReference::mod_two_doubles_operation(isolate_);
-  masm_.dd(reinterpret_cast<intptr_t>(modulo_reference.address()));
-  return 1;
-}
-
-int CodeGeneratorLLVM::HandleRecordStubCodeLocation() {
-  Callable const callable =
-      Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
-  masm_.dd(reinterpret_cast<intptr_t>(callable.code().location()));
-  return 1;
-}
 
 int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
                                   const StackMaps::Record& record) {
@@ -224,18 +172,6 @@ int CodeGeneratorLLVM::HandleReturn(const ReturnInfo* info,
 int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
                                           const StackMaps::Record* record) {
   switch (stack_map_info->GetType()) {
-    case StackMapInfoType::kHeapConstant:
-      return HandleHeapConstant();
-    case StackMapInfoType::kExternalReference:
-      return HandleExternalReference();
-    case StackMapInfoType::kCodeConstant:
-      return HandleCodeConstant();
-    case StackMapInfoType::kIsolateExternalReferenceLocation:
-      return HandleIsolateExternalReferenceLocation();
-    case StackMapInfoType::kModuloExternalReferenceLocation:
-      return HandleModuloExternalReferenceLocation();
-    case StackMapInfoType::kRecordStubCodeLocation:
-      return HandleRecordStubCodeLocation();
     case StackMapInfoType::kCallInfo:
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), *record);
     case StackMapInfoType::kStoreBarrier:
@@ -262,8 +198,6 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   unsigned num_bytes = code.size();
   const uint32_t* instruction_end =
       reinterpret_cast<const uint32_t*>(code.data() + num_bytes);
-  ProcessCode(instruction_pointer, instruction_end,
-              state.load_constant_recorder_);
   ProcessRecordMap(rm, state.stack_map_info_map_);
 
   slot_count_ = sm.stackSize() / kPointerSize;
@@ -289,7 +223,9 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
       masm_.dd(instruction);
     }
   }
-  masm_.CheckConstPool(true, false);
+  instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
+  PostProcessCode(instruction_pointer, instruction_end,
+                  state.load_constant_recorder_);
   record_reference_map_.clear();
   safepoint_table_builder_.Emit(&masm_, slot_count_);
   CodeDesc desc;
@@ -304,9 +240,15 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   return new_object;
 }
 
-void CodeGeneratorLLVM::ProcessCode(
+void CodeGeneratorLLVM::PostProcessCode(
     const uint32_t* code_start, const uint32_t* code_end,
     const LoadConstantRecorder& load_constant_recorder) {
+  // constant_pc_offset, pc_offset, type.
+  using WorkListEntry = std::tuple<int, int, LoadConstantRecorder::Type>;
+  std::vector<WorkListEntry> work_list;
+  typedef std::unordered_set<int> ConstantLocationSet;
+  ConstantLocationSet constant_location_set;
+  int pc_offset = masm_.pc_offset();
   for (auto instruction_pointer = code_start; instruction_pointer != code_end;
        instruction_pointer += 1) {
     uint32_t instruction = *instruction_pointer;
@@ -320,51 +262,67 @@ void CodeGeneratorLLVM::ProcessCode(
       int constant_pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(&address));
+      if (constant_location_set.find(constant_pc_offset) !=
+          constant_location_set.end())
+        continue;
+      constant_location_set.insert(constant_pc_offset);
       int pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
                         reinterpret_cast<const uint8_t*>(instruction_pointer));
 
       LoadConstantRecorder::Type type =
           load_constant_recorder.Query(reinterpret_cast<int64_t>(address));
-      switch (type) {
-        case LoadConstantRecorder::kHeapConstant:
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kHeapConstant);
-          break;
-        case LoadConstantRecorder::kExternalReference:
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kExternalReference);
-          break;
-        case LoadConstantRecorder::kCodeConstant:
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kCodeConstant);
-          break;
-        case LoadConstantRecorder::kIsolateExternalReference: {
-          StackMapInfoType location_type =
-              StackMapInfoType::kIsolateExternalReferenceLocation;
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kExternalReference,
-                                         &location_type);
-        } break;
-        case LoadConstantRecorder::kRecordStubCodeConstant: {
-          StackMapInfoType location_type =
-              StackMapInfoType::kRecordStubCodeLocation;
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kCodeConstant,
-                                         &location_type);
-        } break;
-        case LoadConstantRecorder::kModuloExternalReference: {
-          StackMapInfoType location_type =
-              StackMapInfoType::kModuloExternalReferenceLocation;
-          InsertLoadConstantInfoIfNeeded(constant_pc_offset, pc_offset,
-                                         StackMapInfoType::kExternalReference,
-                                         &location_type);
-        } break;
-        default:
-          UNREACHABLE();
-      }
+      work_list.emplace_back(constant_pc_offset, pc_offset, type);
     }
   }
+  std::stable_sort(work_list.begin(), work_list.end(),
+                   [](const WorkListEntry& lhs, const WorkListEntry& rhs) {
+                     return std::get<0>(lhs) < std::get<0>(rhs);
+                   });
+  for (auto& entry : work_list) {
+    switch (std::get<2>(entry)) {
+      case LoadConstantRecorder::kHeapConstant:
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
+        break;
+      case LoadConstantRecorder::kCodeConstant:
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
+        break;
+      case LoadConstantRecorder::kExternalReference:
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+        break;
+      case LoadConstantRecorder::kIsolateExternalReference: {
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+        masm_.reset_pc(std::get<0>(entry));
+        ExternalReference isolate_external_reference =
+            ExternalReference::isolate_address(isolate_);
+        masm_.dd(
+            reinterpret_cast<intptr_t>(isolate_external_reference.address()));
+      } break;
+      case LoadConstantRecorder::kRecordStubCodeConstant: {
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
+        masm_.reset_pc(std::get<0>(entry));
+        Callable const callable =
+            Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
+        masm_.dd(reinterpret_cast<intptr_t>(callable.code().location()));
+      } break;
+      case LoadConstantRecorder::kModuloExternalReference: {
+        masm_.reset_pc(std::get<1>(entry));
+        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+        masm_.reset_pc(std::get<0>(entry));
+        ExternalReference modulo_reference =
+            ExternalReference::mod_two_doubles_operation(isolate_);
+        masm_.dd(reinterpret_cast<intptr_t>(modulo_reference.address()));
+      } break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  masm_.reset_pc(pc_offset);
 }
 
 void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
@@ -391,35 +349,6 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
     record_reference_map_.insert(std::make_pair(
         instruction_offset, RecordReference(&record, stack_map_info)));
 #endif
-  }
-}
-
-void CodeGeneratorLLVM::InsertLoadConstantInfoIfNeeded(
-    int constant_pc_offset, int pc_offset, StackMapInfoType type,
-    StackMapInfoType* location_type) {
-  auto found = constant_location_set_.find(constant_pc_offset);
-  if (found == constant_location_set_.end()) {
-    constant_location_set_.insert(constant_pc_offset);
-    info_storage_.emplace_back(new StackMapInfo(type));
-#if defined(UC_3_0)
-    record_reference_map_.emplace(
-        pc_offset, RecordReference(nullptr, info_storage_.back().get()));
-#else
-    record_reference_map_.insert(std::make_pair(
-        pc_offset, RecordReference(nullptr, info_storage_.back().get())));
-#endif
-    if (location_type) {
-      info_storage_.emplace_back(new StackMapInfo(*location_type));
-#if defined(UC_3_0)
-      record_reference_map_.emplace(
-          constant_pc_offset,
-          RecordReference(nullptr, info_storage_.back().get()));
-#else
-      record_reference_map_.insert(
-          std::make_pair(constant_pc_offset,
-                         RecordReference(nullptr, info_storage_.back().get())));
-#endif
-    }
   }
 }
 

@@ -66,12 +66,14 @@ static void disassemble(ByteBuffer& code) {
     size_t InstSize = LLVMDisasmInstruction(DCR, BytesP, NumBytes, PC,
                                             OutString, OutStringSize);
     if (InstSize == 0) {
-      printf("\t %08x: maybe constant\n", PC);
+      printf("%08x: %08x maybe constant\n", PC,
+             *reinterpret_cast<uint32_t*>(BytesP));
       PC += 4;
       BytesP += 4;
       NumBytes -= 4;
     }
-    printf("%08x: %s\n", PC, OutString);
+    printf("%08x: %08x %s\n", PC, *reinterpret_cast<uint32_t*>(BytesP),
+           OutString);
     PC += InstSize;
     BytesP += InstSize;
     NumBytes -= InstSize;
