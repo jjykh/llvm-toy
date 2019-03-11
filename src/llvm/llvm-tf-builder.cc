@@ -443,7 +443,10 @@ TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
 void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
   std::vector<LValue> patchpoint_operands;
   patchpoint_operands.push_back(output().constInt64(patchid()));
-  patchpoint_operands.push_back(output().constInt32(call_instruction_bytes()));
+  int additional_instruction_bytes = 0;
+  if (output().stack_parameter_count() > 0) additional_instruction_bytes = 4;
+  patchpoint_operands.push_back(output().constInt32(
+      call_instruction_bytes() + additional_instruction_bytes));
   patchpoint_operands.push_back(constNull(output().repo().ref8));
   patchpoint_operands.push_back(
       output().constInt32(operand_values().size()));  // # call params
@@ -457,6 +460,7 @@ void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
 
 void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
   callinfo->set_is_tailcall(true);
+  callinfo->set_tailcall_return_count(output().stack_parameter_count());
 }
 
 LValue CallResolver::EmitCallInstr(LValue function, LValue* operands,

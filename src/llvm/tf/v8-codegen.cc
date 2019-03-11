@@ -117,6 +117,9 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     int reg = *call_paramters_iterator;
     reg_list |= 1 << reg;
   }
+  if (call_info->is_tailcall() && call_info->tailcall_return_count()) {
+    masm_.add(sp, sp, Operand(call_info->tailcall_return_count() * 4));
+  }
   if (reg_list != 0) masm_.stm(db_w, sp, reg_list);
 
   if (!call_info->is_tailcall())

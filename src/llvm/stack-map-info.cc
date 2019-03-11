@@ -9,6 +9,7 @@ StackMapInfo::~StackMapInfo() {}
 CallInfo::CallInfo(LocationVector&& locations)
     : StackMapInfo(StackMapInfoType::kCallInfo),
       locations_(std::move(locations)),
+      tailcall_return_count_(0),
       is_tailcall_(false) {}
 
 ReturnInfo::ReturnInfo()
