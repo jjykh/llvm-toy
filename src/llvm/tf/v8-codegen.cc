@@ -29,8 +29,9 @@ class CodeGeneratorLLVM {
   int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
-  void PostProcessCode(const uint32_t* code_start, const uint32_t* code_end,
-                       const LoadConstantRecorder&);
+  void ProcessForConstantLoad(const uint32_t* code_start,
+                              const uint32_t* code_end,
+                              const LoadConstantRecorder&);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
 
@@ -227,8 +228,8 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
     }
   }
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
-  PostProcessCode(instruction_pointer, instruction_end,
-                  state.load_constant_recorder_);
+  ProcessForConstantLoad(instruction_pointer, instruction_end,
+                         state.load_constant_recorder_);
   record_reference_map_.clear();
   safepoint_table_builder_.Emit(&masm_, slot_count_);
   CodeDesc desc;
@@ -243,7 +244,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   return new_object;
 }
 
-void CodeGeneratorLLVM::PostProcessCode(
+void CodeGeneratorLLVM::ProcessForConstantLoad(
     const uint32_t* code_start, const uint32_t* code_end,
     const LoadConstantRecorder& load_constant_recorder) {
   // constant_pc_offset, pc_offset, type.
@@ -252,6 +253,7 @@ void CodeGeneratorLLVM::PostProcessCode(
   typedef std::unordered_set<int> ConstantLocationSet;
   ConstantLocationSet constant_location_set;
   int pc_offset = masm_.pc_offset();
+  masm_.LLVMGrowBuffer();
   for (auto instruction_pointer = code_start; instruction_pointer != code_end;
        instruction_pointer += 1) {
     uint32_t instruction = *instruction_pointer;
@@ -299,27 +301,45 @@ void CodeGeneratorLLVM::PostProcessCode(
       case LoadConstantRecorder::kIsolateExternalReference: {
         masm_.reset_pc(std::get<1>(entry));
         masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-        masm_.reset_pc(std::get<0>(entry));
-        ExternalReference isolate_external_reference =
-            ExternalReference::isolate_address(isolate_);
-        masm_.dd(
-            reinterpret_cast<intptr_t>(isolate_external_reference.address()));
       } break;
       case LoadConstantRecorder::kRecordStubCodeConstant: {
         masm_.reset_pc(std::get<1>(entry));
         masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
-        masm_.reset_pc(std::get<0>(entry));
-        Callable const callable =
-            Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
-        masm_.dd(reinterpret_cast<intptr_t>(callable.code().location()));
       } break;
       case LoadConstantRecorder::kModuloExternalReference: {
         masm_.reset_pc(std::get<1>(entry));
         masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+      } break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  for (auto& entry : work_list) {
+    switch (std::get<2>(entry)) {
+      case LoadConstantRecorder::kHeapConstant:
+      case LoadConstantRecorder::kCodeConstant:
+      case LoadConstantRecorder::kExternalReference:
+        break;
+      case LoadConstantRecorder::kIsolateExternalReference: {
+        masm_.reset_pc(std::get<0>(entry));
+        ExternalReference isolate_external_reference =
+            ExternalReference::isolate_address(isolate_);
+        masm_.write_instruction(
+            reinterpret_cast<intptr_t>(isolate_external_reference.address()));
+      } break;
+      case LoadConstantRecorder::kRecordStubCodeConstant: {
+        masm_.reset_pc(std::get<0>(entry));
+        Callable const callable =
+            Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
+        masm_.write_instruction(
+            reinterpret_cast<intptr_t>(callable.code().location()));
+      } break;
+      case LoadConstantRecorder::kModuloExternalReference: {
         masm_.reset_pc(std::get<0>(entry));
         ExternalReference modulo_reference =
             ExternalReference::mod_two_doubles_operation(isolate_);
-        masm_.dd(reinterpret_cast<intptr_t>(modulo_reference.address()));
+        masm_.write_instruction(
+            reinterpret_cast<intptr_t>(modulo_reference.address()));
       } break;
       default:
         UNREACHABLE();

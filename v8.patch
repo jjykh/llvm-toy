@@ -157,21 +157,25 @@ index eccb4d22bd..f3bcb1ebc4 100644
    // Set bit indicating whether the offset should be added.
    instr = (instr & ~B23) | (positive ? B23 : 0);
 diff --git a/src/arm/assembler-arm.h b/src/arm/assembler-arm.h
-index 536731978b..65d9934bc5 100644
+index 536731978b..e073f050f3 100644
 --- a/src/arm/assembler-arm.h
 +++ b/src/arm/assembler-arm.h
-@@ -1718,7 +1718,15 @@ class Assembler : public AssemblerBase {
+@@ -1718,7 +1718,19 @@ class Assembler : public AssemblerBase {
    void next(Label* L);
  
    // Record reloc info for current pc_
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 + public:
-   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
++  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 +  void reset_pc(int pc_offset) { pc_ = buffer_ + pc_offset; }
++  void write_instruction(Instr instr) {
++    *reinterpret_cast<Instr*>(pc_) = instr;
++  }
++  void LLVMGrowBuffer() { GrowBuffer(); }
 +
 + private:
 +#else
-+  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
+   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 +#endif
    void ConstantPoolAddEntry(int position, RelocInfo::Mode rmode,
                              intptr_t value);

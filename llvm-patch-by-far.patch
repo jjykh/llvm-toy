@@ -1,6 +1,6 @@
 Index: include/llvm/IR/CallingConv.h
 ===================================================================
---- include/llvm/IR/CallingConv.h	(revision 347537)
+--- include/llvm/IR/CallingConv.h	(revision 355887)
 +++ include/llvm/IR/CallingConv.h	(working copy)
 @@ -220,6 +220,12 @@
      /// shader if tessellation is in use, or otherwise the vertex shader.
@@ -17,7 +17,7 @@ Index: include/llvm/IR/CallingConv.h
    };
 Index: include/llvm/Support/TargetOpcodes.def
 ===================================================================
---- include/llvm/Support/TargetOpcodes.def	(revision 347537)
+--- include/llvm/Support/TargetOpcodes.def	(revision 355887)
 +++ include/llvm/Support/TargetOpcodes.def	(working copy)
 @@ -120,6 +120,7 @@
  /// rewrite calls to runtimes with more efficient code sequences.
@@ -29,7 +29,7 @@ Index: include/llvm/Support/TargetOpcodes.def
  /// to prevent the stack guard value or address from being spilled to the
 Index: include/llvm/Target/Target.td
 ===================================================================
---- include/llvm/Target/Target.td	(revision 347537)
+--- include/llvm/Target/Target.td	(revision 355887)
 +++ include/llvm/Target/Target.td	(working copy)
 @@ -1066,6 +1066,17 @@
    let mayLoad = 1;
@@ -75,7 +75,7 @@ Index: include/llvm-c/Core.h
   */
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
---- lib/AsmParser/LLLexer.cpp	(revision 347537)
+--- lib/AsmParser/LLLexer.cpp	(revision 355887)
 +++ lib/AsmParser/LLLexer.cpp	(working copy)
 @@ -606,6 +606,8 @@
    KEYWORD(webkit_jscc);
@@ -88,20 +88,24 @@ Index: lib/AsmParser/LLLexer.cpp
    KEYWORD(ghccc);
 Index: lib/AsmParser/LLParser.cpp
 ===================================================================
---- lib/AsmParser/LLParser.cpp	(revision 347537)
+--- lib/AsmParser/LLParser.cpp	(revision 355887)
 +++ lib/AsmParser/LLParser.cpp	(working copy)
-@@ -1906,6 +1906,8 @@
+@@ -1906,6 +1906,12 @@
    case lltok::kw_win64cc:        CC = CallingConv::Win64; break;
    case lltok::kw_webkit_jscc:    CC = CallingConv::WebKit_JS; break;
    case lltok::kw_anyregcc:       CC = CallingConv::AnyReg; break;
-+  case lltok::kw_v8cc:           CC = CallingConv::V8CC; break;
-+  case lltok::kw_v8sbcc:         CC = CallingConv::V8SBCC; break;
++  case lltok::kw_v8cc:
++    CC = CallingConv::V8CC;
++    break;
++  case lltok::kw_v8sbcc:
++    CC = CallingConv::V8SBCC;
++    break;
    case lltok::kw_preserve_mostcc:CC = CallingConv::PreserveMost; break;
    case lltok::kw_preserve_allcc: CC = CallingConv::PreserveAll; break;
    case lltok::kw_ghccc:          CC = CallingConv::GHC; break;
 Index: lib/AsmParser/LLToken.h
 ===================================================================
---- lib/AsmParser/LLToken.h	(revision 347537)
+--- lib/AsmParser/LLToken.h	(revision 355887)
 +++ lib/AsmParser/LLToken.h	(working copy)
 @@ -150,6 +150,8 @@
    kw_win64cc,
@@ -114,7 +118,7 @@ Index: lib/AsmParser/LLToken.h
    kw_preserve_allcc,
 Index: lib/CodeGen/InlineSpiller.cpp
 ===================================================================
---- lib/CodeGen/InlineSpiller.cpp	(revision 347537)
+--- lib/CodeGen/InlineSpiller.cpp	(revision 355887)
 +++ lib/CodeGen/InlineSpiller.cpp	(working copy)
 @@ -57,6 +57,7 @@
  #include <cassert>
@@ -195,7 +199,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
         RegI = MRI.reg_bundle_begin(Reg), E = MRI.reg_bundle_end();
 Index: lib/CodeGen/LocalStackSlotAllocation.cpp
 ===================================================================
---- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 347537)
+--- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 355887)
 +++ lib/CodeGen/LocalStackSlotAllocation.cpp	(working copy)
 @@ -299,6 +299,7 @@
        // range, so they don't need any updates.
@@ -207,7 +211,7 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
  
 Index: lib/CodeGen/MachineVerifier.cpp
 ===================================================================
---- lib/CodeGen/MachineVerifier.cpp	(revision 347537)
+--- lib/CodeGen/MachineVerifier.cpp	(revision 355887)
 +++ lib/CodeGen/MachineVerifier.cpp	(working copy)
 @@ -1097,6 +1097,8 @@
    unsigned NumDefs = MCID.getNumDefs();
@@ -220,7 +224,7 @@ Index: lib/CodeGen/MachineVerifier.cpp
    if (MONum < NumDefs) {
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 347537)
+--- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 355887)
 +++ lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(working copy)
 @@ -809,7 +809,8 @@
    const MCPhysReg *ScratchRegs = nullptr;
@@ -234,7 +238,7 @@ Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
      // scratch registers as AnyRegCC.
 Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 347537)
+--- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 355887)
 +++ lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(working copy)
 @@ -540,6 +540,10 @@
      NodeNumDefs = 0;
@@ -249,7 +253,7 @@ Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
      // PATCHPOINT is defined to have one result, but it might really have none
 Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 347537)
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 355887)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
 @@ -8077,6 +8077,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
@@ -332,7 +336,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    if (HasDef) {
 Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 347537)
+--- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 355887)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
 @@ -532,14 +532,15 @@
    // arrays interwoven with each (lowered) base pointer immediately followed by
@@ -368,7 +372,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    }
 Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 347537)
+--- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 355887)
 +++ lib/CodeGen/SelectionDAG/TargetLowering.cpp	(working copy)
 @@ -87,6 +87,9 @@
      // (We look for a CopyFromReg reading a virtual register that is used
@@ -380,54 +384,9 @@ Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
      if (Value->getOpcode() != ISD::CopyFromReg)
        return false;
      unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
-Index: lib/CodeGen/ShrinkWrap.cpp
-===================================================================
---- lib/CodeGen/ShrinkWrap.cpp	(revision 347537)
-+++ lib/CodeGen/ShrinkWrap.cpp	(working copy)
-@@ -157,6 +157,8 @@
-   /// Current MachineFunction.
-   MachineFunction *MachineFunc;
- 
-+  const BitVector *Reserved;
-+
-   /// Check if \p MI uses or defines a callee-saved register or
-   /// a frame index. If this is the case, this means \p MI must happen
-   /// after Save and before Restore.
-@@ -204,6 +206,9 @@
-     CurrentCSRs.clear();
-     MachineFunc = &MF;
- 
-+    const BitVector &RR = MF.getRegInfo().getReservedRegs();
-+    Reserved = &RR;
-+
-     ++NumFunc;
-   }
- 
-@@ -264,6 +269,8 @@
-     LLVM_DEBUG(dbgs() << "Frame instruction: " << MI << '\n');
-     return true;
-   }
-+  const MachineFunction &MF = *MI.getParent()->getParent();
-+  const MachineRegisterInfo &MRI = MF.getRegInfo();
-   for (const MachineOperand &MO : MI.operands()) {
-     bool UseOrDefCSR = false;
-     if (MO.isReg()) {
-@@ -280,8 +287,10 @@
-       // separately. An SP mentioned by a call instruction, we can ignore,
-       // though, as it's harmless and we do not want to effectively disable tail
-       // calls by forcing the restore point to post-dominate them.
--      UseOrDefCSR = (!MI.isCall() && PhysReg == SP) ||
--                    RCI.getLastCalleeSavedAlias(PhysReg);
-+      UseOrDefCSR =
-+          (!MI.isCall() && PhysReg == SP) ||
-+          (RCI.getLastCalleeSavedAlias(PhysReg) &&
-+           (!Reserved->test(PhysReg) || MRI.isPhysRegModified(PhysReg)));
-     } else if (MO.isRegMask()) {
-       // Check if this regmask clobbers any of the CSRs.
-       for (unsigned Reg : getCurrentCSRs(RS)) {
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
---- lib/CodeGen/StackMaps.cpp	(revision 347537)
+--- lib/CodeGen/StackMaps.cpp	(revision 355887)
 +++ lib/CodeGen/StackMaps.cpp	(working copy)
 @@ -30,6 +30,7 @@
  #include "llvm/Support/ErrorHandling.h"
@@ -459,7 +418,7 @@ Index: lib/CodeGen/StackMaps.cpp
    }
 Index: lib/CodeGen/TargetInstrInfo.cpp
 ===================================================================
---- lib/CodeGen/TargetInstrInfo.cpp	(revision 347537)
+--- lib/CodeGen/TargetInstrInfo.cpp	(revision 355887)
 +++ lib/CodeGen/TargetInstrInfo.cpp	(working copy)
 @@ -479,6 +479,7 @@
      StartIdx = StackMapOpers(&MI).getVarIdx();
@@ -487,7 +446,7 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
        isLoadFromStackSlot(LoadMI, FrameIndex)) {
 Index: lib/CodeGen/TargetPassConfig.cpp
 ===================================================================
---- lib/CodeGen/TargetPassConfig.cpp	(revision 347537)
+--- lib/CodeGen/TargetPassConfig.cpp	(revision 355887)
 +++ lib/CodeGen/TargetPassConfig.cpp	(working copy)
 @@ -895,6 +895,7 @@
    if (getOptLevel() != CodeGenOpt::None)
@@ -507,7 +466,7 @@ Index: lib/CodeGen/TargetPassConfig.cpp
    // Insert before XRay Instrumentation.
 Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
---- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 347537)
+--- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 355887)
 +++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
 @@ -200,6 +200,14 @@
           .setErrorStr(&Error)
@@ -526,20 +485,24 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
      builder.setCodeModel(*CM);
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
---- lib/IR/AsmWriter.cpp	(revision 347537)
+--- lib/IR/AsmWriter.cpp	(revision 355887)
 +++ lib/IR/AsmWriter.cpp	(working copy)
-@@ -350,6 +350,8 @@
+@@ -350,6 +350,12 @@
    case CallingConv::Cold:          Out << "coldcc"; break;
    case CallingConv::WebKit_JS:     Out << "webkit_jscc"; break;
    case CallingConv::AnyReg:        Out << "anyregcc"; break;
-+  case CallingConv::V8CC:          Out << "v8cc"; break;
-+  case CallingConv::V8SBCC:        Out << "v8sbcc"; break;
++  case CallingConv::V8CC:
++    Out << "v8cc";
++    break;
++  case CallingConv::V8SBCC:
++    Out << "v8sbcc";
++    break;
    case CallingConv::PreserveMost:  Out << "preserve_mostcc"; break;
    case CallingConv::PreserveAll:   Out << "preserve_allcc"; break;
    case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
 Index: lib/IR/Core.cpp
 ===================================================================
---- lib/IR/Core.cpp	(revision 347537)
+--- lib/IR/Core.cpp	(revision 355887)
 +++ lib/IR/Core.cpp	(working copy)
 @@ -3553,3 +3553,15 @@
  LLVMBool LLVMIsMultithreaded() {
@@ -559,7 +522,7 @@ Index: lib/IR/Core.cpp
 +}
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
---- lib/MC/MCAsmStreamer.cpp	(revision 347537)
+--- lib/MC/MCAsmStreamer.cpp	(revision 355887)
 +++ lib/MC/MCAsmStreamer.cpp	(working copy)
 @@ -914,7 +914,7 @@
    if (!Directive) {
@@ -572,7 +535,7 @@ Index: lib/MC/MCAsmStreamer.cpp
      // the request down into several, smaller, integers.
 Index: lib/Target/ARM/ARMAsmPrinter.cpp
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 347537)
+--- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMAsmPrinter.cpp	(working copy)
 @@ -55,7 +55,7 @@
  ARMAsmPrinter::ARMAsmPrinter(TargetMachine &TM,
@@ -731,7 +694,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  //===----------------------------------------------------------------------===//
 Index: lib/Target/ARM/ARMAsmPrinter.h
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.h	(revision 347537)
+--- lib/Target/ARM/ARMAsmPrinter.h	(revision 355887)
 +++ lib/Target/ARM/ARMAsmPrinter.h	(working copy)
 @@ -12,6 +12,7 @@
  
@@ -771,7 +734,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.h
      // ARM/Darwin adds ISA to the DWARF info for each function.
 Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 347537)
+--- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMBaseInstrInfo.cpp	(working copy)
 @@ -717,6 +717,10 @@
      return 0;
@@ -786,7 +749,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    case ARM::t2MOVi16_ga_pcrel:
 Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 347537)
+--- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
 @@ -90,6 +90,10 @@
        // exception handling.
@@ -831,7 +794,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  }
 Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
---- lib/Target/ARM/ARMCallingConv.td	(revision 347537)
+--- lib/Target/ARM/ARMCallingConv.td	(revision 355887)
 +++ lib/Target/ARM/ARMCallingConv.td	(working copy)
 @@ -239,6 +239,60 @@
  ]>;
@@ -898,7 +861,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
-+def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
++def CSR_V8CC : CalleeSavedRegs<(add LR, R11)>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5)>;
 +
@@ -907,7 +870,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  
 Index: lib/Target/ARM/ARMConstantIslandPass.cpp
 ===================================================================
---- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 347537)
+--- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMConstantIslandPass.cpp	(working copy)
 @@ -241,6 +241,7 @@
      CPEntry *findConstPoolEntry(unsigned CPI, const MachineInstr *CPEMI);
@@ -978,7 +941,7 @@ Index: lib/Target/ARM/ARMConstantIslandPass.cpp
  /// and finding all of the constant pool users.
 Index: lib/Target/ARM/ARMFastISel.cpp
 ===================================================================
---- lib/Target/ARM/ARMFastISel.cpp	(revision 347537)
+--- lib/Target/ARM/ARMFastISel.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMFastISel.cpp	(working copy)
 @@ -1890,6 +1890,10 @@
        report_fatal_error("Can't return in GHC call convention");
@@ -993,7 +956,7 @@ Index: lib/Target/ARM/ARMFastISel.cpp
  
 Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.cpp	(revision 347537)
+--- lib/Target/ARM/ARMFrameLowering.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
 @@ -380,6 +380,7 @@
    unsigned GPRCS1Size = 0, GPRCS2Size = 0, DPRCSSize = 0;
@@ -1079,7 +1042,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
-@@ -1054,7 +1083,9 @@
+@@ -949,6 +978,9 @@
+       // Otherwise, use SP or FP, whichever is closer to the stack slot.
+       FrameReg = RegInfo->getFrameRegister(MF);
+       return FPOffset;
++    } else if (AFI->isJSStub() || AFI->isJSFunction()) {
++      FrameReg = RegInfo->getFrameRegister(MF);
++      return FPOffset;
+     }
+   }
+   // Use the base pointer if we have one.
+@@ -1054,7 +1086,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1090,7 +1063,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1428,8 +1459,18 @@
+@@ -1428,8 +1462,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1111,7 +1084,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1460,7 +1501,6 @@
+@@ -1460,7 +1504,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1119,7 +1092,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1610,6 +1650,20 @@
+@@ -1610,6 +1653,20 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1140,7 +1113,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1782,7 +1836,10 @@
+@@ -1782,7 +1839,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1152,7 +1125,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1796,7 +1853,6 @@
+@@ -1796,7 +1856,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1160,7 +1133,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2499,3 +2555,25 @@
+@@ -2499,3 +2558,25 @@
    MF.verify();
  #endif
  }
@@ -1188,7 +1161,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +}
 Index: lib/Target/ARM/ARMFrameLowering.h
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.h	(revision 347537)
+--- lib/Target/ARM/ARMFrameLowering.h	(revision 355887)
 +++ lib/Target/ARM/ARMFrameLowering.h	(working copy)
 @@ -65,6 +65,11 @@
      return true;
@@ -1204,7 +1177,7 @@ Index: lib/Target/ARM/ARMFrameLowering.h
                      const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.cpp	(revision 347537)
+--- lib/Target/ARM/ARMISelLowering.cpp	(revision 355887)
 +++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
 @@ -1578,6 +1578,10 @@
    switch (CC) {
@@ -1228,7 +1201,70 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -9256,6 +9264,17 @@
+@@ -1787,6 +1795,7 @@
+   bool isStructRet    = (Outs.empty()) ? false : Outs[0].Flags.isSRet();
+   bool isThisReturn   = false;
+   bool isSibCall      = false;
++  bool hasJSCCall = false;
+   auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
+ 
+   // Disable tail calls if they're not supported.
+@@ -1826,9 +1835,36 @@
+   // These operations are automatically eliminated by the prolog/epilog pass
+   if (!isSibCall)
+     Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
++  if (CLI.CS.isCall()) {
++    MachineFunction &MF = DAG.getMachineFunction();
++    const Function &CallerF = MF.getFunction();
++    CallingConv::ID CallerCC = CallerF.getCallingConv();
++    if ((CallerCC == CallingConv::V8CC) && (CLI.CallConv == CallingConv::C)) {
++      hasJSCCall = true;
++    }
++  }
+ 
+-  SDValue StackPtr =
+-      DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
++  SDValue StackPtr;
++  if (hasJSCCall) {
++    SDValue OldStackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
++                                             getPointerTy(DAG.getDataLayout()));
++    Chain = OldStackPtr.getValue(1);
++    SDValue NewStackPtr = DAG.getNode(
++        ISD::AND, dl, OldStackPtr.getValueType(), OldStackPtr.getValue(0),
++        DAG.getConstant(-8, dl, OldStackPtr.getValueType()));
++    SDValue InFlag;
++    Chain = DAG.getCopyToReg(Chain, dl, ARM::R4, OldStackPtr, InFlag);
++    InFlag = Chain.getValue(1);
++    Chain =
++        DAG.getCopyToReg(Chain, dl, ARM::SP, NewStackPtr.getValue(0), InFlag);
++    StackPtr = NewStackPtr;
++    MachineFunction &MF = DAG.getMachineFunction();
++    MachineFrameInfo &MFI = MF.getFrameInfo();
++    MFI.setFrameAddressIsTaken(true);
++  } else {
++    StackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
++                                  getPointerTy(DAG.getDataLayout()));
++  }
+ 
+   RegsToPassVector RegsToPass;
+   SmallVector<SDValue, 8> MemOpChains;
+@@ -2168,6 +2204,15 @@
+ 
+   // Returns a chain and a flag for retval copy to use.
+   Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
++
++  if (hasJSCCall) {
++    SDValue OldStackPtr = DAG.getCopyFromReg(Chain, dl, ARM::R4,
++                                             getPointerTy(DAG.getDataLayout()));
++    Chain = OldStackPtr.getValue(1);
++    Chain = DAG.getCopyToReg(Chain, dl, ARM::SP, OldStackPtr.getValue(0),
++                             Chain.getValue(1));
++  }
++
+   InFlag = Chain.getValue(1);
+ 
+   Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
+@@ -9256,6 +9301,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -1246,7 +1282,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13080,23 @@
+@@ -13061,6 +13117,23 @@
    return -1;
  }
  
@@ -1272,7 +1308,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      return false;
 Index: lib/Target/ARM/ARMISelLowering.h
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.h	(revision 347537)
+--- lib/Target/ARM/ARMISelLowering.h	(revision 355887)
 +++ lib/Target/ARM/ARMISelLowering.h	(working copy)
 @@ -696,6 +696,11 @@
      /// correctness bugs.
@@ -1288,7 +1324,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
      SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
 Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 ===================================================================
---- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 347537)
+--- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 355887)
 +++ lib/Target/ARM/ARMMachineFunctionInfo.h	(working copy)
 @@ -127,6 +127,9 @@
    /// The amount the literal pool has been increasedby due to promoted globals.
@@ -1300,12 +1336,13 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  public:
    ARMFunctionInfo() = default;
  
-@@ -239,6 +242,10 @@
+@@ -239,6 +242,11 @@
    void setPromotedConstpoolIncrease(int Sz) {
      PromotedGlobalsIncrease = Sz;
    }
 +  bool isJSFunction() const { return IsJSFunction; }
 +  bool isJSStub() const { return IsJSStub; }
++
 +  void setJSFunction(bool s) { IsJSFunction = s; }
 +  void setJSStub(bool s) { IsJSStub = s; }
  };
@@ -1313,7 +1350,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  } // end namespace llvm
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
---- tools/llvm-shlib/CMakeLists.txt	(revision 347537)
+--- tools/llvm-shlib/CMakeLists.txt	(revision 355887)
 +++ tools/llvm-shlib/CMakeLists.txt	(working copy)
 @@ -58,6 +58,7 @@
  endif()
@@ -1325,7 +1362,7 @@ Index: tools/llvm-shlib/CMakeLists.txt
    set_property(TARGET LLVM APPEND_STRING PROPERTY
 Index: tools/llvm-shlib/simple_version_script.map.in
 ===================================================================
---- tools/llvm-shlib/simple_version_script.map.in	(revision 347537)
+--- tools/llvm-shlib/simple_version_script.map.in	(revision 355887)
 +++ tools/llvm-shlib/simple_version_script.map.in	(working copy)
 @@ -1 +1 @@
 -LLVM_@LLVM_VERSION_MAJOR@ { global: *; };

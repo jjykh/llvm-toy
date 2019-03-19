@@ -334,8 +334,7 @@ void CallResolver::ResolveOperands(
     LValue llvm_val = GetImpl(current_bb_)->value(*(operands_iterator++));
     SetOperandValue(reg, llvm_val);
   }
-  // setup artifact operands' value
-  SetOperandValue(kFPReg, output().fp());
+  // setup callee value.
   int target_reg = FindNextReg();
   SetOperandValue(target_reg, target_);
   locations_.push_back(target_reg);
@@ -574,7 +573,8 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       output().constInt32(4 * instructions_count),
       constNull(output().repo().ref8), output().constInt32(8), base, offset,
       isolate, remembered_set_action, save_fp_mode,
-      LLVMGetUndef(typeOf(output().root())), output().fp(), stub);
+      LLVMGetUndef(typeOf(output().root())),
+      LLVMGetUndef(typeOf(output().fp())), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(
       new StackMapInfo(StackMapInfoType::kStoreBarrier));
