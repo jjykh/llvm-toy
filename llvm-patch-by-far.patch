@@ -51,7 +51,7 @@ Index: include/llvm/Target/Target.td
    let InOperandList = (ins variable_ops);
 Index: include/llvm-c/Core.h
 ===================================================================
---- include/llvm-c/Core.h	(revision 347537)
+--- include/llvm-c/Core.h	(revision 355887)
 +++ include/llvm-c/Core.h	(working copy)
 @@ -240,7 +240,9 @@
    LLVMAMDGPUHSCallConv      = 93,
@@ -773,7 +773,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +213,18 @@
+@@ -205,6 +213,19 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -788,6 +788,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +    markSuperRegs(Reserved, ARM::R11);
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    markSuperRegs(Reserved, ARM::R10);
++    markSuperRegs(Reserved, ARM::R11);
 +  }
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
@@ -1209,7 +1210,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
  
    // Disable tail calls if they're not supported.
-@@ -1826,9 +1835,36 @@
+@@ -1826,8 +1835,35 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
@@ -1223,31 +1224,29 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 +  }
  
 -  SDValue StackPtr =
--      DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
 +  SDValue StackPtr;
 +  if (hasJSCCall) {
 +    SDValue OldStackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
 +                                             getPointerTy(DAG.getDataLayout()));
 +    Chain = OldStackPtr.getValue(1);
++    SDValue InFlag;
++    Chain =
++        DAG.getCopyToReg(Chain, dl, ARM::R4, OldStackPtr.getValue(0), InFlag);
++    InFlag = Chain.getValue(1);
 +    SDValue NewStackPtr = DAG.getNode(
 +        ISD::AND, dl, OldStackPtr.getValueType(), OldStackPtr.getValue(0),
 +        DAG.getConstant(-8, dl, OldStackPtr.getValueType()));
-+    SDValue InFlag;
-+    Chain = DAG.getCopyToReg(Chain, dl, ARM::R4, OldStackPtr, InFlag);
-+    InFlag = Chain.getValue(1);
 +    Chain =
 +        DAG.getCopyToReg(Chain, dl, ARM::SP, NewStackPtr.getValue(0), InFlag);
-+    StackPtr = NewStackPtr;
 +    MachineFunction &MF = DAG.getMachineFunction();
 +    MachineFrameInfo &MFI = MF.getFrameInfo();
 +    MFI.setFrameAddressIsTaken(true);
-+  } else {
-+    StackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
-+                                  getPointerTy(DAG.getDataLayout()));
 +  }
++
++  StackPtr =
+       DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-   SmallVector<SDValue, 8> MemOpChains;
 @@ -2168,6 +2204,15 @@
  
    // Returns a chain and a flag for retval copy to use.
