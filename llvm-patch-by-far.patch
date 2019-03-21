@@ -1210,7 +1210,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
  
    // Disable tail calls if they're not supported.
-@@ -1826,8 +1835,35 @@
+@@ -1826,8 +1835,37 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
@@ -1218,7 +1218,9 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 +    MachineFunction &MF = DAG.getMachineFunction();
 +    const Function &CallerF = MF.getFunction();
 +    CallingConv::ID CallerCC = CallerF.getCallingConv();
-+    if ((CallerCC == CallingConv::V8CC) && (CLI.CallConv == CallingConv::C)) {
++    if (((CallerCC == CallingConv::V8CC) ||
++         (CallerCC == CallingConv::V8SBCC)) &&
++        (CLI.CallConv == CallingConv::C)) {
 +      hasJSCCall = true;
 +    }
 +  }
@@ -1247,7 +1249,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2168,6 +2204,15 @@
+@@ -2168,6 +2206,15 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
@@ -1263,7 +1265,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9256,6 +9301,17 @@
+@@ -9256,6 +9303,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -1281,7 +1283,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -13061,6 +13117,23 @@
+@@ -13061,6 +13119,23 @@
    return -1;
  }
  
