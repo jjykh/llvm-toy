@@ -847,7 +847,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +213,19 @@
+@@ -205,6 +213,17 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -859,10 +859,8 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +    markSuperRegs(Reserved, ARM::R8);
 +    markSuperRegs(Reserved, ARM::R9);
 +    markSuperRegs(Reserved, ARM::R10);
-+    markSuperRegs(Reserved, ARM::R11);
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    markSuperRegs(Reserved, ARM::R10);
-+    markSuperRegs(Reserved, ARM::R11);
 +  }
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
@@ -1117,17 +1115,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
-@@ -949,6 +978,9 @@
+@@ -945,7 +974,8 @@
+         FrameReg = RegInfo->getFrameRegister(MF);
+         return FPOffset;
+       }
+-    } else if (Offset > (FPOffset < 0 ? -FPOffset : FPOffset)) {
++    } else if ((Offset > (FPOffset < 0 ? -FPOffset : FPOffset)) ||
++               AFI->isJSFunction() || AFI->isJSStub()) {
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
-+    } else if (AFI->isJSStub() || AFI->isJSFunction()) {
-+      FrameReg = RegInfo->getFrameRegister(MF);
-+      return FPOffset;
-     }
-   }
-   // Use the base pointer if we have one.
-@@ -1054,7 +1086,9 @@
+@@ -1054,7 +1084,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1138,7 +1136,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1428,8 +1462,18 @@
+@@ -1428,8 +1460,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1159,7 +1157,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1460,7 +1504,6 @@
+@@ -1460,7 +1502,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1167,7 +1165,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1610,6 +1653,20 @@
+@@ -1610,6 +1651,20 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1188,7 +1186,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1782,7 +1839,10 @@
+@@ -1782,7 +1837,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1200,7 +1198,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1796,7 +1856,6 @@
+@@ -1796,7 +1854,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1208,7 +1206,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2499,3 +2558,25 @@
+@@ -2499,3 +2556,25 @@
    MF.verify();
  #endif
  }
