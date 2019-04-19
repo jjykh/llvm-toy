@@ -134,7 +134,6 @@ class CallResolver {
                                size_t operands_count);
   virtual void BuildCall(const CallDescriptor& call_desc);
   virtual void PopulateCallInfo(CallInfo*) {}
-  virtual void PrepareArtifactOperand();
   inline Output& output() { return *output_; }
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
@@ -185,7 +184,6 @@ class TCCallResolver final : public CallResolver {
  private:
   void BuildCall(const CallDescriptor& call_desc) override;
   void PopulateCallInfo(CallInfo*) override;
-  void PrepareArtifactOperand() override;
 };
 
 class InvokeResolver final : public CallResolver {
@@ -340,8 +338,6 @@ void CallResolver::ResolveOperands(
   int target_reg = FindNextReg();
   SetOperandValue(target_reg, target_);
   locations_.push_back(target_reg);
-  // setup artifact operands' value
-  PrepareArtifactOperand();
 
   std::vector<int> allocated_regs;
 
@@ -439,10 +435,6 @@ void CallResolver::PopulateToStackMap() {
 #endif
 }
 
-void CallResolver::PrepareArtifactOperand() {
-  SetOperandValue(kFPReg, output().fp());
-}
-
 TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
                                StackMapInfoMap* stack_map_info_map, int patchid)
     : CallResolver(current_bb, output, id, stack_map_info_map, patchid) {}
@@ -469,8 +461,6 @@ void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
   callinfo->set_is_tailcall(true);
   callinfo->set_tailcall_return_count(output().stack_parameter_count());
 }
-
-void TCCallResolver::PrepareArtifactOperand() {}
 
 LValue CallResolver::EmitCallInstr(LValue function, LValue* operands,
                                    size_t operands_count) {
@@ -583,7 +573,8 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       output().constInt32(4 * instructions_count),
       constNull(output().repo().ref8), output().constInt32(8), base, offset,
       isolate, remembered_set_action, save_fp_mode,
-      LLVMGetUndef(typeOf(output().root())), output().fp(), stub);
+      LLVMGetUndef(typeOf(output().root())),
+      LLVMGetUndef(typeOf(output().fp())), stub);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(
       new StackMapInfo(StackMapInfoType::kStoreBarrier));
