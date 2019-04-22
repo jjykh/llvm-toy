@@ -92,13 +92,15 @@ class Output {
   LValue buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy);
   LValue buildBitCast(LValue val, LType type);
   LValue buildPointerCast(LValue val, LType type);
-  LValue getStatePointFunction(LType callee_type);
-
-  LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
-  LValue buildLoadMagic(LType, int64_t magic);
-  void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildLandingPad();
+
+  // helpers
+  LValue getStatePointFunction(LType callee_type);
+  LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
+  LValue buildLoadMagic(LType, int64_t magic);
+  LValue buildGetPage(LValue object, int page_bits);
+  void buildUnreachable();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }

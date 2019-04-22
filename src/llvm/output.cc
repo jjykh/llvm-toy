@@ -379,6 +379,17 @@ LValue Output::buildLandingPad() {
   LLVMSetCleanup(landing_pad, true);
   return landing_pad;
 }
+
+LValue Output::buildGetPage(LValue object, int page_bits) {
+  LValue base_int = buildCast(LLVMPtrToInt, object, repo().intPtr);
+  char kAsmString[] = "bfc $0,$1,$2";
+  char kConstraintString[] = "=r,i,i,0";
+  LValue function = LLVMGetInlineAsm(
+      functionType(repo().ref8, repo().intPtr, repo().intPtr, repo().intPtr),
+      kAsmString, sizeof(kAsmString) - 1, kConstraintString,
+      sizeof(kConstraintString) - 1, false, false, LLVMInlineAsmDialectATT);
+  return buildCall(function, constIntPtr(0), constIntPtr(page_bits), base_int);
+}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

@@ -529,13 +529,7 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
 }
 
 void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
-  LValue base_int =
-      output().buildCast(LLVMPtrToInt, base, output().repo().intPtr);
-  const int page_mask = ~((1 << kPageSizeBits) - 1);
-  LValue memchunk_int =
-      output().buildAnd(base_int, output().constIntPtr(page_mask));
-  LValue memchunk_ref8 =
-      output().buildCast(LLVMIntToPtr, memchunk_int, output().repo().ref8);
+  LValue memchunk_ref8 = output().buildGetPage(base, kPageSizeBits);
   LValue flag_slot = output().buildGEPWithByteOffset(
       memchunk_ref8, output().constInt32(MemoryChunk::kFlagsOffset),
       output().repo().ref32);
