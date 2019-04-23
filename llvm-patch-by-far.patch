@@ -255,7 +255,24 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 357230)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -8077,6 +8077,32 @@
+@@ -1196,6 +1196,16 @@
+   SDValue &N = NodeMap[V];
+   if (N.getNode()) return N;
+ 
++  // Special handling BitCastInst with a constant.
++  if (const BitCastInst *I = dyn_cast<BitCastInst>(V)) {
++    if (const Constant *C = dyn_cast<Constant>(I->getOperand(0))) {
++      SDValue Val = getValueImpl(C);
++      NodeMap[V] = Val;
++      resolveDanglingDebugInfo(V, Val);
++      return Val;
++    }
++  }
++
+   // If there's a virtual register allocated and initialized for this
+   // value, use it.
+   if (SDValue copyFromReg = getCopyFromRegs(V, V->getType()))
+@@ -8077,6 +8087,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
@@ -288,7 +305,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8120,17 +8146,24 @@
+@@ -8120,17 +8156,24 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
@@ -322,7 +339,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8201,8 +8234,9 @@
+@@ -8201,8 +8244,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
@@ -1359,6 +1376,21 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
+@@ -11074,10 +11127,10 @@
+ 
+   // Try to use the ARM/Thumb2 BFI (bitfield insert) instruction when
+   // reasonable.
+-  if (N0.getOpcode() == ISD::AND && N0.hasOneUse()) {
+-    if (SDValue Res = PerformORCombineToBFI(N, DCI, Subtarget))
+-      return Res;
+-  }
++  // if (N0.getOpcode() == ISD::AND && N0.hasOneUse()) {
++  //   if (SDValue Res = PerformORCombineToBFI(N, DCI, Subtarget))
++  //     return Res;
++  // }
+ 
+   if (SDValue Result = PerformSHLSimplify(N, DCI, Subtarget))
+     return Result;
 @@ -13061,6 +13114,23 @@
    return -1;
  }
