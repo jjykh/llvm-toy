@@ -543,6 +543,8 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
   LValue and_result = output().buildAnd(flag, output().constInt32(mask));
   LValue cmp =
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
+  cmp = output().buildCall(output().repo().expectIntrinsic(), cmp,
+                           output().repo().booleanTrue);
 
   char buf[256];
   snprintf(buf, 256, "B%d_value%d_checkpageflag_%d", current_bb()->id(), id_,
@@ -591,6 +593,8 @@ void StoreBarrierResolver::CheckSmi(LValue value) {
   LValue and_result = output().buildAnd(value_int, output().repo().intPtrOne);
   LValue cmp =
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
+  cmp = output().buildCall(output().repo().expectIntrinsic(), cmp,
+                           output().repo().booleanFalse);
   char buf[256];
   snprintf(buf, 256, "B%d_value%d_checksmi", current_bb()->id(), id());
   LBasicBlock continuation = output().appendBasicBlock(buf);
