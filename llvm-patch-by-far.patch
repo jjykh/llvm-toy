@@ -1379,22 +1379,18 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -11136,10 +11189,10 @@
- 
-   // Try to use the ARM/Thumb2 BFI (bitfield insert) instruction when
-   // reasonable.
--  if (N0.getOpcode() == ISD::AND && N0.hasOneUse()) {
--    if (SDValue Res = PerformORCombineToBFI(N, DCI, Subtarget))
--      return Res;
--  }
-+  // if (N0.getOpcode() == ISD::AND && N0.hasOneUse()) {
-+  //   if (SDValue Res = PerformORCombineToBFI(N, DCI, Subtarget))
-+  //     return Res;
-+  // }
- 
-   if (SDValue Result = PerformSHLSimplify(N, DCI, Subtarget))
-     return Result;
-@@ -13136,6 +13189,23 @@
+@@ -10961,6 +11014,10 @@
+   unsigned Mask = MaskC->getZExtValue();
+   if (Mask == 0xffff)
+     return SDValue();
++  // Memory Operator can address constant, save one register.
++  auto UI = dyn_cast<MemSDNode>(*(N->use_begin()));
++  if (UI)
++    return SDValue();
+   SDValue Res;
+   // Case (1): or (and A, mask), val => ARMbfi A, val, mask
+   ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
+@@ -13136,6 +13193,23 @@
    return -1;
  }
  
