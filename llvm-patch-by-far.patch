@@ -1,8 +1,8 @@
 Index: include/llvm/IR/CallingConv.h
 ===================================================================
---- include/llvm/IR/CallingConv.h	(revision 357230)
+--- include/llvm/IR/CallingConv.h	(revision 359070)
 +++ include/llvm/IR/CallingConv.h	(working copy)
-@@ -220,6 +220,12 @@
+@@ -220,8 +220,14 @@
      /// shader if tessellation is in use, or otherwise the vertex shader.
      AMDGPU_ES = 96,
  
@@ -12,12 +12,15 @@ Index: include/llvm/IR/CallingConv.h
 +    // Calling convention for v8 store barrier stub
 +    V8SBCC = 98,
 +
+     // Calling convention between AArch64 Advanced SIMD functions
+-    AArch64_VectorCall = 97,
++    AArch64_VectorCall = 99,
+ 
      /// The highest possible calling convention ID. Must be some 2^k - 1.
      MaxID = 1023
-   };
 Index: include/llvm/Support/TargetOpcodes.def
 ===================================================================
---- include/llvm/Support/TargetOpcodes.def	(revision 357230)
+--- include/llvm/Support/TargetOpcodes.def	(revision 359070)
 +++ include/llvm/Support/TargetOpcodes.def	(working copy)
 @@ -120,6 +120,7 @@
  /// rewrite calls to runtimes with more efficient code sequences.
@@ -29,9 +32,9 @@ Index: include/llvm/Support/TargetOpcodes.def
  /// to prevent the stack guard value or address from being spilled to the
 Index: include/llvm/Target/Target.td
 ===================================================================
---- include/llvm/Target/Target.td	(revision 357230)
+--- include/llvm/Target/Target.td	(revision 359070)
 +++ include/llvm/Target/Target.td	(working copy)
-@@ -1066,6 +1066,17 @@
+@@ -1068,6 +1068,17 @@
    let mayLoad = 1;
    let usesCustomInserter = 1;
  }
@@ -51,9 +54,9 @@ Index: include/llvm/Target/Target.td
    let InOperandList = (ins variable_ops);
 Index: include/llvm-c/Core.h
 ===================================================================
---- include/llvm-c/Core.h	(revision 357230)
+--- include/llvm-c/Core.h	(revision 359070)
 +++ include/llvm-c/Core.h	(working copy)
-@@ -240,7 +240,9 @@
+@@ -245,7 +245,9 @@
    LLVMAMDGPUHSCallConv      = 93,
    LLVMMSP430BUILTINCallConv = 94,
    LLVMAMDGPULSCallConv      = 95,
@@ -64,7 +67,7 @@ Index: include/llvm-c/Core.h
  } LLVMCallConv;
  
  typedef enum {
-@@ -3554,6 +3556,8 @@
+@@ -3887,6 +3889,8 @@
      @see llvm::llvm_is_multithreaded */
  LLVMBool LLVMIsMultithreaded(void);
  
@@ -75,9 +78,9 @@ Index: include/llvm-c/Core.h
   */
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
---- lib/AsmParser/LLLexer.cpp	(revision 357230)
+--- lib/AsmParser/LLLexer.cpp	(revision 359070)
 +++ lib/AsmParser/LLLexer.cpp	(working copy)
-@@ -606,6 +606,8 @@
+@@ -607,6 +607,8 @@
    KEYWORD(webkit_jscc);
    KEYWORD(swiftcc);
    KEYWORD(anyregcc);
@@ -88,9 +91,9 @@ Index: lib/AsmParser/LLLexer.cpp
    KEYWORD(ghccc);
 Index: lib/AsmParser/LLParser.cpp
 ===================================================================
---- lib/AsmParser/LLParser.cpp	(revision 357230)
+--- lib/AsmParser/LLParser.cpp	(revision 359070)
 +++ lib/AsmParser/LLParser.cpp	(working copy)
-@@ -1906,6 +1906,12 @@
+@@ -1931,6 +1931,12 @@
    case lltok::kw_win64cc:        CC = CallingConv::Win64; break;
    case lltok::kw_webkit_jscc:    CC = CallingConv::WebKit_JS; break;
    case lltok::kw_anyregcc:       CC = CallingConv::AnyReg; break;
@@ -105,9 +108,9 @@ Index: lib/AsmParser/LLParser.cpp
    case lltok::kw_ghccc:          CC = CallingConv::GHC; break;
 Index: lib/AsmParser/LLToken.h
 ===================================================================
---- lib/AsmParser/LLToken.h	(revision 357230)
+--- lib/AsmParser/LLToken.h	(revision 359070)
 +++ lib/AsmParser/LLToken.h	(working copy)
-@@ -150,6 +150,8 @@
+@@ -151,6 +151,8 @@
    kw_win64cc,
    kw_webkit_jscc,
    kw_anyregcc,
@@ -118,7 +121,7 @@ Index: lib/AsmParser/LLToken.h
    kw_preserve_allcc,
 Index: lib/CodeGen/InlineSpiller.cpp
 ===================================================================
---- lib/CodeGen/InlineSpiller.cpp	(revision 357230)
+--- lib/CodeGen/InlineSpiller.cpp	(revision 359070)
 +++ lib/CodeGen/InlineSpiller.cpp	(working copy)
 @@ -57,6 +57,7 @@
  #include <cassert>
@@ -199,7 +202,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
         RegI = MRI.reg_bundle_begin(Reg), E = MRI.reg_bundle_end();
 Index: lib/CodeGen/LocalStackSlotAllocation.cpp
 ===================================================================
---- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 357230)
+--- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 359070)
 +++ lib/CodeGen/LocalStackSlotAllocation.cpp	(working copy)
 @@ -299,6 +299,7 @@
        // range, so they don't need any updates.
@@ -211,9 +214,9 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
  
 Index: lib/CodeGen/MachineVerifier.cpp
 ===================================================================
---- lib/CodeGen/MachineVerifier.cpp	(revision 357230)
+--- lib/CodeGen/MachineVerifier.cpp	(revision 359070)
 +++ lib/CodeGen/MachineVerifier.cpp	(working copy)
-@@ -1097,6 +1097,8 @@
+@@ -1203,6 +1203,8 @@
    unsigned NumDefs = MCID.getNumDefs();
    if (MCID.getOpcode() == TargetOpcode::PATCHPOINT)
      NumDefs = (MONum == 0 && MO->isReg()) ? NumDefs : 0;
@@ -224,9 +227,9 @@ Index: lib/CodeGen/MachineVerifier.cpp
    if (MONum < NumDefs) {
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 357230)
+--- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(working copy)
-@@ -809,7 +809,8 @@
+@@ -832,7 +832,8 @@
    const MCPhysReg *ScratchRegs = nullptr;
  
    // Handle STACKMAP and PATCHPOINT specially and then use the generic code.
@@ -238,9 +241,9 @@ Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
      // scratch registers as AnyRegCC.
 Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 357230)
+--- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(working copy)
-@@ -540,6 +540,10 @@
+@@ -538,6 +538,10 @@
      NodeNumDefs = 0;
      return;
    }
@@ -253,9 +256,9 @@ Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
      // PATCHPOINT is defined to have one result, but it might really have none
 Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 357230)
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -1196,6 +1196,16 @@
+@@ -1221,6 +1221,16 @@
    SDValue &N = NodeMap[V];
    if (N.getNode()) return N;
  
@@ -272,14 +275,14 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    // If there's a virtual register allocated and initialized for this
    // value, use it.
    if (SDValue copyFromReg = getCopyFromRegs(V, V->getType()))
-@@ -8077,6 +8087,32 @@
+@@ -8187,6 +8197,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
 +static bool isPatchpointInTailCallPosition(ImmutableCallSite CS) {
 +  const Instruction *I = CS.getInstruction();
 +  const BasicBlock *ExitBB = I->getParent();
-+  const TerminatorInst *Term = ExitBB->getTerminator();
++  const Instruction *Term = ExitBB->getTerminator();
 +  const ReturnInst *Ret = dyn_cast<ReturnInst>(Term);
 +  // If Term is not a ReturnInst, then it must be a UnreachableInst.
 +  if (!Ret && !isa<UnreachableInst>(Term))
@@ -305,7 +308,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8120,17 +8156,24 @@
+@@ -8230,17 +8266,24 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
@@ -339,7 +342,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8201,8 +8244,9 @@
+@@ -8311,8 +8354,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
@@ -353,9 +356,9 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    if (HasDef) {
 Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 357230)
+--- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
-@@ -532,14 +532,15 @@
+@@ -541,14 +541,15 @@
    // arrays interwoven with each (lowered) base pointer immediately followed by
    // it's (lowered) derived pointer.  i.e
    // (base[0], ptr[0], base[1], ptr[1], ...)
@@ -375,7 +378,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    }
  
    // If there are any explicit spill slots passed to the statepoint, record
-@@ -818,6 +819,11 @@
+@@ -827,6 +828,11 @@
  
      unsigned AS = ISP.getCalledValue()->getType()->getPointerAddressSpace();
      ActualCallee = DAG.getConstant(0, getCurSDLoc(), TLI.getPointerTy(DL, AS));
@@ -389,9 +392,9 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    }
 Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 357230)
+--- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/TargetLowering.cpp	(working copy)
-@@ -87,6 +87,9 @@
+@@ -89,6 +89,9 @@
      // (We look for a CopyFromReg reading a virtual register that is used
      //  for the function live-in value of register Reg)
      SDValue Value = OutVals[I];
@@ -403,7 +406,7 @@ Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
      unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
---- lib/CodeGen/StackMaps.cpp	(revision 357230)
+--- lib/CodeGen/StackMaps.cpp	(revision 359070)
 +++ lib/CodeGen/StackMaps.cpp	(working copy)
 @@ -30,6 +30,7 @@
  #include "llvm/Support/ErrorHandling.h"
@@ -413,7 +416,7 @@ Index: lib/CodeGen/StackMaps.cpp
  #include <algorithm>
  #include <cassert>
  #include <cstdint>
-@@ -372,7 +373,9 @@
+@@ -371,7 +372,9 @@
  }
  
  void StackMaps::recordPatchPoint(const MachineInstr &MI) {
@@ -424,7 +427,7 @@ Index: lib/CodeGen/StackMaps.cpp
  
    PatchPointOpers opers(&MI);
    const int64_t ID = opers.getID();
-@@ -444,7 +447,7 @@
+@@ -443,7 +446,7 @@
      LLVM_DEBUG(dbgs() << WSMP << "function addr: " << FR.first
                        << " frame size: " << FR.second.StackSize
                        << " callsite count: " << FR.second.RecordCount << '\n');
@@ -435,9 +438,9 @@ Index: lib/CodeGen/StackMaps.cpp
    }
 Index: lib/CodeGen/TargetInstrInfo.cpp
 ===================================================================
---- lib/CodeGen/TargetInstrInfo.cpp	(revision 357230)
+--- lib/CodeGen/TargetInstrInfo.cpp	(revision 359070)
 +++ lib/CodeGen/TargetInstrInfo.cpp	(working copy)
-@@ -479,6 +479,7 @@
+@@ -468,6 +468,7 @@
      StartIdx = StackMapOpers(&MI).getVarIdx();
      break;
    }
@@ -445,7 +448,7 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
    case TargetOpcode::PATCHPOINT: {
      // For PatchPoint, the call args are not foldable (even if reported in the
      // stackmap e.g. via anyregcc).
-@@ -573,6 +574,7 @@
+@@ -562,6 +563,7 @@
  
    if (MI.getOpcode() == TargetOpcode::STACKMAP ||
        MI.getOpcode() == TargetOpcode::PATCHPOINT ||
@@ -453,7 +456,7 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
        MI.getOpcode() == TargetOpcode::STATEPOINT) {
      // Fold stackmap/patchpoint.
      NewMI = foldPatchpoint(MF, MI, Ops, FI, *this);
-@@ -637,6 +639,7 @@
+@@ -626,6 +628,7 @@
    int FrameIndex = 0;
  
    if ((MI.getOpcode() == TargetOpcode::STACKMAP ||
@@ -463,9 +466,9 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
        isLoadFromStackSlot(LoadMI, FrameIndex)) {
 Index: lib/CodeGen/TargetPassConfig.cpp
 ===================================================================
---- lib/CodeGen/TargetPassConfig.cpp	(revision 357230)
+--- lib/CodeGen/TargetPassConfig.cpp	(revision 359070)
 +++ lib/CodeGen/TargetPassConfig.cpp	(working copy)
-@@ -895,6 +895,7 @@
+@@ -954,6 +954,7 @@
    if (getOptLevel() != CodeGenOpt::None)
      addBlockPlacement();
  
@@ -473,7 +476,7 @@ Index: lib/CodeGen/TargetPassConfig.cpp
    addPreEmitPass();
  
    if (TM->Options.EnableIPRA)
-@@ -904,7 +905,6 @@
+@@ -963,7 +964,6 @@
  
    addPass(&FuncletLayoutID, false);
  
@@ -483,7 +486,7 @@ Index: lib/CodeGen/TargetPassConfig.cpp
    // Insert before XRay Instrumentation.
 Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
---- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 357230)
+--- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 359070)
 +++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
 @@ -200,6 +200,14 @@
           .setErrorStr(&Error)
@@ -502,9 +505,9 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
      builder.setCodeModel(*CM);
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
---- lib/IR/AsmWriter.cpp	(revision 357230)
+--- lib/IR/AsmWriter.cpp	(revision 359070)
 +++ lib/IR/AsmWriter.cpp	(working copy)
-@@ -350,6 +350,12 @@
+@@ -349,6 +349,12 @@
    case CallingConv::Cold:          Out << "coldcc"; break;
    case CallingConv::WebKit_JS:     Out << "webkit_jscc"; break;
    case CallingConv::AnyReg:        Out << "anyregcc"; break;
@@ -519,9 +522,9 @@ Index: lib/IR/AsmWriter.cpp
    case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
 Index: lib/IR/Core.cpp
 ===================================================================
---- lib/IR/Core.cpp	(revision 357230)
+--- lib/IR/Core.cpp	(revision 359070)
 +++ lib/IR/Core.cpp	(working copy)
-@@ -3553,3 +3553,15 @@
+@@ -3921,3 +3921,15 @@
  LLVMBool LLVMIsMultithreaded() {
    return llvm_is_multithreaded();
  }
@@ -539,9 +542,9 @@ Index: lib/IR/Core.cpp
 +}
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
---- lib/MC/MCAsmStreamer.cpp	(revision 357230)
+--- lib/MC/MCAsmStreamer.cpp	(revision 359070)
 +++ lib/MC/MCAsmStreamer.cpp	(working copy)
-@@ -914,7 +914,7 @@
+@@ -941,7 +941,7 @@
    if (!Directive) {
      int64_t IntValue;
      if (!Value->evaluateAsAbsolute(IntValue))
@@ -552,7 +555,7 @@ Index: lib/MC/MCAsmStreamer.cpp
      // the request down into several, smaller, integers.
 Index: lib/Target/ARM/ARMAsmPrinter.cpp
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 357230)
+--- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMAsmPrinter.cpp	(working copy)
 @@ -55,7 +55,7 @@
  ARMAsmPrinter::ARMAsmPrinter(TargetMachine &TM,
@@ -563,7 +566,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  
  void ARMAsmPrinter::EmitFunctionBodyEnd() {
    // Make sure to terminate any constant pools that were at the end
-@@ -547,6 +547,7 @@
+@@ -559,6 +559,7 @@
        OutStreamer->AddBlankLine();
      }
  
@@ -571,7 +574,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
      // Funny Darwin hack: This flag tells the linker that no global symbols
      // contain code that falls through to other global symbols (e.g. the obvious
      // implementation of multiple entry points).  If this doesn't occur, the
-@@ -566,6 +567,15 @@
+@@ -578,6 +579,15 @@
    OptimizationGoals = -1;
  
    ATS.finishAttributeSection();
@@ -587,7 +590,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  }
  
  //===----------------------------------------------------------------------===//
-@@ -2032,6 +2042,13 @@
+@@ -2064,6 +2074,13 @@
    case ARM::PATCHABLE_TAIL_CALL:
      LowerPATCHABLE_TAIL_CALL(*MI);
      return;
@@ -601,7 +604,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
    }
  
    MCInst TmpInst;
-@@ -2040,6 +2057,107 @@
+@@ -2072,6 +2089,107 @@
    EmitToStreamer(*OutStreamer, TmpInst);
  }
  
@@ -711,7 +714,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  //===----------------------------------------------------------------------===//
 Index: lib/Target/ARM/ARMAsmPrinter.h
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.h	(revision 357230)
+--- lib/Target/ARM/ARMAsmPrinter.h	(revision 359070)
 +++ lib/Target/ARM/ARMAsmPrinter.h	(working copy)
 @@ -12,6 +12,7 @@
  
@@ -751,9 +754,9 @@ Index: lib/Target/ARM/ARMAsmPrinter.h
      // ARM/Darwin adds ISA to the DWARF info for each function.
 Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 357230)
+--- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMBaseInstrInfo.cpp	(working copy)
-@@ -717,6 +717,10 @@
+@@ -721,6 +721,10 @@
      return 0;
    case TargetOpcode::BUNDLE:
      return getInstBundleLength(MI);
@@ -764,7 +767,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    case ARM::MOVi16_ga_pcrel:
    case ARM::MOVTi16_ga_pcrel:
    case ARM::t2MOVi16_ga_pcrel:
-@@ -1447,6 +1451,49 @@
+@@ -1462,6 +1466,49 @@
    BB->erase(MI);
  }
  
@@ -814,7 +817,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
  bool ARMBaseInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
    if (MI.getOpcode() == TargetOpcode::LOAD_STACK_GUARD) {
      assert(getSubtarget().getTargetTriple().isOSBinFormatMachO() &&
-@@ -1461,6 +1508,11 @@
+@@ -1476,6 +1523,11 @@
      return true;
    }
  
@@ -828,9 +831,9 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    // widened to VMOVD.  We prefer the VMOVD when possible because it may be
 Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
---- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 357230)
+--- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 359070)
 +++ lib/Target/ARM/ARMBaseInstrInfo.h	(working copy)
-@@ -388,6 +388,7 @@
+@@ -398,6 +398,7 @@
    virtual void expandLoadStackGuard(MachineBasicBlock::iterator MI) const = 0;
  
    void expandMEMCPY(MachineBasicBlock::iterator) const;
@@ -840,7 +843,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.h
    /// Modeling special VFP / NEON fp MLA / MLS hazards.
 Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 357230)
+--- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
 @@ -90,6 +90,10 @@
        // exception handling.
@@ -886,7 +889,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  }
 Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
---- lib/Target/ARM/ARMCallingConv.td	(revision 357230)
+--- lib/Target/ARM/ARMCallingConv.td	(revision 359070)
 +++ lib/Target/ARM/ARMCallingConv.td	(working copy)
 @@ -239,6 +239,60 @@
  ]>;
@@ -962,7 +965,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  
 Index: lib/Target/ARM/ARMConstantIslandPass.cpp
 ===================================================================
---- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 357230)
+--- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMConstantIslandPass.cpp	(working copy)
 @@ -241,6 +241,7 @@
      CPEntry *findConstPoolEntry(unsigned CPI, const MachineInstr *CPEMI);
@@ -1033,7 +1036,7 @@ Index: lib/Target/ARM/ARMConstantIslandPass.cpp
  /// and finding all of the constant pool users.
 Index: lib/Target/ARM/ARMFastISel.cpp
 ===================================================================
---- lib/Target/ARM/ARMFastISel.cpp	(revision 357230)
+--- lib/Target/ARM/ARMFastISel.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMFastISel.cpp	(working copy)
 @@ -1890,6 +1890,10 @@
        report_fatal_error("Can't return in GHC call convention");
@@ -1048,9 +1051,9 @@ Index: lib/Target/ARM/ARMFastISel.cpp
  
 Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.cpp	(revision 357230)
+--- lib/Target/ARM/ARMFrameLowering.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
-@@ -380,6 +380,7 @@
+@@ -379,6 +379,7 @@
    unsigned GPRCS1Size = 0, GPRCS2Size = 0, DPRCSSize = 0;
    int FramePtrSpillFI = 0;
    int D8SpillFI = 0;
@@ -1058,7 +1061,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    // All calls are tail calls in GHC calling conv, and functions have no
    // prologue/epilogue.
-@@ -408,6 +409,16 @@
+@@ -407,6 +408,16 @@
      return;
    }
  
@@ -1075,7 +1078,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    // Determine spill area sizes.
    for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
      unsigned Reg = CSI[i].getReg();
-@@ -459,7 +470,7 @@
+@@ -458,7 +469,7 @@
    unsigned DPRGapSize = (GPRCS1Size + GPRCS2Size + ArgRegsSaveSize) % DPRAlign;
    unsigned DPRCSOffset = GPRCS2Offset - DPRGapSize - DPRCSSize;
    int FramePtrOffsetInPush = 0;
@@ -1084,7 +1087,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      int FPOffset = MFI.getObjectOffset(FramePtrSpillFI);
      assert(getMaxFPOffset(MF.getFunction(), *AFI) <= FPOffset &&
             "Max FP estimation is wrong");
-@@ -559,7 +570,7 @@
+@@ -560,7 +571,7 @@
  
    if (NumBytes) {
      // Adjust SP after all the callee-save spills.
@@ -1093,7 +1096,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          tryFoldSPUpdateIntoPushPop(STI, MF, &*LastPush, NumBytes))
        DefCFAOffsetCandidates.addExtraBytes(LastPush, NumBytes);
      else {
-@@ -586,7 +597,7 @@
+@@ -587,7 +598,7 @@
    // into spill area 1, including the FP in R11.  In either case, it
    // is in area one and the adjustment needs to take place just after
    // that push.
@@ -1102,7 +1105,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      MachineBasicBlock::iterator AfterPush = std::next(GPRCS1Push);
      unsigned PushSize = sizeOfSPAdjustment(*GPRCS1Push);
      emitRegPlusImmediate(!AFI->isThumbFunction(), MBB, AfterPush,
-@@ -608,6 +619,19 @@
+@@ -609,6 +620,19 @@
            .addCFIIndex(CFIIndex)
            .setMIFlags(MachineInstr::FrameSetup);
      }
@@ -1122,7 +1125,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    }
  
    // Now that the prologue's actual instructions are finalised, we can insert
-@@ -806,6 +830,11 @@
+@@ -807,6 +831,11 @@
                   AFI->getGPRCalleeSavedArea2Size() +
                   AFI->getDPRCalleeSavedGapSize() +
                   AFI->getDPRCalleeSavedAreaSize());
@@ -1134,7 +1137,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
-@@ -949,6 +978,9 @@
+@@ -951,6 +980,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1144,7 +1147,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1054,7 +1086,9 @@
+@@ -1055,7 +1087,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1155,7 +1158,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1428,8 +1462,18 @@
+@@ -1429,8 +1463,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1176,7 +1179,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1460,7 +1504,6 @@
+@@ -1461,7 +1505,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1184,7 +1187,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1610,6 +1653,20 @@
+@@ -1611,6 +1654,20 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1205,7 +1208,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1782,7 +1839,10 @@
+@@ -1783,7 +1840,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1217,7 +1220,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1796,7 +1856,6 @@
+@@ -1797,7 +1857,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1225,7 +1228,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2499,3 +2558,25 @@
+@@ -2511,3 +2570,25 @@
    MF.verify();
  #endif
  }
@@ -1253,7 +1256,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +}
 Index: lib/Target/ARM/ARMFrameLowering.h
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.h	(revision 357230)
+--- lib/Target/ARM/ARMFrameLowering.h	(revision 359070)
 +++ lib/Target/ARM/ARMFrameLowering.h	(working copy)
 @@ -65,6 +65,11 @@
      return true;
@@ -1269,9 +1272,9 @@ Index: lib/Target/ARM/ARMFrameLowering.h
                      const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.cpp	(revision 357230)
+--- lib/Target/ARM/ARMISelLowering.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
-@@ -1365,6 +1365,7 @@
+@@ -1388,6 +1388,7 @@
    case ARMISD::VBICIMM:       return "ARMISD::VBICIMM";
    case ARMISD::VBSL:          return "ARMISD::VBSL";
    case ARMISD::MEMCPY:        return "ARMISD::MEMCPY";
@@ -1279,7 +1282,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case ARMISD::VLD1DUP:       return "ARMISD::VLD1DUP";
    case ARMISD::VLD2DUP:       return "ARMISD::VLD2DUP";
    case ARMISD::VLD3DUP:       return "ARMISD::VLD3DUP";
-@@ -1578,6 +1579,10 @@
+@@ -1601,6 +1602,10 @@
    switch (CC) {
    default:
      report_fatal_error("Unsupported calling convention");
@@ -1290,7 +1293,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_AAPCS:
    case CallingConv::ARM_APCS:
    case CallingConv::GHC:
-@@ -1627,6 +1632,10 @@
+@@ -1650,6 +1655,10 @@
    switch (getEffectiveCallingConv(CC, isVarArg)) {
    default:
      report_fatal_error("Unsupported calling convention");
@@ -1301,7 +1304,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -1787,6 +1796,7 @@
+@@ -1810,6 +1819,7 @@
    bool isStructRet    = (Outs.empty()) ? false : Outs[0].Flags.isSRet();
    bool isThisReturn   = false;
    bool isSibCall      = false;
@@ -1309,7 +1312,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
  
    // Disable tail calls if they're not supported.
-@@ -1826,8 +1836,34 @@
+@@ -1849,8 +1859,34 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
@@ -1345,7 +1348,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2168,6 +2204,12 @@
+@@ -2191,6 +2227,12 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
@@ -1358,7 +1361,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9256,6 +9298,17 @@
+@@ -9254,6 +9296,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -1376,7 +1379,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -11074,10 +11127,10 @@
+@@ -11136,10 +11189,10 @@
  
    // Try to use the ARM/Thumb2 BFI (bitfield insert) instruction when
    // reasonable.
@@ -1391,7 +1394,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
  
    if (SDValue Result = PerformSHLSimplify(N, DCI, Subtarget))
      return Result;
-@@ -13061,6 +13114,23 @@
+@@ -13136,6 +13189,23 @@
    return -1;
  }
  
@@ -1417,9 +1420,9 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      return false;
 Index: lib/Target/ARM/ARMISelLowering.h
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.h	(revision 357230)
+--- lib/Target/ARM/ARMISelLowering.h	(revision 359070)
 +++ lib/Target/ARM/ARMISelLowering.h	(working copy)
-@@ -232,6 +232,8 @@
+@@ -233,6 +233,8 @@
        // Pseudo-instruction representing a memory copy using ldm/stm
        // instructions.
        MEMCPY,
@@ -1428,7 +1431,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
  
        // Vector load N-element structure to all lanes:
        VLD1DUP = ISD::FIRST_TARGET_MEMORY_OPCODE,
-@@ -497,6 +499,12 @@
+@@ -501,6 +503,12 @@
      bool functionArgumentNeedsConsecutiveRegisters(
          Type *Ty, CallingConv::ID CallConv, bool isVarArg) const override;
  
@@ -1443,7 +1446,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
      unsigned
 Index: lib/Target/ARM/ARMInstrInfo.td
 ===================================================================
---- lib/Target/ARM/ARMInstrInfo.td	(revision 357230)
+--- lib/Target/ARM/ARMInstrInfo.td	(revision 359070)
 +++ lib/Target/ARM/ARMInstrInfo.td	(working copy)
 @@ -79,6 +79,7 @@
  def SDT_ARMMEMCPY  : SDTypeProfile<2, 3, [SDTCisVT<0, i32>, SDTCisVT<1, i32>,
@@ -1453,7 +1456,7 @@ Index: lib/Target/ARM/ARMInstrInfo.td
  
  def SDTBinaryArithWithFlags : SDTypeProfile<2, 2,
                                              [SDTCisSameAs<0, 2>,
-@@ -206,6 +207,10 @@
+@@ -207,6 +208,10 @@
                          [SDNPHasChain, SDNPInGlue, SDNPOutGlue,
                           SDNPMayStore, SDNPMayLoad]>;
  
@@ -1464,7 +1467,7 @@ Index: lib/Target/ARM/ARMInstrInfo.td
  def ARMsmulwb       : SDNode<"ARMISD::SMULWB", SDTIntBinOp, []>;
  def ARMsmulwt       : SDNode<"ARMISD::SMULWT", SDTIntBinOp, []>;
  def ARMsmlalbb      : SDNode<"ARMISD::SMLALBB", SDT_LongMac, []>;
-@@ -4890,6 +4895,14 @@
+@@ -4931,6 +4936,14 @@
              (ARMmemcopy GPR:$dst, GPR:$src, imm:$nreg))]>;
  }
  
@@ -1481,7 +1484,7 @@ Index: lib/Target/ARM/ARMInstrInfo.td
  }]>;
 Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 ===================================================================
---- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 357230)
+--- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 359070)
 +++ lib/Target/ARM/ARMMachineFunctionInfo.h	(working copy)
 @@ -127,6 +127,9 @@
    /// The amount the literal pool has been increasedby due to promoted globals.
@@ -1507,20 +1510,20 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  } // end namespace llvm
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
---- tools/llvm-shlib/CMakeLists.txt	(revision 357230)
+--- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
 +++ tools/llvm-shlib/CMakeLists.txt	(working copy)
-@@ -58,6 +58,7 @@
- endif()
+@@ -64,6 +64,7 @@
+   endif()
  
- target_link_libraries(LLVM PRIVATE ${LIB_NAMES})
+   target_link_libraries(LLVM PRIVATE ${LIB_NAMES})
 +set_target_properties(LLVM PROPERTIES LINK_FLAGS "-static-libstdc++")
  
- if (APPLE)
-   set_property(TARGET LLVM APPEND_STRING PROPERTY
+   if (APPLE)
+     set_property(TARGET LLVM APPEND_STRING PROPERTY
 Index: tools/llvm-shlib/simple_version_script.map.in
 ===================================================================
---- tools/llvm-shlib/simple_version_script.map.in	(revision 357230)
+--- tools/llvm-shlib/simple_version_script.map.in	(revision 359070)
 +++ tools/llvm-shlib/simple_version_script.map.in	(working copy)
 @@ -1 +1 @@
 -LLVM_@LLVM_VERSION_MAJOR@ { global: *; };
-+LLVM_@LLVM_VERSION_MAJOR@ { global: LLVM*;_ZN4llvm13linkCoreCLRGCEv; local:*; };
++LLVM_@LLVM_VERSION_MAJOR@ { global: LLVM*; local:*; };
