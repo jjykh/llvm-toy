@@ -133,20 +133,32 @@ class CallResolver {
   virtual LValue EmitCallInstr(LValue function, LValue* operands,
                                size_t operands_count);
   virtual void BuildCall(const CallDescriptor& call_desc);
-  virtual void PopulateCallInfo(CallInfo*) {}
+  virtual void PopulateCallInfo(CallInfo*);
+  virtual void ResolveStackParameters(const OperandsVector&);
   inline Output& output() { return *output_; }
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
   inline size_t location_count() const { return locations_.size(); }
   inline int call_instruction_bytes() const {
+    if (restore_slot_count_) return 8;
     // locations[0] must be the callee. If greater than 1, then an extra stmdb
     // is needed.
     return location_count() > 1 ? 8 : 4;
   }
   inline std::vector<LValue>& operand_values() { return operand_values_; }
+
   inline std::vector<LType>& operand_value_types() {
     return operand_value_types_;
   }
+
+  inline LValue GetLLVMValue(int value) {
+    return GetImpl(current_bb_)->value(value);
+  }
+
+  inline void AppendLocation(int reg) { locations_.push_back(reg); }
+
+  int FindNextReg();
+  void SetOperandValue(int reg, LValue value);
 
  private:
   void ResolveOperands(bool code, const OperandsVector& operands,
@@ -158,8 +170,6 @@ class CallResolver {
   inline CallInfo::LocationVector&& release_location() {
     return std::move(locations_);
   }
-  void SetOperandValue(int reg, LValue value);
-  int FindNextReg();
 
   std::bitset<kV8CCRegisterParameterCount>
       allocatable_register_set_; /* 0 is allocatable */
@@ -173,6 +183,7 @@ class CallResolver {
   int id_;
   int next_reg_;
   int patchid_;
+  int restore_slot_count_;
 };
 
 class TCCallResolver final : public CallResolver {
@@ -184,6 +195,7 @@ class TCCallResolver final : public CallResolver {
  private:
   void BuildCall(const CallDescriptor& call_desc) override;
   void PopulateCallInfo(CallInfo*) override;
+  void ResolveStackParameters(const OperandsVector&) override;
 };
 
 class InvokeResolver final : public CallResolver {
@@ -270,7 +282,8 @@ CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
       target_(nullptr),
       id_(id),
       next_reg_(0),
-      patchid_(patchid) {}
+      patchid_(patchid),
+      restore_slot_count_(0) {}
 
 int CallResolver::FindNextReg() {
   if (next_reg_ < 0) return -1;
@@ -310,7 +323,7 @@ void CallResolver::ResolveOperands(
   // layout
   // return value | register operands | stack operands | artifact operands
   if (code) {
-    LValue code_value = GetImpl(current_bb_)->value(*(operands_iterator++));
+    LValue code_value = GetLLVMValue(*(operands_iterator++));
     if (typeOf(code_value) != output().taggedType()) {
       EMASSERT(typeOf(code_value) == output().repo().ref8);
       target_ = code_value;
@@ -321,17 +334,17 @@ void CallResolver::ResolveOperands(
     }
   } else {
     int addr_value = *(operands_iterator++);
-    target_ = GetImpl(current_bb_)->value(addr_value);
+    target_ = GetLLVMValue(addr_value);
   }
   // setup register operands
-  OperandsVector stack_operands;
+  OperandsVector stack_parameters;
   for (int reg : registers_for_operands) {
     EMASSERT(reg < kV8CCRegisterParameterCount);
     if (reg < 0) {
-      stack_operands.push_back(*(operands_iterator++));
+      stack_parameters.push_back(*(operands_iterator++));
       continue;
     }
-    LValue llvm_val = GetImpl(current_bb_)->value(*(operands_iterator++));
+    LValue llvm_val = GetLLVMValue(*(operands_iterator++));
     SetOperandValue(reg, llvm_val);
   }
   // setup callee value.
@@ -339,22 +352,7 @@ void CallResolver::ResolveOperands(
   SetOperandValue(target_reg, target_);
   locations_.push_back(target_reg);
 
-  std::vector<int> allocated_regs;
-
-  for (size_t i = 0; i != stack_operands.size(); ++i) {
-    int reg = FindNextReg();
-    EMASSERT(reg >= 0);
-    allocated_regs.push_back(reg);
-  }
-
-  auto reg_iterator = allocated_regs.rbegin();
-
-  for (auto operand : stack_operands) {
-    LValue llvm_val = GetImpl(current_bb_)->value(operand);
-    int reg = *(reg_iterator++);
-    SetOperandValue(reg, llvm_val);
-    locations_.push_back(reg);
-  }
+  ResolveStackParameters(stack_parameters);
 }
 
 void CallResolver::BuildCall(const CallDescriptor& call_desc) {
@@ -435,6 +433,19 @@ void CallResolver::PopulateToStackMap() {
 #endif
 }
 
+void CallResolver::ResolveStackParameters(
+    const OperandsVector& stack_parameters) {
+  for (auto i = stack_parameters.rbegin(); i != stack_parameters.rend(); ++i) {
+    LValue llvm_val = GetLLVMValue(*i);
+    SetOperandValue(-1, llvm_val);
+  }
+  restore_slot_count_ = stack_parameters.size();
+}
+
+void CallResolver::PopulateCallInfo(CallInfo* callinfo) {
+  callinfo->set_restore_slot_count(restore_slot_count_);
+}
+
 TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
                                StackMapInfoMap* stack_map_info_map, int patchid)
     : CallResolver(current_bb, output, id, stack_map_info_map, patchid) {}
@@ -460,6 +471,26 @@ void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
 void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
   callinfo->set_is_tailcall(true);
   callinfo->set_tailcall_return_count(output().stack_parameter_count());
+}
+
+void TCCallResolver::ResolveStackParameters(
+    const OperandsVector& stack_parameters) {
+  std::vector<int> allocated_regs;
+
+  for (size_t i = 0; i != stack_parameters.size(); ++i) {
+    int reg = FindNextReg();
+    EMASSERT(reg >= 0);
+    allocated_regs.push_back(reg);
+  }
+
+  auto reg_iterator = allocated_regs.rbegin();
+
+  for (auto stack_parameter : stack_parameters) {
+    LValue llvm_val = GetLLVMValue(stack_parameter);
+    int reg = *(reg_iterator++);
+    SetOperandValue(reg, llvm_val);
+    AppendLocation(reg);
+  }
 }
 
 LValue CallResolver::EmitCallInstr(LValue function, LValue* operands,
