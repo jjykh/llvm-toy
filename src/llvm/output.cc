@@ -12,6 +12,7 @@ Output::Output(CompilerState& state)
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
+      parent_fp_(nullptr),
       stack_parameter_count_(0) {}
 
 Output::~Output() { LLVMDisposeBuilder(builder_); }
@@ -34,6 +35,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   if (v8cc) {
     root_ = LLVMGetParam(state_.function_, 10);
     fp_ = LLVMGetParam(state_.function_, 11);
+    parent_fp_ = LLVMGetParam(state_.function_, 9);
   } else {
     root_ = LLVMGetParam(state_.function_, 5);
     fp_ = LLVMGetParam(state_.function_, 6);
@@ -75,7 +77,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
                                      taggedType(),
                                      taggedType(),
                                      taggedType(),
-                                     taggedType(),
+                                     repo().ref8,
                                      pointerType(taggedType()),
                                      pointerType(repo().ref8)};
   EMASSERT(params_types.size() == kV8CCRegisterParameterCount);

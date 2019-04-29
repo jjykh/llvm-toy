@@ -109,6 +109,7 @@ class Output {
   }
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
+  inline LValue parent_fp() { return parent_fp_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
 
  private:
@@ -118,6 +119,7 @@ class Output {
   LBasicBlock prologue_;
   LValue root_;
   LValue fp_;
+  LValue parent_fp_;
   size_t stack_parameter_count_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;

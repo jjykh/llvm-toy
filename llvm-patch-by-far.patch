@@ -76,6 +76,19 @@ Index: include/llvm-c/Core.h
  /**
   * @}
   */
+Index: lib/Analysis/BranchProbabilityInfo.cpp
+===================================================================
+--- lib/Analysis/BranchProbabilityInfo.cpp	(revision 359070)
++++ lib/Analysis/BranchProbabilityInfo.cpp	(working copy)
+@@ -302,7 +302,7 @@
+   assert(WeightSum <= UINT32_MAX &&
+          "Expected weights to scale down to 32 bits");
+ 
+-  if (WeightSum == 0 || ReachableIdxs.size() == 0) {
++  if (WeightSum == 0) {
+     for (unsigned i = 0, e = TI->getNumSuccessors(); i != e; ++i)
+       Weights[i] = 1;
+     WeightSum = TI->getNumSuccessors();
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
 --- lib/AsmParser/LLLexer.cpp	(revision 359070)
@@ -1053,7 +1066,20 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMFrameLowering.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
-@@ -379,6 +379,7 @@
+@@ -374,11 +374,20 @@
+ 
+   unsigned FramePtr = RegInfo->getFrameRegister(MF);
+ 
++  if (AFI->isJSStub() && MF.getRegInfo().isLiveIn(ARM::R9)) {
++    MachineBasicBlock &MBB = MF.front();
++    BuildMI(MBB, MBB.instr_begin(), dl, TII.get(ARM::MOVr), ARM::R9)
++        .addReg(ARM::R11)
++        .add(predOps(ARMCC::AL))
++        .add(condCodeOp());
++  }
++
+   // Determine the sizes of each callee-save spill areas and record which frame
+   // belongs to which callee-save spill areas.
    unsigned GPRCS1Size = 0, GPRCS2Size = 0, DPRCSSize = 0;
    int FramePtrSpillFI = 0;
    int D8SpillFI = 0;
@@ -1061,12 +1087,12 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    // All calls are tail calls in GHC calling conv, and functions have no
    // prologue/epilogue.
-@@ -407,6 +408,16 @@
+@@ -407,6 +416,16 @@
      return;
    }
  
 +  if (AFI->isJSStub()) {
-+    GPRCS1Size += 4;
++    NumBytes += 4;
 +    IsJSFamily = true;
 +    FramePtr = ARM::R11;
 +  } else if (AFI->isJSFunction()) {
@@ -1078,7 +1104,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    // Determine spill area sizes.
    for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
      unsigned Reg = CSI[i].getReg();
-@@ -458,7 +469,7 @@
+@@ -458,7 +477,7 @@
    unsigned DPRGapSize = (GPRCS1Size + GPRCS2Size + ArgRegsSaveSize) % DPRAlign;
    unsigned DPRCSOffset = GPRCS2Offset - DPRGapSize - DPRCSSize;
    int FramePtrOffsetInPush = 0;
@@ -1087,7 +1113,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      int FPOffset = MFI.getObjectOffset(FramePtrSpillFI);
      assert(getMaxFPOffset(MF.getFunction(), *AFI) <= FPOffset &&
             "Max FP estimation is wrong");
-@@ -560,7 +571,7 @@
+@@ -560,7 +579,7 @@
  
    if (NumBytes) {
      // Adjust SP after all the callee-save spills.
@@ -1096,7 +1122,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          tryFoldSPUpdateIntoPushPop(STI, MF, &*LastPush, NumBytes))
        DefCFAOffsetCandidates.addExtraBytes(LastPush, NumBytes);
      else {
-@@ -587,7 +598,7 @@
+@@ -587,7 +606,7 @@
    // into spill area 1, including the FP in R11.  In either case, it
    // is in area one and the adjustment needs to take place just after
    // that push.
@@ -1105,27 +1131,26 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      MachineBasicBlock::iterator AfterPush = std::next(GPRCS1Push);
      unsigned PushSize = sizeOfSPAdjustment(*GPRCS1Push);
      emitRegPlusImmediate(!AFI->isThumbFunction(), MBB, AfterPush,
-@@ -609,6 +620,19 @@
+@@ -609,6 +628,18 @@
            .addCFIIndex(CFIIndex)
            .setMIFlags(MachineInstr::FrameSetup);
      }
 +    if (AFI->isJSStub()) {
 +      MachineBasicBlock::iterator MI = AfterPush;
-+      BuildMI(MBB, MI, dl, TII.get(ARM::MOVi), ARM::R12)
++      BuildMI(MBB, GPRCS1Push, dl, TII.get(ARM::MOVi), ARM::R12)
 +          .addImm(22)
 +          .add(predOps(ARMCC::AL))
 +          .add(condCodeOp());
-+      BuildMI(MBB, MI, dl, TII.get(ARM::STR_PRE_IMM), ARM::SP)
++      BuildMI(MBB, MI, dl, TII.get(ARM::STRi12))
 +          .addReg(ARM::R12, RegState::Kill)
 +          .addReg(ARM::SP)
-+          .setMIFlags(MachineInstr::NoFlags)
 +          .addImm(-4)
 +          .add(predOps(ARMCC::AL));
 +    }
    }
  
    // Now that the prologue's actual instructions are finalised, we can insert
-@@ -807,6 +831,11 @@
+@@ -807,6 +838,11 @@
                   AFI->getGPRCalleeSavedArea2Size() +
                   AFI->getDPRCalleeSavedGapSize() +
                   AFI->getDPRCalleeSavedAreaSize());
@@ -1137,7 +1162,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
-@@ -951,6 +980,9 @@
+@@ -951,6 +987,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1147,7 +1172,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1087,9 @@
+@@ -1055,7 +1094,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1158,7 +1183,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1429,8 +1463,18 @@
+@@ -1429,8 +1470,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1179,7 +1204,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1461,7 +1505,6 @@
+@@ -1461,7 +1512,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1187,7 +1212,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1611,6 +1654,20 @@
+@@ -1611,6 +1661,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1205,10 +1230,11 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    SavedRegs.set(ARM::LR);
 +    CanEliminateFrame = false;
 +  }
++
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1840,10 @@
+@@ -1783,7 +1848,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1220,7 +1246,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1857,6 @@
+@@ -1797,7 +1865,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1228,7 +1254,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2570,25 @@
+@@ -2511,3 +2578,25 @@
    MF.verify();
  #endif
  }
@@ -1504,6 +1530,19 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
+Index: lib/Transforms/Utils/SimplifyCFG.cpp
+===================================================================
+--- lib/Transforms/Utils/SimplifyCFG.cpp	(revision 359070)
++++ lib/Transforms/Utils/SimplifyCFG.cpp	(working copy)
+@@ -6007,7 +6007,7 @@
+     DeleteDeadBlock(BB);
+     return true;
+   }
+-
++  return false;
+   // Check to see if we can constant propagate this terminator instruction
+   // away...
+   Changed |= ConstantFoldTerminator(BB, true);
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
