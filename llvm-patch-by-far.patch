@@ -148,20 +148,6 @@ Index: lib/AsmParser/LLToken.h
    kw_swiftcc,
    kw_preserve_mostcc,
    kw_preserve_allcc,
-Index: lib/CodeGen/IfConversion.cpp
-===================================================================
---- lib/CodeGen/IfConversion.cpp	(revision 359070)
-+++ lib/CodeGen/IfConversion.cpp	(working copy)
-@@ -337,6 +337,9 @@
- INITIALIZE_PASS_END(IfConverter, DEBUG_TYPE, "If Converter", false, false)
- 
- bool IfConverter::runOnMachineFunction(MachineFunction &MF) {
-+  CallingConv::ID CC = MF.getFunction().getCallingConv();
-+  if ((CC == CallingConv::V8CC) || (CC == CallingConv::V8SBCC))
-+    return false;
-   if (skipFunction(MF.getFunction()) || (PredicateFtor && !PredicateFtor(MF)))
-     return false;
- 
 Index: lib/CodeGen/InlineSpiller.cpp
 ===================================================================
 --- lib/CodeGen/InlineSpiller.cpp	(revision 359070)
