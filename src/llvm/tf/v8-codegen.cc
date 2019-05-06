@@ -113,14 +113,10 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
   int call_target_reg = *(call_paramters_iterator++);
   int pc_offset = masm_.pc_offset();
   RegList reg_list = 0;
-  int restore_slot_count = 0;
-  // There is restore_slot_count, then no call params
-  if (call_info->restore_slot_count() == 0) {
-    for (; call_paramters_iterator != call_info->locations().end();
-         ++call_paramters_iterator) {
-      int reg = *call_paramters_iterator;
-      reg_list |= 1 << reg;
-    }
+  for (; call_paramters_iterator != call_info->locations().end();
+       ++call_paramters_iterator) {
+    int reg = *call_paramters_iterator;
+    reg_list |= 1 << reg;
   }
   if (call_info->is_tailcall() && call_info->tailcall_return_count()) {
     masm_.add(sp, sp, Operand(call_info->tailcall_return_count() * 4));
@@ -150,9 +146,6 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
                                     &zone_);
       }
     }
-  }
-  if (call_info->restore_slot_count()) {
-    masm_.sub(sp, sp, Operand(call_info->restore_slot_count() * 4));
   }
   CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
