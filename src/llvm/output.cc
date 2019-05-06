@@ -116,6 +116,10 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
         __builtin_trap();
     }
   }
+  // arm jump tables are slow.
+  static const char kNoJumpTables[] = "no-jump-tables";
+  static const char kTrue[] = "true";
+  LLVMAddTargetDependentFunctionAttr(state_.function_, kNoJumpTables, kTrue);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {

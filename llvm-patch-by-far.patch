@@ -1547,31 +1547,6 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
-Index: lib/Transforms/Utils/SimplifyCFG.cpp
-===================================================================
---- lib/Transforms/Utils/SimplifyCFG.cpp	(revision 359070)
-+++ lib/Transforms/Utils/SimplifyCFG.cpp	(working copy)
-@@ -5823,9 +5823,11 @@
-     // If we only have one predecessor, and if it is a branch on this value,
-     // see if that predecessor totally determines the outcome of this
-     // switch.
--    if (BasicBlock *OnlyPred = BB->getSinglePredecessor())
-+    if (BasicBlock *OnlyPred = BB->getSinglePredecessor()) {
-+      return false;
-       if (SimplifyEqualityComparisonWithOnlyPredecessor(BI, OnlyPred, Builder))
-         return requestResimplify();
-+    }
- 
-     // This block must be empty, except for the setcond inst, if it exists.
-     // Ignore dbg intrinsics.
-@@ -6007,7 +6009,6 @@
-     DeleteDeadBlock(BB);
-     return true;
-   }
--
-   // Check to see if we can constant propagate this terminator instruction
-   // away...
-   Changed |= ConstantFoldTerminator(BB, true);
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
