@@ -1108,7 +1108,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    }
  
 +  if (AFI->isJSStub()) {
-+    NumBytes += 4;
++    GPRCS1Size += 4;
 +    IsJSFamily = true;
 +    FramePtr = ARM::R11;
 +  } else if (AFI->isJSFunction()) {
@@ -1147,7 +1147,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      MachineBasicBlock::iterator AfterPush = std::next(GPRCS1Push);
      unsigned PushSize = sizeOfSPAdjustment(*GPRCS1Push);
      emitRegPlusImmediate(!AFI->isThumbFunction(), MBB, AfterPush,
-@@ -609,6 +628,18 @@
+@@ -609,6 +628,19 @@
            .addCFIIndex(CFIIndex)
            .setMIFlags(MachineInstr::FrameSetup);
      }
@@ -1157,16 +1157,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +          .addImm(22)
 +          .add(predOps(ARMCC::AL))
 +          .add(condCodeOp());
-+      BuildMI(MBB, MI, dl, TII.get(ARM::STRi12))
++      BuildMI(MBB, MI, dl, TII.get(ARM::STR_PRE_IMM), ARM::SP)
 +          .addReg(ARM::R12, RegState::Kill)
 +          .addReg(ARM::SP)
++          .setMIFlags(MachineInstr::NoFlags)
 +          .addImm(-4)
 +          .add(predOps(ARMCC::AL));
 +    }
    }
  
    // Now that the prologue's actual instructions are finalised, we can insert
-@@ -807,6 +838,11 @@
+@@ -807,6 +839,11 @@
                   AFI->getGPRCalleeSavedArea2Size() +
                   AFI->getDPRCalleeSavedGapSize() +
                   AFI->getDPRCalleeSavedAreaSize());
@@ -1178,7 +1179,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
-@@ -951,6 +987,9 @@
+@@ -951,6 +988,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1188,7 +1189,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1094,9 @@
+@@ -1055,7 +1095,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1199,7 +1200,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1429,8 +1470,18 @@
+@@ -1429,8 +1471,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1220,7 +1221,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1461,7 +1512,6 @@
+@@ -1461,7 +1513,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1228,7 +1229,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1611,6 +1661,21 @@
+@@ -1611,6 +1662,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1250,7 +1251,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1848,10 @@
+@@ -1783,7 +1849,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1262,7 +1263,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1865,6 @@
+@@ -1797,7 +1866,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1270,7 +1271,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2578,25 @@
+@@ -2511,3 +2579,25 @@
    MF.verify();
  #endif
  }
@@ -1550,12 +1551,24 @@ Index: lib/Transforms/Utils/SimplifyCFG.cpp
 ===================================================================
 --- lib/Transforms/Utils/SimplifyCFG.cpp	(revision 359070)
 +++ lib/Transforms/Utils/SimplifyCFG.cpp	(working copy)
-@@ -6007,7 +6007,7 @@
+@@ -5823,9 +5823,11 @@
+     // If we only have one predecessor, and if it is a branch on this value,
+     // see if that predecessor totally determines the outcome of this
+     // switch.
+-    if (BasicBlock *OnlyPred = BB->getSinglePredecessor())
++    if (BasicBlock *OnlyPred = BB->getSinglePredecessor()) {
++      return false;
+       if (SimplifyEqualityComparisonWithOnlyPredecessor(BI, OnlyPred, Builder))
+         return requestResimplify();
++    }
+ 
+     // This block must be empty, except for the setcond inst, if it exists.
+     // Ignore dbg intrinsics.
+@@ -6007,7 +6009,6 @@
      DeleteDeadBlock(BB);
      return true;
    }
 -
-+  return false;
    // Check to see if we can constant propagate this terminator instruction
    // away...
    Changed |= ConstantFoldTerminator(BB, true);
