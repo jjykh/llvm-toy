@@ -59,7 +59,7 @@ static void mmDestroy(void*) {}
 void compile(State& state) {
   LLVMMCJITCompilerOptions options;
   LLVMInitializeMCJITCompilerOptions(&options, sizeof(options));
-  options.OptLevel = 3;
+  options.OptLevel = 2;
   LLVMExecutionEngineRef engine;
   char* error = 0;
   options.MCJMM = LLVMCreateSimpleMCJITMemoryManager(
@@ -81,7 +81,7 @@ void compile(State& state) {
   LLVMPassManagerBuilderRef passBuilder = LLVMPassManagerBuilderCreate();
   LLVMPassManagerBuilderSetOptLevel(passBuilder, 2);
   LLVMPassManagerBuilderUseInlinerWithThreshold(passBuilder, 275);
-  LLVMPassManagerBuilderSetSizeLevel(passBuilder, 0);
+  LLVMPassManagerBuilderSetSizeLevel(passBuilder, 2);
 
   functionPasses = LLVMCreateFunctionPassManagerForModule(module);
   modulePasses = LLVMCreatePassManager();
