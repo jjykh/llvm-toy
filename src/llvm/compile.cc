@@ -1,4 +1,8 @@
 #include "src/llvm/compile.h"
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <assert.h>
 #include <string.h>
 #include <memory>
@@ -86,11 +90,12 @@ void SaveObjectFile(const State& state) {
   }
   char file_name_buf[256];
   snprintf(file_name_buf, 256, "%s.o", state.function_name_);
-  FILE* f = fopen(file_name_buf, "wb");
-  if (!f) return;
-  fwrite(__jit_debug_descriptor.first_entry->symfile_addr, 1,
-         __jit_debug_descriptor.first_entry->symfile_size, f);
-  fclose(f);
+  int fd = open(file_name_buf, O_WRONLY | O_CREAT | O_EXCL,
+                S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+  if (fd == -1) return;
+  write(fd, __jit_debug_descriptor.first_entry->symfile_addr,
+        __jit_debug_descriptor.first_entry->symfile_size);
+  close(fd);
 }
 #endif  // FEATURE_SAMPLE_PGO
 
