@@ -99,6 +99,8 @@ class Output {
   void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildLandingPad();
+  void setLineNumber(int linenum);
+  void finalizeDebugInfo();
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
@@ -113,13 +115,16 @@ class Output {
   inline int stack_parameter_count() const { return stack_parameter_count_; }
 
  private:
+  LValue setInstrDebugLoc(LValue);
   CompilerState& state_;
   IntrinsicRepository repo_;
   LBuilder builder_;
+  LLVMDIBuilderRef di_builder_;
   LBasicBlock prologue_;
   LValue root_;
   LValue fp_;
   LValue parent_fp_;
+  LLVMMetadataRef subprogram_;
   size_t stack_parameter_count_;
   std::vector<LValue> registerParameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;

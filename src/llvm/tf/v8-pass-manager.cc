@@ -122,7 +122,7 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
 #endif
   }
   do {
-    tf_llvm::CompilerState compiler_state("test");
+    tf_llvm::CompilerState compiler_state(name);
     compiler_state.code_kind_ = static_cast<int>(kind);
     compiler_state.needs_frame_ = BBM.needs_frame();
     if (call_descriptor->IsJSFunctionCall()) {

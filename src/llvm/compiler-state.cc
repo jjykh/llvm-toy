@@ -5,18 +5,19 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 
-CompilerState::CompilerState(const char* moduleName)
+CompilerState::CompilerState(const char* function_name)
     : stackMapsSection_(nullptr),
       exception_table_(nullptr),
       module_(nullptr),
       function_(nullptr),
       context_(nullptr),
       entryPoint_(nullptr),
+      function_name_(function_name),
       code_kind_(0),
       prologue_kind_(PrologueKind::Unset),
       needs_frame_(false) {
   context_ = LLVMContextCreate();
-  module_ = LLVMModuleCreateWithNameInContext("test", context_);
+  module_ = LLVMModuleCreateWithNameInContext("main", context_);
 #if 0
     LLVMSetTarget(module_, "x86_64-unknown-linux-gnu");
 #else

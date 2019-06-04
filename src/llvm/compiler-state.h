@@ -33,10 +33,11 @@ struct CompilerState {
   LLVMValueRef function_;
   LLVMContextRef context_;
   void* entryPoint_;
+  const char* function_name_;
   int code_kind_;
   PrologueKind prologue_kind_;
   bool needs_frame_;
-  CompilerState(const char* moduleName);
+  CompilerState(const char* FunctionName);
   ~CompilerState();
   CompilerState(const CompilerState&) = delete;
   const CompilerState& operator=(const CompilerState&) = delete;

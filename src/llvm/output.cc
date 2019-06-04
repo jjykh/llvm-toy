@@ -1,4 +1,5 @@
 #include "src/llvm/output.h"
+#include <llvm-c/DebugInfo.h>
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/log.h"
 
@@ -9,13 +10,18 @@ Output::Output(CompilerState& state)
     : state_(state),
       repo_(state.context_, state.module_),
       builder_(nullptr),
+      di_builder_(nullptr),
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
       parent_fp_(nullptr),
+      subprogram_(nullptr),
       stack_parameter_count_(0) {}
 
-Output::~Output() { LLVMDisposeBuilder(builder_); }
+Output::~Output() {
+  LLVMDisposeBuilder(builder_);
+  LLVMDisposeDIBuilder(di_builder_);
+}
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
@@ -23,6 +29,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
+  di_builder_ = LLVMCreateDIBuilderDisallowUnresolved(state_.module_);
   initializeFunction(registerParameters, v8cc);
   // FIXME: Add V8 to LLVM.
   LLVMSetGC(state_.function_, "coreclr");
@@ -91,7 +98,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
     }
   }
   state_.function_ =
-      addFunction(state_.module_, "main",
+      addFunction(state_.module_, state_.function_name_,
                   functionType(taggedType(), params_types.data(),
                                params_types.size(), NotVariadic));
   if (v8cc)
@@ -120,6 +127,19 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   static const char kNoJumpTables[] = "no-jump-tables";
   static const char kTrue[] = "true";
   LLVMAddTargetDependentFunctionAttr(state_.function_, kNoJumpTables, kTrue);
+  char file_name[256];
+  int file_name_count = snprintf(file_name, 256, "%s.c", state_.function_name_);
+  LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
+      di_builder_, file_name, file_name_count, nullptr, 0);
+  LLVMDIBuilderCreateCompileUnit(di_builder_, LLVMDWARFSourceLanguageC,
+                                 file_name_meta, nullptr, 0, true, nullptr, 0,
+                                 1, nullptr, 0, LLVMDWARFEmissionLineTablesOnly,
+                                 0, false, false);
+  subprogram_ = LLVMDIBuilderCreateFunction(
+      di_builder_, nullptr, state_.function_name_,
+      strlen(state_.function_name_), nullptr, 0, nullptr, 0, nullptr, false,
+      true, 0, LLVMDIFlagZero, true);
+  LLVMSetSubprogram(state_.function_, subprogram_);
 }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -153,139 +173,143 @@ LValue Output::constTagged(void* magic) {
 }
 
 LValue Output::buildStructGEP(LValue structVal, unsigned field) {
-  return v8::internal::tf_llvm::buildStructGEP(builder_, structVal, field);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildStructGEP(builder_, structVal, field));
 }
 
 LValue Output::buildLoad(LValue toLoad) {
-  return v8::internal::tf_llvm::buildLoad(builder_, toLoad);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildLoad(builder_, toLoad));
 }
 
 LValue Output::buildStore(LValue val, LValue pointer) {
-  return v8::internal::tf_llvm::buildStore(builder_, val, pointer);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildStore(builder_, val, pointer));
 }
 
 LValue Output::buildNeg(LValue val) {
-  return v8::internal::tf_llvm::buildNeg(builder_, val);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildNeg(builder_, val));
 }
 
 LValue Output::buildAdd(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildAdd(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildAdd(builder_, lhs, rhs));
 }
 
 LValue Output::buildFAdd(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildFAdd(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildFAdd(builder_, lhs, rhs));
 }
 
 LValue Output::buildNSWAdd(LValue lhs, LValue rhs) {
-  return LLVMBuildNSWAdd(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildNSWAdd(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildSub(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildSub(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildSub(builder_, lhs, rhs));
 }
 
 LValue Output::buildFSub(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildFSub(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildFSub(builder_, lhs, rhs));
 }
 
 LValue Output::buildNSWSub(LValue lhs, LValue rhs) {
-  return LLVMBuildNSWSub(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildNSWSub(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildMul(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildMul(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildMul(builder_, lhs, rhs));
 }
 
 LValue Output::buildSRem(LValue lhs, LValue rhs) {
-  return LLVMBuildSRem(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildSRem(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildSDiv(LValue lhs, LValue rhs) {
-  return LLVMBuildSDiv(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildSDiv(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildFMul(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildFMul(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildFMul(builder_, lhs, rhs));
 }
 
 LValue Output::buildFDiv(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildFDiv(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildFDiv(builder_, lhs, rhs));
 }
 
 LValue Output::buildFCmp(LRealPredicate cond, LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildFCmp(builder_, cond, lhs, rhs);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildFCmp(builder_, cond, lhs, rhs));
 }
 
 LValue Output::buildFNeg(LValue value) {
-  return LLVMBuildFNeg(builder_, value, "");
+  return setInstrDebugLoc(LLVMBuildFNeg(builder_, value, ""));
 }
 
 LValue Output::buildNSWMul(LValue lhs, LValue rhs) {
-  return LLVMBuildNSWMul(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildNSWMul(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildShl(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildShl(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildShl(builder_, lhs, rhs));
 }
 
 LValue Output::buildShr(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildLShr(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildLShr(builder_, lhs, rhs));
 }
 
 LValue Output::buildSar(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildAShr(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildAShr(builder_, lhs, rhs));
 }
 
 LValue Output::buildAnd(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildAnd(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildAnd(builder_, lhs, rhs));
 }
 
 LValue Output::buildOr(LValue lhs, LValue rhs) {
-  return v8::internal::tf_llvm::buildOr(builder_, lhs, rhs);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildOr(builder_, lhs, rhs));
 }
 
 LValue Output::buildXor(LValue lhs, LValue rhs) {
-  return LLVMBuildXor(builder_, lhs, rhs, "");
+  return setInstrDebugLoc(LLVMBuildXor(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildBr(LBasicBlock bb) {
-  return v8::internal::tf_llvm::buildBr(builder_, bb);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildBr(builder_, bb));
 }
 
 LValue Output::buildSwitch(LValue val, LBasicBlock defaultBlock,
                            unsigned cases) {
-  return LLVMBuildSwitch(builder_, val, defaultBlock, cases);
+  return setInstrDebugLoc(LLVMBuildSwitch(builder_, val, defaultBlock, cases));
 }
 
 LValue Output::buildCondBr(LValue condition, LBasicBlock taken,
                            LBasicBlock notTaken) {
-  return v8::internal::tf_llvm::buildCondBr(builder_, condition, taken,
-                                            notTaken);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildCondBr(builder_, condition, taken, notTaken));
 }
 
 LValue Output::buildRet(LValue ret) {
-  return v8::internal::tf_llvm::buildRet(builder_, ret);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildRet(builder_, ret));
 }
 
 LValue Output::buildRetVoid(void) {
-  return v8::internal::tf_llvm::buildRetVoid(builder_);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildRetVoid(builder_));
 }
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
-  return LLVMBuildCast(builder_, Op, Val, DestTy, "");
+  return setInstrDebugLoc(LLVMBuildCast(builder_, Op, Val, DestTy, ""));
 }
 
 LValue Output::buildPointerCast(LValue val, LType type) {
-  return LLVMBuildPointerCast(builder_, val, type, "");
+  return setInstrDebugLoc(LLVMBuildPointerCast(builder_, val, type, ""));
 }
 
 LValue Output::buildSelect(LValue condition, LValue taken, LValue notTaken) {
-  return v8::internal::tf_llvm::buildSelect(builder_, condition, taken,
-                                            notTaken);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildSelect(builder_, condition, taken, notTaken));
 }
 
 LValue Output::buildICmp(LIntPredicate cond, LValue left, LValue right) {
-  return v8::internal::tf_llvm::buildICmp(builder_, cond, left, right);
+  return setInstrDebugLoc(
+      v8::internal::tf_llvm::buildICmp(builder_, cond, left, right));
 }
 
 LValue Output::buildInlineAsm(LType type, char* asmString, size_t asmStringSize,
@@ -308,11 +332,11 @@ LValue Output::buildLoadMagic(LType type, int64_t magic) {
 }
 
 LValue Output::buildPhi(LType type) {
-  return v8::internal::tf_llvm::buildPhi(builder_, type);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildPhi(builder_, type));
 }
 
 LValue Output::buildAlloca(LType type) {
-  return v8::internal::tf_llvm::buildAlloca(builder_, type);
+  return setInstrDebugLoc(v8::internal::tf_llvm::buildAlloca(builder_, type));
 }
 
 LValue Output::buildGEPWithByteOffset(LValue base, LValue offset,
@@ -336,7 +360,7 @@ LValue Output::buildBitCast(LValue val, LType type) {
 }
 
 void Output::buildUnreachable() {
-  v8::internal::tf_llvm::buildUnreachable(builder_);
+  setInstrDebugLoc(v8::internal::tf_llvm::buildUnreachable(builder_));
 }
 
 LValue Output::getStatePointFunction(LType callee_type) {
@@ -361,20 +385,21 @@ LValue Output::getStatePointFunction(LType callee_type) {
 }
 
 LValue Output::buildExtractValue(LValue aggVal, unsigned index) {
-  return tf_llvm::buildExtractValue(builder_, aggVal, index);
+  return setInstrDebugLoc(tf_llvm::buildExtractValue(builder_, aggVal, index));
 }
 
 LValue Output::buildCall(LValue function, const LValue* args,
                          unsigned numArgs) {
-  return LLVMBuildCall(builder_, function, const_cast<LValue*>(args), numArgs,
-                       "");
+  return setInstrDebugLoc(LLVMBuildCall(
+      builder_, function, const_cast<LValue*>(args), numArgs, ""));
 }
 
 LValue Output::buildInvoke(LValue function, const LValue* args,
                            unsigned numArgs, LBasicBlock then,
                            LBasicBlock exception) {
-  return LLVMBuildInvoke(builder_, function, const_cast<LValue*>(args), numArgs,
-                         then, exception, "");
+  return setInstrDebugLoc(LLVMBuildInvoke(builder_, function,
+                                          const_cast<LValue*>(args), numArgs,
+                                          then, exception, ""));
 }
 
 LValue Output::buildLandingPad() {
@@ -383,8 +408,26 @@ LValue Output::buildLandingPad() {
   LValue landing_pad =
       LLVMBuildLandingPad(builder_, landing_type, function, 0, "");
   LLVMSetCleanup(landing_pad, true);
-  return landing_pad;
+  return setInstrDebugLoc(landing_pad);
 }
+
+void Output::setLineNumber(int linenum) {
+#if defined(FEATURE_SAMPLE_PGO)
+  LLVMMetadataRef loc = LLVMDIBuilderCreateDebugLocation(
+      state_.context_, linenum, 0, subprogram_, nullptr);
+  LValue loc_value = LLVMMetadataAsValue(state_.context_, loc);
+  LLVMSetCurrentDebugLocation(builder_, loc_value);
+#endif
+}
+
+LValue Output::setInstrDebugLoc(LValue v) {
+#if defined(FEATURE_SAMPLE_PGO)
+  LLVMSetInstDebugLocation(builder_, v);
+#endif  // FEATURE_SAMPLE_PGO
+  return v;
+}
+
+void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8
