@@ -1,5 +1,5 @@
 diff --git a/BUILD.gn b/BUILD.gn
-index cf3c455093..b16bef5590 100644
+index cf3c455093..80faac447b 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -6,11 +6,13 @@
@@ -16,49 +16,56 @@ index cf3c455093..b16bef5590 100644
  #import("//build/config/host_byteorder.gni")
  #import("//build/config/jumbo.gni")
  import("//build/config/mips.gni")
-@@ -138,6 +140,7 @@ declare_args() {
+@@ -138,6 +140,9 @@ declare_args() {
    # Temporary flag to allow embedders to update their microtasks scopes
    # while rolling in a new version of V8.
    v8_check_microtasks_scopes_consistency = ""
++#if UC_BUILD_TF_LLVM_BACKEND
 +  v8_enable_llvm = false
++#endif
  }
  
  # Derived defaults.
-@@ -160,6 +163,13 @@ if (v8_check_microtasks_scopes_consistency == "") {
+@@ -160,6 +165,15 @@ if (v8_check_microtasks_scopes_consistency == "") {
    v8_check_microtasks_scopes_consistency = is_debug || dcheck_always_on
  }
  
++#if UC_BUILD_TF_LLVM_BACKEND
 +if (uc_build_tf_llvm_backend && current_toolchain == v8_snapshot_toolchain) {
 +  v8_enable_llvm = true
 +}
 +if (v8_enable_llvm) {
 +  v8_enable_disassembler = true
 +}
++#endif
 +
  # Specifies if the target build is a simulator build. Comparing target cpu
  # with v8 target cpu to not affect simulator builds for making cross-compile
  # snapshots.
-@@ -539,6 +549,15 @@ config("toolchain") {
+@@ -539,6 +553,17 @@ config("toolchain") {
    }
  }
  
++#if UC_BUILD_TF_LLVM_BACKEND
 +config("llvm_configs") {
 +  include_dirs = [ "src/llvm/include" ]
-+  libs = [ "LLVM-7" ]
++  libs = [ "LLVM-8" ]
 +  defines = [ "LLVMLOG_LEVEL=1" ]
 +  ldflags = [ "-Wl,-rpath,../../v8/lib" ]
 +
 +  lib_dirs = [ "lib/" ]
 +}
++#endif
 +
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1108,6 +1127,52 @@ v8_source_set("v8_initializers") {
+@@ -1108,6 +1133,54 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
 +
++#if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
 +    sources += [
@@ -104,49 +111,76 @@ index cf3c455093..b16bef5590 100644
 +      "src/llvm/tf/v8-pass-manager.h",
 +    ]
 +  }
++#endif
  }
  
  v8_source_set("v8_init") {
-@@ -2441,6 +2506,9 @@ v8_source_set("v8_base") {
+@@ -2441,6 +2514,11 @@ v8_source_set("v8_base") {
      sources += [ "$target_gen_dir/debug-support.cc" ]
      deps += [ ":postmortem-metadata" ]
    }
++#if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
 +  }
++#endif
  }
  
  v8_component("v8_libbase") {
-@@ -2680,7 +2748,10 @@ if (current_toolchain == v8_snapshot_toolchain) {
+@@ -2680,7 +2758,12 @@ if (current_toolchain == v8_snapshot_toolchain) {
        "src/snapshot/mksnapshot.cc",
      ]
  
 -    configs = [ ":internal_config" ]
++#if UC_BUILD_TF_LLVM_BACKEND
 +    configs = [
 +      ":internal_config",
 +      ":llvm_configs",
 +    ]
++#endif
  
      deps = [
        ":v8_base",
 diff --git a/gni/v8.gni b/gni/v8.gni
-index 1f499c9cd5..b73c30d962 100644
+index 1f499c9cd5..ac1b32833d 100644
 --- a/gni/v8.gni
 +++ b/gni/v8.gni
-@@ -90,7 +90,7 @@ if (is_debug && !v8_optimized_debug) {
+@@ -11,6 +11,7 @@ import("//build/split_static_library.gni")
+ declare_args() {
+   host_byteorder = "little"
+   use_jumbo_build = false
++
+   # Set flags for tracking code coverage. Uses gcov with gcc and sanitizer
+   # coverage with clang.
+   v8_code_coverage = false
+@@ -90,13 +91,21 @@ if (is_debug && !v8_optimized_debug) {
    # TODO(crbug.com/621335) Rework this so that we don't have the confusion
    # between "optimize_speed" and "optimize_max".
    if (is_posix && !is_android && !using_sanitizer) {
 -    v8_add_configs += [ "//build/config/compiler:optimize_speed" ]
-+    v8_add_configs += [ "//build/config/compiler:no_optimize" ]
++#if UC_BUILD_TF_LLVM_BACKEND
++    if (uc_build_tf_llvm_backend) {
++      v8_add_configs += [ "//build/config/compiler:no_optimize" ]
++    } else {
++      v8_add_configs += [ "//build/config/compiler:optimize_speed" ]
++    }
++#endif
    } else {
      v8_add_configs += [ "//build/config/compiler:optimize_max" ]
++
      #if UC_BUILD_OPTIMIZE_SIZE
+     if (uc_build_optimize_size) {
+       v8_add_configs += [ "//build/config/compiler:optimize_max_O2" ]
+     }
++
+     #endif
+   }
+ }
 diff --git a/src/arm/assembler-arm.cc b/src/arm/assembler-arm.cc
-index eccb4d22bd..f3bcb1ebc4 100644
+index 0f49b3c902..a87e6db029 100644
 --- a/src/arm/assembler-arm.cc
 +++ b/src/arm/assembler-arm.cc
-@@ -649,6 +649,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
+@@ -659,6 +659,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
    DCHECK(IsLdrRegisterImmediate(instr));
    bool positive = offset >= 0;
    if (!positive) offset = -offset;
@@ -572,7 +606,7 @@ index a58f3a4093..e6d7030d19 100644
   protected:
    void GenerateTypedArrayPrototypeGetter(Node* context, Node* receiver,
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
-index aa3ba47197..f3ac08ee97 100644
+index aa3ba47197..40f6e043fe 100644
 --- a/src/compiler/code-assembler.cc
 +++ b/src/compiler/code-assembler.cc
 @@ -23,6 +23,10 @@
@@ -599,11 +633,12 @@ index aa3ba47197..f3ac08ee97 100644
  
  CodeAssemblerState::~CodeAssemblerState() {}
  
-@@ -146,6 +154,13 @@ void CodeAssembler::CallEpilogue() {
+@@ -146,6 +154,14 @@ void CodeAssembler::CallEpilogue() {
    if (state_->call_epilogue_) {
      state_->call_epilogue_();
    }
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  // Need to split the block, to make my liveness analysis pass able to work.
 +  if (state_->is_llvm_enabled()) {
 +    Label force_break(this);
 +    Goto(&force_break);
@@ -613,7 +648,7 @@ index aa3ba47197..f3ac08ee97 100644
  }
  
  // static
-@@ -154,6 +169,38 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state) {
+@@ -154,6 +170,38 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state) {
  
    RawMachineAssembler* rasm = state->raw_assembler_.get();
    Schedule* schedule = rasm->Export();
