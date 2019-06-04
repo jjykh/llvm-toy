@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef EXCEPTION_TABLE_ARM_H
 #define EXCEPTION_TABLE_ARM_H
 #include <stddef.h>

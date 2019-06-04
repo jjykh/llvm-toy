@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef LLVM_HEADERS_H
 #define LLVM_HEADERS_H
 #pragma once

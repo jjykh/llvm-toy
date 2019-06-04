@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/compile.h"
 #include <fcntl.h>
 #include <sys/stat.h>

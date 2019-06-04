@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef TFVISITOR_H
 #define TFVISITOR_H
 #include <stdint.h>

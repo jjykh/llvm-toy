@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include <stdlib.h>
 #include <iostream>
 #include "src/llvm/tf/tf-parser.h"

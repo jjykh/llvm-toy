@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/llvm-tf-builder.h"
 #include <llvm/Support/Compiler.h>
 #include <bitset>

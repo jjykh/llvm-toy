@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/stack-map-info.h"
 

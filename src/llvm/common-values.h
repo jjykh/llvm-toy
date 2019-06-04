@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef COMMON_VALUES_H
 #define COMMON_VALUES_H
 #include "src/llvm/abbreviations.h"

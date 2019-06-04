@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 --- BLOCK B0 ---
   1: Parameter[0](0)
   2: Parameter[1](0)

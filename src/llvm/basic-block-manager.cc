@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/basic-block-manager.h"
 #include <memory>
 #include "src/llvm/basic-block.h"

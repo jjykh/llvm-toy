@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef STACK_MAP_INFO_H
 #define STACK_MAP_INFO_H
 #include <stdint.h>

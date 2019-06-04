@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef COMPILER_STATE_H
 #define COMPILER_STATE_H
 #include <stdint.h>

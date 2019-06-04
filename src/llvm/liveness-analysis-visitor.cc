@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/liveness-analysis-visitor.h"
 #include <algorithm>
 #include <deque>

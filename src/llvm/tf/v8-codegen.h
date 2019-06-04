@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef V8_CODEGEN_H
 #define V8_CODEGEN_H
 #include "src/objects.h"

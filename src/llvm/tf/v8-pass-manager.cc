@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/tf/v8-pass-manager.h"
 
 #include <iostream>

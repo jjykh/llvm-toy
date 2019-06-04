@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef BASIC_BLOCK_MANAGER_H
 #define BASIC_BLOCK_MANAGER_H
 #include <map>

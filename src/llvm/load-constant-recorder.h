@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef LOAD_CONSTANT_RECORDER_H
 #define LOAD_CONSTANT_RECORDER_H
 #include <stdint.h>

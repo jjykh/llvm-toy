@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef INTRINSIC_REPOSITORY_H
 #define INTRINSIC_REPOSITORY_H
 #include "src/llvm/common-values.h"

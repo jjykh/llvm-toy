@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef V8_PASS_MANAGER_H
 #define V8_PASS_MANAGER_H
 #include "src/objects.h"

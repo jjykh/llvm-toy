@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "log.h"
 #include <stdarg.h>
 #include <stdio.h>

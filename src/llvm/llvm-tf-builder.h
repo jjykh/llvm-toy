@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef LLVM_TF_BUILDER_H
 #define LLVM_TF_BUILDER_H
 #include <unordered_map>

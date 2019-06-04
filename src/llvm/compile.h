@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef COMPILE_H
 #define COMPILE_H
 

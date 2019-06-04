@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef ABBREVIATED_TYPES_H
 #define ABBREVIATED_TYPES_H
 #include "src/llvm/llvm-headers.h"

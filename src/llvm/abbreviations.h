@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef ABBREVIATIONS_H
 #define ABBREVIATIONS_H
 #include <cstring>

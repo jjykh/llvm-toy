@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef LOG_H
 #define LOG_H
 #ifdef LLVMLOG_LEVEL

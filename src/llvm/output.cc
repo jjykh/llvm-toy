@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/output.h"
 #include <llvm-c/DebugInfo.h>
 #include "src/llvm/compiler-state.h"

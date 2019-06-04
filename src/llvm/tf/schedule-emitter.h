@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef SCHEDULE_EMITTER_H
 #define SCHEDULE_EMITTER_H
 #include "src/handles.h"

@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef STACK_MAPS_H
 #define STACK_MAPS_H
 #include <assert.h>

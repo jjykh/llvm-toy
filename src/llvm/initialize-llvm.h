@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef INITIALIZE_LLVM_H
 #define INITIALIZE_LLVM_H
 namespace v8 {

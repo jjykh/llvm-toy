@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/tf/v8-codegen.h"
 
 #include "src/assembler-inl.h"

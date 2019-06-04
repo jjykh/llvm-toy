@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/exception-table-arm.h"
 
 #include "src/llvm/log.h"

@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include <assert.h>
 #include <stdio.h>
 

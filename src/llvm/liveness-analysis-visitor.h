@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef LIVENESS_ANALYSIS_VISITOR_H
 #define LIVENESS_ANALYSIS_VISITOR_H
 #include <set>

@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #include "src/llvm/tf/schedule-emitter.h"
 
 #include <unordered_map>

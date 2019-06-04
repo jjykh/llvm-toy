@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef TFPARSER_H
 #define TFPARSER_H
 #include <stdio.h>

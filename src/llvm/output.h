@@ -1,3 +1,5 @@
+// Copyright 2019 UCWeb Co., Ltd.
+
 #ifndef OUTPUT_H
 #define OUTPUT_H
 #include <string>
