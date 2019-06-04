@@ -420,9 +420,20 @@ void Output::setLineNumber(int linenum) {
 #endif
 }
 
+static bool ValueKindIsFind(LValue v) {
+  switch (LLVMGetValueKind(v)) {
+    case LLVMConstantExprValueKind:
+    case LLVMConstantIntValueKind:
+    case LLVMConstantFPValueKind:
+    case LLVMConstantPointerNullValueKind:
+      return false;
+  }
+  return true;
+}
+
 LValue Output::setInstrDebugLoc(LValue v) {
 #if defined(FEATURE_SAMPLE_PGO)
-  LLVMSetInstDebugLocation(builder_, v);
+  if (ValueKindIsFind(v)) LLVMSetInstDebugLocation(builder_, v);
 #endif  // FEATURE_SAMPLE_PGO
   return v;
 }
