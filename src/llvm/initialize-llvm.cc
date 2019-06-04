@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include <llvm-c/Support.h>
 #include "src/llvm/initialize-llvm.h"
 #include "src/llvm/llvm-headers.h"
 #include "src/llvm/log.h"
@@ -29,6 +30,11 @@ void llvmCrash(const char* reason) {
 
 static void initializeAndGetLLVMAPI(void) {
   LLVMInstallFatalErrorHandler(llvmCrash);
+  const char* options[] = {
+      "v8 builtins compiler",
+  };
+  LLVMParseCommandLineOptions(sizeof(options) / sizeof(const char*), options,
+                              nullptr);
 
   // You think you want to call LLVMInitializeNativeTarget()? Think again. This
   // presumes that LLVM was ./configured correctly, which won't be the case in

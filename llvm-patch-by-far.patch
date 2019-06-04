@@ -1563,4 +1563,4 @@ Index: tools/llvm-shlib/simple_version_script.map.in
 +++ tools/llvm-shlib/simple_version_script.map.in	(working copy)
 @@ -1 +1 @@
 -LLVM_@LLVM_VERSION_MAJOR@ { global: *; };
-+LLVM_@LLVM_VERSION_MAJOR@ { global: LLVM*; local:*; };
++LLVM_@LLVM_VERSION_MAJOR@ { global: LLVM*; __jit_debug_descriptor; local:*; };
