@@ -133,14 +133,14 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   int file_name_count = snprintf(file_name, 256, "%s.c", state_.function_name_);
   LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
       di_builder_, file_name, file_name_count, nullptr, 0);
-  LLVMDIBuilderCreateCompileUnit(di_builder_, LLVMDWARFSourceLanguageC,
-                                 file_name_meta, nullptr, 0, true, nullptr, 0,
-                                 1, nullptr, 0, LLVMDWARFEmissionLineTablesOnly,
-                                 0, false, false);
+  LLVMMetadataRef cu = LLVMDIBuilderCreateCompileUnit(
+      di_builder_, LLVMDWARFSourceLanguageC, file_name_meta, nullptr, 0, true,
+      nullptr, 0, 1, nullptr, 0, LLVMDWARFEmissionLineTablesOnly, 0, false,
+      false);
   subprogram_ = LLVMDIBuilderCreateFunction(
-      di_builder_, nullptr, state_.function_name_,
-      strlen(state_.function_name_), nullptr, 0, nullptr, 0, nullptr, false,
-      true, 0, LLVMDIFlagZero, true);
+      di_builder_, cu, state_.function_name_, strlen(state_.function_name_),
+      nullptr, 0, file_name_meta, 0, nullptr, false, true, 0, LLVMDIFlagZero,
+      true);
   LLVMSetSubprogram(state_.function_, subprogram_);
 }
 

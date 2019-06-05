@@ -712,6 +712,51 @@ index d29423558c..9e0c12ea69 100644
  
    DISALLOW_COPY_AND_ASSIGN(CodeAssemblerState);
  };
+diff --git a/src/interpreter/interpreter.cc b/src/interpreter/interpreter.cc
+index b53d667803..a5d4a33539 100644
+--- a/src/interpreter/interpreter.cc
++++ b/src/interpreter/interpreter.cc
+@@ -240,7 +240,7 @@ bool Interpreter::IsDispatchTableInitialized() {
+ }
+ 
+ const char* Interpreter::LookupNameOfBytecodeHandler(Code* code) {
+-#ifdef ENABLE_DISASSEMBLER
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
+ #define RETURN_NAME(Name, ...)                                 \
+   if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name)] == \
+       code->entry()) {                                         \
+@@ -248,7 +248,31 @@ const char* Interpreter::LookupNameOfBytecodeHandler(Code* code) {
+   }
+   BYTECODE_LIST(RETURN_NAME)
+ #undef RETURN_NAME
++#define RETURN_NAME(Name, ...)                                 \
++  if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name) +   \
++                      (1 << kBitsPerByte)] == code->entry()) { \
++    return #Name;                                              \
++  }
++  BYTECODE_LIST(RETURN_NAME)
++#undef RETURN_NAME
++#define RETURN_NAME(Name, ...)                                 \
++  if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name) +   \
++                      (2 << kBitsPerByte)] == code->entry()) { \
++    return #Name " (Double Scale";                             \
++  }
++  BYTECODE_LIST(RETURN_NAME)
++#undef RETURN_NAME
++#else
++#ifdef ENABLE_DISASSEMBLER
++#define RETURN_NAME(Name, ...)                                 \
++  if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name)] == \
++      code->entry()) {                                         \
++    return #Name " (Quadruple Scale)";                         \
++  }
++  BYTECODE_LIST(RETURN_NAME)
++#undef RETURN_NAME
+ #endif  // ENABLE_DISASSEMBLER
++#endif
+   return nullptr;
+ }
+ 
 diff --git a/src/objects.cc b/src/objects.cc
 index de0d4fd1ef..66944a5b61 100644
 --- a/src/objects.cc
@@ -726,3 +771,197 @@ index de0d4fd1ef..66944a5b61 100644
      os << "\n";
    }
  
+diff --git a/src/profiler/cpu-profiler.cc b/src/profiler/cpu-profiler.cc
+index bae592b36d..0dd9a6a589 100644
+--- a/src/profiler/cpu-profiler.cc
++++ b/src/profiler/cpu-profiler.cc
+@@ -11,6 +11,9 @@
+ #include "src/log-inl.h"
+ #include "src/profiler/cpu-profiler-inl.h"
+ #include "src/vm-state-inl.h"
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++#include <fstream>
++#endif
+ 
+ namespace v8 {
+ namespace internal {
+@@ -321,6 +324,12 @@ void CpuProfiler::StartProcessorIfNotStarted() {
+   // Disable logging when using the new implementation.
+   saved_is_logging_ = logger->is_logging_;
+   logger->is_logging_ = false;
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  char name[256];
++  snprintf(name, 256, "/sdcard/v8_profile_details_%08x.log", static_cast<int>(time(nullptr)));
++  profile_detail_.reset(new std::ofstream(name));
++  if (profile_detail_->fail()) __builtin_trap();
++#endif
+   generator_.reset(new ProfileGenerator(profiles_.get()));
+   processor_.reset(new ProfilerEventsProcessor(isolate_, generator_.get(),
+                                                sampling_interval_));
+diff --git a/src/profiler/cpu-profiler.h b/src/profiler/cpu-profiler.h
+index 5fd7fa14da..3109402736 100644
+--- a/src/profiler/cpu-profiler.h
++++ b/src/profiler/cpu-profiler.h
+@@ -213,6 +213,9 @@ class CpuProfiler : public CodeEventObserver {
+   ProfileGenerator* generator() const { return generator_.get(); }
+   ProfilerEventsProcessor* processor() const { return processor_.get(); }
+   Isolate* isolate() const { return isolate_; }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  std::ostream& os() { return *profile_detail_; }
++#endif
+ 
+  private:
+   void StartProcessorIfNotStarted();
+@@ -228,6 +231,9 @@ class CpuProfiler : public CodeEventObserver {
+   std::unique_ptr<ProfileGenerator> generator_;
+   std::unique_ptr<ProfilerEventsProcessor> processor_;
+   std::vector<std::unique_ptr<CodeEntry>> static_entries_;
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  std::unique_ptr<std::ostream> profile_detail_;
++#endif
+   bool saved_is_logging_;
+   bool is_profiling_;
+ 
+diff --git a/src/profiler/profile-generator.cc b/src/profiler/profile-generator.cc
+index 78fc97b19f..661d0cb187 100644
+--- a/src/profiler/profile-generator.cc
++++ b/src/profiler/profile-generator.cc
+@@ -14,6 +14,11 @@
+ #include "src/tracing/trace-event.h"
+ #include "src/tracing/traced-value.h"
+ #include "src/unicode.h"
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++#include <dlfcn.h>
++#include "src/code-stubs.h"
++#include "src/interpreter/interpreter.h"
++#endif
+ 
+ namespace v8 {
+ namespace internal {
+@@ -624,6 +629,19 @@ void CpuProfilesCollection::AddPathToCurrentProfiles(
+   }
+   current_profiles_semaphore_.Signal();
+ }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++Isolate* CpuProfilesCollection::isolate() { return profiler_->isolate(); }
++
++std::ostream& CpuProfilesCollection::os() { return profiler_->os(); }
++
++ProfileGenerator::~ProfileGenerator() {
++  for (Code* code : code_set_) {
++    std::ostream& os = profiles_->os();
++    if (code->IsCode()) code->Print(os);
++  }
++  profiles_->os().flush();
++}
++#endif
+ 
+ ProfileGenerator::ProfileGenerator(CpuProfilesCollection* profiles)
+     : profiles_(profiles) {}
+@@ -710,6 +728,71 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
+       }
+       entries.push_back(entry);
+     }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++    bool handled = false;
++    do {
++      const char* name = nullptr;
++      Isolate* isolate = profiles_->isolate();
++      if (!isolate->heap()->code_space()->ContainsSlow(
++              reinterpret_cast<i::Address>(sample.pc)))
++        break;
++      handled = true;
++      i::Code* code =
++          isolate->FindCodeObject(reinterpret_cast<i::Address>(sample.pc));
++      if (code) {
++        std::ostream& os = profiles_->os();
++        os << "kind = " << i::Code::Kind2String(code->kind()) << ";";
++        os << "offset = "
++           << static_cast<byte* const>(sample.pc) - code->instruction_start()
++           << ";";
++
++        if (code->is_stub()) {
++          const char* n =
++              i::CodeStub::MajorName(i::CodeStub::GetMajorKey(code));
++          os << "major_key = " << (n == NULL ? "null" : n) << ";";
++        }
++        if (code->kind() == i::Code::BYTECODE_HANDLER) {
++          name = isolate->interpreter()->LookupNameOfBytecodeHandler(code);
++          if (name != nullptr) {
++            os << "name = " << name << ";";
++          }
++        } else {
++          // There are some handlers and ICs that we can also find names for
++          // with
++          // Builtins::Lookup.
++          name = isolate->builtins()->Lookup(code->instruction_start());
++          if (name != nullptr) {
++            os << "name = " << name << ";";
++          }
++        }
++        os << "\n";
++      }
++    } while (false);
++#if 0
++    if (!handled) {
++      // Try native objects.
++      Dl_info info;
++      std::ostream& os = profiles_->os();
++      if (dladdr(sample.pc, &info)) {
++        os << "kind = native;offset = "
++           << reinterpret_cast<uintptr_t>(sample.pc) -
++                  reinterpret_cast<uintptr_t>(info.dli_fbase)
++           << ';' << "name = ";
++#if 0
++        if (info.dli_sname) {
++          os << info.dli_sname;
++        } else {
++          os << "unknown symbol";
++        }
++#endif
++        os << "unknown symbol";
++        os << " (of " << info.dli_fname << ");\n";
++      } else {
++        os << "kind = unknown native;offset = " << sample.pc << ";\n";
++      }
++    }
++#endif
++#endif
+   }
+ 
+   if (FLAG_prof_browser_mode) {
+diff --git a/src/profiler/profile-generator.h b/src/profiler/profile-generator.h
+index 69a85a1422..7d114198c9 100644
+--- a/src/profiler/profile-generator.h
++++ b/src/profiler/profile-generator.h
+@@ -346,6 +346,10 @@ class CpuProfilesCollection {
+   const char* GetName(Name* name) { return resource_names_.GetName(name); }
+   bool IsLastProfile(const char* title);
+   void RemoveProfile(CpuProfile* profile);
++#if defined(UC_BUILD)
++  Isolate* isolate();
++  std::ostream& os();
++#endif
+ 
+   // Called from profile generator thread.
+   void AddPathToCurrentProfiles(base::TimeTicks timestamp,
+@@ -371,6 +375,9 @@ class CpuProfilesCollection {
+ class ProfileGenerator {
+  public:
+   explicit ProfileGenerator(CpuProfilesCollection* profiles);
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  ~ProfileGenerator();
++#endif
+ 
+   void RecordTickSample(const TickSample& sample);
+ 
+@@ -382,6 +389,9 @@ class ProfileGenerator {
+ 
+   CpuProfilesCollection* profiles_;
+   CodeMap code_map_;
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  std::unordered_set<Code*> code_set_;
++#endif
+ 
+   DISALLOW_COPY_AND_ASSIGN(ProfileGenerator);
+ };
