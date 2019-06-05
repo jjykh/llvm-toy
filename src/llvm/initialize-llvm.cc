@@ -25,7 +25,7 @@ static void initializeAndGetLLVMAPI(void) {
   const char* options[] = {
     "v8 builtins compiler",
 #if defined(FEATURE_USE_SAMPLE_PGO)
-    "-sample-profile-file=../../sample.prof",
+    "-sample-profile-file=../../v8/src/llvm/sample.prof",
 #endif
   };
   LLVMParseCommandLineOptions(sizeof(options) / sizeof(const char*), options,
