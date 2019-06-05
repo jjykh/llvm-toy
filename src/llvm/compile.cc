@@ -61,7 +61,7 @@ static uint8_t* mmAllocateDataSection(void* opaqueState, uintptr_t size,
 static LLVMBool mmApplyPermissions(void*, char**) { return false; }
 
 static void mmDestroy(void*) {}
-#if defined(FEATURE_SAMPLE_PGO)
+#if defined(FEATURE_SAMPLE_PGO) && !defined(FEATURE_USE_SAMPLE_PGO)
 // This must be kept in sync with gdb/gdb/jit.h .
 typedef enum {
   JIT_NOACTION = 0,
@@ -99,7 +99,7 @@ void SaveObjectFile(const State& state) {
         __jit_debug_descriptor.first_entry->symfile_size);
   close(fd);
 }
-#endif  // FEATURE_SAMPLE_PGO
+#endif  // FEATURE_SAMPLE_PGO && !FEATURE_SAMPLE_PGO
 
 void compile(State& state) {
   LLVMMCJITCompilerOptions options;
@@ -149,9 +149,9 @@ void compile(State& state) {
 
   if (functionPasses) LLVMDisposePassManager(functionPasses);
   LLVMDisposePassManager(modulePasses);
-#if defined(FEATURE_SAMPLE_PGO)
+#if defined(FEATURE_SAMPLE_PGO) && !defined(FEATURE_USE_SAMPLE_PGO)
   SaveObjectFile(state);
-#endif  // FEATURE_SAMPLE_PGO
+#endif  // FEATURE_SAMPLE_PGO && !FEATURE_SAMPLE_PGO
   LLVMDisposeExecutionEngine(engine);
 }
 }  // namespace tf_llvm

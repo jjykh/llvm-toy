@@ -7,21 +7,11 @@
 #include "src/llvm/initialize-llvm.h"
 #include "src/llvm/llvm-headers.h"
 #include "src/llvm/log.h"
-#if 0
-#include <llvm/Support/CommandLine.h>
-#endif
 
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
-#if 0
-template <typename... Args>
-void initCommandLine(Args... args) {
-  const char* theArgs[] = {args...};
-  llvm::cl::ParseCommandLineOptions(sizeof(theArgs) / sizeof(const char*),
-                                    theArgs);
-}
-#endif
+
 static void llvmCrash(const char*) __attribute__((noreturn));
 
 void llvmCrash(const char* reason) {
@@ -33,7 +23,10 @@ void llvmCrash(const char* reason) {
 static void initializeAndGetLLVMAPI(void) {
   LLVMInstallFatalErrorHandler(llvmCrash);
   const char* options[] = {
-      "v8 builtins compiler",
+    "v8 builtins compiler",
+#if defined(FEATURE_USE_SAMPLE_PGO)
+    "-sample-profile-file=../../sample.prof",
+#endif
   };
   LLVMParseCommandLineOptions(sizeof(options) / sizeof(const char*), options,
                               nullptr);

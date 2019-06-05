@@ -52,6 +52,18 @@ Index: include/llvm/Target/Target.td
  def STATEPOINT : StandardPseudoInstruction {
    let OutOperandList = (outs);
    let InOperandList = (ins variable_ops);
+Index: include/llvm/Transforms/IPO/SampleProfile.h
+===================================================================
+--- include/llvm/Transforms/IPO/SampleProfile.h	(revision 359070)
++++ include/llvm/Transforms/IPO/SampleProfile.h	(working copy)
+@@ -31,6 +31,7 @@
+         IsThinLTOPreLink(IsThinLTOPreLink) {}
+ 
+   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
++  static std::string SampleProfileFileFromOption();
+ 
+ private:
+   std::string ProfileFileName;
 Index: include/llvm-c/Core.h
 ===================================================================
 --- include/llvm-c/Core.h	(revision 359070)
@@ -1545,6 +1557,57 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
+Index: lib/Transforms/IPO/PassManagerBuilder.cpp
+===================================================================
+--- lib/Transforms/IPO/PassManagerBuilder.cpp	(revision 359070)
++++ lib/Transforms/IPO/PassManagerBuilder.cpp	(working copy)
+@@ -34,6 +34,7 @@
+ #include "llvm/Transforms/IPO/ForceFunctionAttrs.h"
+ #include "llvm/Transforms/IPO/FunctionAttrs.h"
+ #include "llvm/Transforms/IPO/InferFunctionAttrs.h"
++#include "llvm/Transforms/IPO/SampleProfile.h"
+ #include "llvm/Transforms/InstCombine/InstCombine.h"
+ #include "llvm/Transforms/Instrumentation.h"
+ #include "llvm/Transforms/Scalar.h"
+@@ -273,6 +274,8 @@
+ 
+ // Do PGO instrumentation generation or use pass as the option specified.
+ void PassManagerBuilder::addPGOInstrPasses(legacy::PassManagerBase &MPM) {
++  if (PGOSampleUse.empty())
++    PGOSampleUse = SampleProfileLoaderPass::SampleProfileFileFromOption();
+   if (!EnablePGOInstrGen && PGOInstrUse.empty() && PGOSampleUse.empty())
+     return;
+   // Perform the preinline and cleanup passes for O1 and above.
+@@ -425,6 +428,8 @@
+ 
+ void PassManagerBuilder::populateModulePassManager(
+     legacy::PassManagerBase &MPM) {
++  if (PGOSampleUse.empty())
++    PGOSampleUse = SampleProfileLoaderPass::SampleProfileFileFromOption();
+   if (!PGOSampleUse.empty()) {
+     MPM.add(createPruneEHPass());
+     MPM.add(createSampleProfileLoaderPass(PGOSampleUse));
+@@ -755,6 +760,8 @@
+ }
+ 
+ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
++  if (PGOSampleUse.empty())
++    PGOSampleUse = SampleProfileLoaderPass::SampleProfileFileFromOption();
+   // Load sample profile before running the LTO optimization pipeline.
+   if (!PGOSampleUse.empty()) {
+     PM.add(createPruneEHPass());
+Index: lib/Transforms/IPO/SampleProfile.cpp
+===================================================================
+--- lib/Transforms/IPO/SampleProfile.cpp	(revision 359070)
++++ lib/Transforms/IPO/SampleProfile.cpp	(working copy)
+@@ -1669,3 +1669,7 @@
+ 
+   return PreservedAnalyses::none();
+ }
++
++std::string SampleProfileLoaderPass::SampleProfileFileFromOption() {
++  return SampleProfileFile;
++}
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 359070)

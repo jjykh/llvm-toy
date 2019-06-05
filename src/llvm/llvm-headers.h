@@ -15,5 +15,7 @@
 #include <llvm-c/Transforms/IPO.h>
 #include <llvm-c/Transforms/PassManagerBuilder.h>
 #include <llvm-c/Transforms/Scalar.h>
+#define FEATURE_USE_SAMPLE_PGO
+#define FEATURE_SAMPLE_PGO
 
 #endif  // LLVM_HEADERS_H

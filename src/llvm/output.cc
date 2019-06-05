@@ -139,7 +139,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       false);
   subprogram_ = LLVMDIBuilderCreateFunction(
       di_builder_, cu, state_.function_name_, strlen(state_.function_name_),
-      nullptr, 0, file_name_meta, 0, nullptr, false, true, 0, LLVMDIFlagZero,
+      nullptr, 0, file_name_meta, 1, nullptr, false, true, 1, LLVMDIFlagZero,
       true);
   LLVMSetSubprogram(state_.function_, subprogram_);
 }
