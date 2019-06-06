@@ -16,4 +16,9 @@ const int kIntptrSize = sizeof(intptr_t);
 const int kUIntptrSize = sizeof(uintptr_t);
 const int kPointerSize = sizeof(void*);
 
+#if defined(UC_BUILD_TF_LLVM_BACKEND) && UC_BUILD_TF_LLVM_BACKEND
+#define FEATURE_USE_SAMPLE_PGO
+#define FEATURE_SAMPLE_PGO
+#endif
+
 #endif  // GLOBALS_H
