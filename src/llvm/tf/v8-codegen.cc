@@ -323,25 +323,23 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
       case LoadConstantRecorder::kExternalReference:
         break;
       case LoadConstantRecorder::kIsolateExternalReference: {
-        masm_.reset_pc(std::get<0>(entry));
         ExternalReference isolate_external_reference =
             ExternalReference::isolate_address(isolate_);
-        masm_.write_instruction(
-            reinterpret_cast<intptr_t>(isolate_external_reference.address()));
+        masm_.instr_at_put(
+            std::get<0>(entry),
+            reinterpret_cast<Instr>(isolate_external_reference.address()));
       } break;
       case LoadConstantRecorder::kRecordStubCodeConstant: {
-        masm_.reset_pc(std::get<0>(entry));
         Callable const callable =
             Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
-        masm_.write_instruction(
-            reinterpret_cast<intptr_t>(callable.code().location()));
+        masm_.instr_at_put(std::get<0>(entry),
+                           reinterpret_cast<Instr>(callable.code().location()));
       } break;
       case LoadConstantRecorder::kModuloExternalReference: {
-        masm_.reset_pc(std::get<0>(entry));
         ExternalReference modulo_reference =
             ExternalReference::mod_two_doubles_operation(isolate_);
-        masm_.write_instruction(
-            reinterpret_cast<intptr_t>(modulo_reference.address()));
+        masm_.instr_at_put(std::get<0>(entry),
+                           reinterpret_cast<Instr>(modulo_reference.address()));
       } break;
       default:
         UNREACHABLE();
