@@ -38,6 +38,8 @@ struct CompilerState {
   const char* function_name_;
   int code_kind_;
   PrologueKind prologue_kind_;
+  int32_t builtin_index_;
+  uint32_t stub_key_;
   bool needs_frame_;
   CompilerState(const char* FunctionName);
   ~CompilerState();

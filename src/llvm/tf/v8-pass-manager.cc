@@ -94,7 +94,8 @@ static void disassemble(CompilerState& state) {
 
 Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                                 compiler::CallDescriptor* call_descriptor,
-                                const char* name, Code::Kind kind) {
+                                const char* name, Code::Kind kind,
+                                uint32_t stub_key, int32_t builtin_index) {
   static bool llvm_initialized = false;
 #if 0
   std::cout << "name: " << name << "\n" << *schedule;
@@ -132,6 +133,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     } else {
       compiler_state.prologue_kind_ = PrologueKind::Stub;
     }
+    compiler_state.stub_key_ = stub_key;
+    compiler_state.builtin_index_ = builtin_index;
 
     tf_llvm::Output output(compiler_state);
     tf_llvm::RegisterParameterDesc input_desc;

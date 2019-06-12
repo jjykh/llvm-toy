@@ -9,8 +9,8 @@
 
 #include <unordered_set>
 #include "src/callable.h"
-#include "src/factory.h"
 #include "src/handles-inl.h"
+#include "src/heap/factory.h"
 #include "src/macro-assembler.h"
 #include "src/safepoint-table.h"
 
@@ -36,6 +36,13 @@ class CodeGeneratorLLVM {
                               const LoadConstantRecorder&);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
+  // Exception Handling
+  void EmitHandlerTable(const CompilerState& state, Isolate* isolate);
+  // Adjust for LLVM's callseq_end, which will emit a SDNode
+  // Copy r0. And it will becomes a defined instruction if register allocator
+  // allocates result other than r0.
+  void AdjustCallSite(int* callsite);
+  void AdjustHandler(int* handler);
 
   struct RecordReference {
     const StackMaps::Record* record;
@@ -52,56 +59,9 @@ class CodeGeneratorLLVM {
   RecordReferenceMap record_reference_map_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
+  int handler_table_offset_ = 0;
   bool needs_frame_ = false;
 };
-
-// Adjust for LLVM's callseq_end, which will emit a SDNode
-// Copy r0. And it will becomes a defined instruction if register allocator
-// allocates result other than r0.
-inline void AdjustCallSite(int* callsite, const byte* instruction_start) {
-  int callsite_adj = *callsite;
-  const Instr* where =
-      reinterpret_cast<const Instr*>(instruction_start + callsite_adj);
-  while (!Assembler::IsBlxReg(*(where - 1))) {
-    where -= 1;
-    callsite_adj -= sizeof(Instr);
-  }
-  *callsite = callsite_adj;
-}
-
-// Adjust for LLVM's unmergeable block, which results in a branch.
-inline void AdjustHandler(int* handler, const byte* instruction_start) {
-  int handler_adj = *handler;
-  const Instr* where =
-      reinterpret_cast<const Instr*>(instruction_start + handler_adj);
-  if (Assembler::IsBranch(*where)) {
-    handler_adj = handler_adj + Assembler::GetBranchOffset(*where) + 8;
-  }
-  *handler = handler_adj;
-}
-
-void EmitHandlerTable(const CompilerState& state, Isolate* isolate,
-                      Handle<Code> code) {
-  if (!state.exception_table_) return;
-  ExceptionTableARM exception_table(state.exception_table_->data(),
-                                    state.exception_table_->size());
-  const std::vector<std::tuple<int, int>>& callsite_handler_pairs =
-      exception_table.CallSiteHandlerPairs();
-  Handle<HandlerTable> table =
-      Handle<HandlerTable>::cast(isolate->factory()->NewFixedArray(
-          HandlerTable::LengthForReturn(
-              static_cast<int>(callsite_handler_pairs.size())),
-          TENURED));
-  for (size_t i = 0; i < callsite_handler_pairs.size(); ++i) {
-    int callsite, handler;
-    std::tie(callsite, handler) = callsite_handler_pairs[i];
-    AdjustCallSite(&callsite, code->instruction_start());
-    AdjustHandler(&handler, code->instruction_start());
-    table->SetReturnOffset(static_cast<int>(i), callsite);
-    table->SetReturnHandler(static_cast<int>(i), handler);
-  }
-  code->set_handler_table(*table);
-}
 
 CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
     : isolate_(isolate),
@@ -210,6 +170,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   CHECK(slot_count_ < 0x1000);
   int incremental = 0;
   int base_offset = masm_.pc_offset();
+  masm_.set_builtin_index(state.builtin_index_);
   {
     Assembler::BlockConstPoolScope block_const_pool(&masm_);
 
@@ -230,6 +191,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
       masm_.dd(instruction);
     }
   }
+  EmitHandlerTable(state, isolate_);
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
   ProcessForConstantLoad(instruction_pointer, instruction_end,
                          state.load_constant_recorder_);
@@ -237,14 +199,20 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   safepoint_table_builder_.Emit(&masm_, slot_count_);
   CodeDesc desc;
   masm_.GetCode(isolate_, &desc);
-  Handle<Code> new_object = isolate_->factory()->NewCode(
-      desc, static_cast<Code::Kind>(state.code_kind_), masm_.CodeObject());
-  new_object->set_stack_slots(slot_count_);
-  new_object->set_safepoint_table_offset(
-      safepoint_table_builder_.GetCodeOffset());
-  new_object->set_is_turbofanned(true);
-  EmitHandlerTable(state, isolate_, new_object);
-  return new_object;
+
+  MaybeHandle<Code> maybe_code = isolate_->factory()->TryNewCode(
+      desc, static_cast<Code::Kind>(state.code_kind_), Handle<Object>(),
+      state.builtin_index_, MaybeHandle<ByteArray>(),
+      MaybeHandle<DeoptimizationData>(), kMovable, state.stub_key_, true,
+      slot_count_, safepoint_table_builder_.GetCodeOffset(),
+      handler_table_offset_);
+
+  Handle<Code> result;
+  if (!maybe_code.ToHandle(&result)) {
+    masm_.AbortedCodeGeneration();
+    return Handle<Code>();
+  }
+  return result;
 }
 
 void CodeGeneratorLLVM::ProcessForConstantLoad(
@@ -265,7 +233,7 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
           Memory::Address_at(Assembler::constant_pool_entry_address(
               reinterpret_cast<Address>(
                   const_cast<uint32_t*>(instruction_pointer)),
-              nullptr));
+              0));
       std::unique_ptr<StackMapInfo> to_push;
       int constant_pc_offset =
           std::distance(reinterpret_cast<const uint8_t*>(code_start),
@@ -279,7 +247,7 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
                         reinterpret_cast<const uint8_t*>(instruction_pointer));
 
       LoadConstantRecorder::Type type =
-          load_constant_recorder.Query(reinterpret_cast<int64_t>(address));
+          load_constant_recorder.Query(static_cast<int64_t>(address));
       work_list.emplace_back(constant_pc_offset, pc_offset, type);
     }
   }
@@ -328,7 +296,7 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
             ExternalReference::isolate_address(isolate_);
         masm_.instr_at_put(
             std::get<0>(entry),
-            reinterpret_cast<Instr>(isolate_external_reference.address()));
+            static_cast<Instr>(isolate_external_reference.address()));
       } break;
       case LoadConstantRecorder::kRecordStubCodeConstant: {
         Callable const callable =
@@ -338,9 +306,9 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
       } break;
       case LoadConstantRecorder::kModuloExternalReference: {
         ExternalReference modulo_reference =
-            ExternalReference::mod_two_doubles_operation(isolate_);
+            ExternalReference::mod_two_doubles_operation();
         masm_.instr_at_put(std::get<0>(entry),
-                           reinterpret_cast<Instr>(modulo_reference.address()));
+                           static_cast<Instr>(modulo_reference.address()));
       } break;
       default:
         UNREACHABLE();
@@ -374,6 +342,47 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
         instruction_offset, RecordReference(&record, stack_map_info)));
 #endif
   }
+}
+
+void CodeGeneratorLLVM::EmitHandlerTable(const CompilerState& state,
+                                         Isolate* isolate) {
+  if (!state.exception_table_) return;
+  ExceptionTableARM exception_table(state.exception_table_->data(),
+                                    state.exception_table_->size());
+  const std::vector<std::tuple<int, int>>& callsite_handler_pairs =
+      exception_table.CallSiteHandlerPairs();
+  handler_table_offset_ = HandlerTable::EmitReturnTableStart(
+      &masm_, static_cast<int>(callsite_handler_pairs.size()));
+  for (size_t i = 0; i < callsite_handler_pairs.size(); ++i) {
+    int callsite, handler;
+    std::tie(callsite, handler) = callsite_handler_pairs[i];
+    AdjustCallSite(&callsite);
+    AdjustHandler(&handler);
+    HandlerTable::EmitReturnEntry(&masm_, callsite, handler);
+  }
+}
+
+// Adjust for LLVM's callseq_end, which will emit a SDNode
+// Copy r0. And it will becomes a defined instruction if register allocator
+// allocates result other than r0.
+void CodeGeneratorLLVM::AdjustCallSite(int* callsite) {
+  int callsite_adj = *callsite;
+  callsite -= sizeof(Instr);
+  while (!Assembler::IsBlxReg(masm_.instr_at(callsite_adj))) {
+    callsite_adj -= sizeof(Instr);
+  }
+  *callsite = callsite_adj;
+}
+
+// Adjust for LLVM's unmergeable block, which results in a branch.
+void CodeGeneratorLLVM::AdjustHandler(int* handler) {
+  int handler_adj = *handler;
+  Instr instr = masm_.instr_at(handler_adj);
+  Instruction* where = Instruction::At(reinterpret_cast<Address>(&instr));
+  if (where->IsBranch()) {
+    handler_adj = handler_adj + where->GetBranchOffset() + 8;
+  }
+  *handler = handler_adj;
 }
 
 CodeGeneratorLLVM::RecordReference::RecordReference(

@@ -100,12 +100,12 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       return;
     case compiler::IrOpcode::kInt32Constant:
       visitor->VisitInt32Constant(node->id(),
-                                  compiler::OpParameter<int32_t>(node));
+                                  compiler::OpParameter<int32_t>(node->op()));
       return;
     case compiler::IrOpcode::kExternalConstant: {
       const ExternalReference& external_reference =
-          compiler::OpParameter<ExternalReference>(node);
-      int64_t magic = reinterpret_cast<int64_t>(external_reference.address());
+          compiler::OpParameter<ExternalReference>(node->op());
+      int64_t magic = static_cast<int64_t>(external_reference.address());
       visitor->VisitExternalConstant(node->id(), magic);
     }
       return;
@@ -116,11 +116,11 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64Constant:
       visitor->VisitFloat64Constant(node->id(),
-                                    compiler::OpParameter<double>(node));
+                                    compiler::OpParameter<double>(node->op()));
       return;
     case compiler::IrOpcode::kHeapConstant: {
       Handle<HeapObject> object =
-          compiler::OpParameter<Handle<HeapObject>>(node);
+          compiler::OpParameter<Handle<HeapObject>>(node->op());
       Heap::RootListIndex index;
       if (IsMaterializableFromRoot(object, &index)) {
         visitor->VisitRoot(node->id(), static_cast<int>(index));
@@ -144,7 +144,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     }
       return;
     case compiler::IrOpcode::kNumberConstant: {
-      double value = compiler::OpParameter<double>(node);
+      double value = compiler::OpParameter<double>(node->op());
       int smi;
       if (DoubleToSmiInteger(value, &smi)) {
         visitor->VisitSmiConstant(node->id(), Smi::FromInt(smi));
@@ -185,6 +185,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kRetain:
       UNREACHABLE();
       return;
+    case compiler::IrOpcode::kPoisonedLoad:
     case compiler::IrOpcode::kLoad: {
       compiler::LoadRepresentation type =
           compiler::LoadRepresentationOf(node->op());
@@ -606,10 +607,6 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       UNREACHABLE();
     case compiler::IrOpcode::kUnalignedStore:
       UNREACHABLE();
-    case compiler::IrOpcode::kCheckedLoad:
-      UNREACHABLE();
-    case compiler::IrOpcode::kCheckedStore:
-      UNREACHABLE();
     case compiler::IrOpcode::kInt32PairAdd:
       UNREACHABLE();
     case compiler::IrOpcode::kInt32PairSub:
@@ -622,21 +619,28 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       UNREACHABLE();
     case compiler::IrOpcode::kWord32PairSar:
       UNREACHABLE();
-    case compiler::IrOpcode::kAtomicLoad:
+    case compiler::IrOpcode::kWord32AtomicLoad:
       UNREACHABLE();
-    case compiler::IrOpcode::kAtomicStore:
+    case compiler::IrOpcode::kWord32AtomicStore:
       UNREACHABLE();
-#define ATOMIC_CASE(name)                   \
-  case compiler::IrOpcode::kAtomic##name: { \
-    UNREACHABLE();                          \
+#define ATOMIC_CASE(name, rep)                     \
+  case compiler::IrOpcode::k##rep##Atomic##name: { \
+    UNREACHABLE();                                 \
   }
-      ATOMIC_CASE(Exchange)
-      ATOMIC_CASE(CompareExchange)
-      ATOMIC_CASE(Add)
-      ATOMIC_CASE(Sub)
-      ATOMIC_CASE(And)
-      ATOMIC_CASE(Or)
-      ATOMIC_CASE(Xor)
+      ATOMIC_CASE(Add, Word32)
+      ATOMIC_CASE(Add, Word64)
+      ATOMIC_CASE(Sub, Word32)
+      ATOMIC_CASE(Sub, Word64)
+      ATOMIC_CASE(And, Word32)
+      ATOMIC_CASE(And, Word64)
+      ATOMIC_CASE(Or, Word32)
+      ATOMIC_CASE(Or, Word64)
+      ATOMIC_CASE(Xor, Word32)
+      ATOMIC_CASE(Xor, Word64)
+      ATOMIC_CASE(Exchange, Word32)
+      ATOMIC_CASE(Exchange, Word64)
+      ATOMIC_CASE(CompareExchange, Word32)
+      ATOMIC_CASE(CompareExchange, Word64)
 #undef ATOMIC_CASE
     case compiler::IrOpcode::kProtectedLoad:
       UNREACHABLE();
@@ -874,6 +878,10 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       UNREACHABLE();
     case compiler::IrOpcode::kS1x16AllTrue:
       UNREACHABLE();
+    case compiler::IrOpcode::kTaggedPoisonOnSpeculation:
+    case compiler::IrOpcode::kWord32PoisonOnSpeculation:
+      visitor->VisitIdentity(node->id(), node->InputAt(0)->id());
+      return;
     default:
       V8_Fatal(__FILE__, __LINE__, "Unexpected operator #%d:%s @ node #%d",
                node->opcode(), node->op()->mnemonic(), node->id());
@@ -983,6 +991,7 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
       code = true;
       break;
     case compiler::CallDescriptor::kCallJSFunction:
+    case compiler::CallDescriptor::kCallWasmFunction:
       UNREACHABLE();
   }
   CHECK(descriptor->ReturnCount() <= 2);

@@ -1,33 +1,14 @@
 diff --git a/BUILD.gn b/BUILD.gn
-index cf3c455093..80faac447b 100644
+index 76a06cfa59..c1ef0800b5 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -6,11 +6,13 @@
- if (uc_build_v8_is_shared) {
-   is_component_build = true
- }
-+
- #endif
+@@ -162,8 +162,21 @@ declare_args() {
  
- import("//build/config/android/config.gni")
- import("//build/config/arm.gni")
- import("//build/config/dcheck_always_on.gni")
-+
- #import("//build/config/host_byteorder.gni")
- #import("//build/config/jumbo.gni")
- import("//build/config/mips.gni")
-@@ -138,6 +140,9 @@ declare_args() {
-   # Temporary flag to allow embedders to update their microtasks scopes
-   # while rolling in a new version of V8.
-   v8_check_microtasks_scopes_consistency = ""
+   # Enable minor mark compact.
+   v8_enable_minor_mc = true
 +#if UC_BUILD_TF_LLVM_BACKEND
 +  v8_enable_llvm = false
 +#endif
- }
- 
- # Derived defaults.
-@@ -160,6 +165,15 @@ if (v8_check_microtasks_scopes_consistency == "") {
-   v8_check_microtasks_scopes_consistency = is_debug || dcheck_always_on
  }
  
 +#if UC_BUILD_TF_LLVM_BACKEND
@@ -36,13 +17,14 @@ index cf3c455093..80faac447b 100644
 +}
 +if (v8_enable_llvm) {
 +  v8_enable_disassembler = true
++  v8_enable_object_print = true
 +}
 +#endif
 +
- # Specifies if the target build is a simulator build. Comparing target cpu
- # with v8 target cpu to not affect simulator builds for making cross-compile
- # snapshots.
-@@ -539,6 +553,17 @@ config("toolchain") {
+ # Derived defaults.
+ if (v8_enable_verify_heap == "") {
+   v8_enable_verify_heap = v8_enable_debugging_features
+@@ -628,6 +641,17 @@ config("toolchain") {
    }
  }
  
@@ -60,15 +42,13 @@ index cf3c455093..80faac447b 100644
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1108,6 +1133,54 @@ v8_source_set("v8_initializers") {
+@@ -1440,6 +1464,55 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
-+
 +#if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
-+    configs += [ ":llvm_configs" ]
-+    sources += [
++    llvm_sources = [
 +      "src/llvm/abbreviated-types.h",
 +      "src/llvm/abbreviations.h",
 +      "src/llvm/basic-block-manager.cc",
@@ -110,15 +90,18 @@ index cf3c455093..80faac447b 100644
 +      "src/llvm/tf/v8-pass-manager.cc",
 +      "src/llvm/tf/v8-pass-manager.h",
 +    ]
++    jumbo_excluded_sources += llvm_sources
++    sources += llvm_sources
++    configs += [ ":llvm_configs" ]
 +  }
 +#endif
  }
  
  v8_source_set("v8_init") {
-@@ -2441,6 +2514,11 @@ v8_source_set("v8_base") {
-     sources += [ "$target_gen_dir/debug-support.cc" ]
-     deps += [ ":postmortem-metadata" ]
+@@ -1460,6 +1533,11 @@ v8_source_set("v8_init") {
    }
+ 
+   configs = [ ":internal_config" ]
 +#if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
@@ -126,37 +109,25 @@ index cf3c455093..80faac447b 100644
 +#endif
  }
  
- v8_component("v8_libbase") {
-@@ -2680,7 +2758,12 @@ if (current_toolchain == v8_snapshot_toolchain) {
-       "src/snapshot/mksnapshot.cc",
+ # This is split out to be a non-code containing target that the Chromium browser
+@@ -3187,6 +3265,9 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
      ]
  
--    configs = [ ":internal_config" ]
+     configs = [ ":internal_config" ]
 +#if UC_BUILD_TF_LLVM_BACKEND
-+    configs = [
-+      ":internal_config",
-+      ":llvm_configs",
-+    ]
++    configs += [ ":llvm_configs" ]
 +#endif
  
      deps = [
        ":v8_base",
 diff --git a/gni/v8.gni b/gni/v8.gni
-index 1f499c9cd5..ac1b32833d 100644
+index e6f9c2424d..acea2acfd1 100644
 --- a/gni/v8.gni
 +++ b/gni/v8.gni
-@@ -11,6 +11,7 @@ import("//build/split_static_library.gni")
- declare_args() {
-   host_byteorder = "little"
-   use_jumbo_build = false
-+
-   # Set flags for tracking code coverage. Uses gcov with gcc and sanitizer
-   # coverage with clang.
-   v8_code_coverage = false
-@@ -90,13 +91,21 @@ if (is_debug && !v8_optimized_debug) {
+@@ -112,7 +112,13 @@ if (is_debug && !v8_optimized_debug) {
    # TODO(crbug.com/621335) Rework this so that we don't have the confusion
    # between "optimize_speed" and "optimize_max".
-   if (is_posix && !is_android && !using_sanitizer) {
+   if (((is_posix && !is_android) || is_fuchsia) && !using_sanitizer) {
 -    v8_add_configs += [ "//build/config/compiler:optimize_speed" ]
 +#if UC_BUILD_TF_LLVM_BACKEND
 +    if (uc_build_tf_llvm_backend) {
@@ -167,58 +138,48 @@ index 1f499c9cd5..ac1b32833d 100644
 +#endif
    } else {
      v8_add_configs += [ "//build/config/compiler:optimize_max" ]
-+
-     #if UC_BUILD_OPTIMIZE_SIZE
-     if (uc_build_optimize_size) {
-       v8_add_configs += [ "//build/config/compiler:optimize_max_O2" ]
-     }
-+
-     #endif
    }
- }
 diff --git a/src/arm/assembler-arm.cc b/src/arm/assembler-arm.cc
-index 0f49b3c902..a87e6db029 100644
+index 576bcb30f6..2882ece13e 100644
 --- a/src/arm/assembler-arm.cc
 +++ b/src/arm/assembler-arm.cc
-@@ -659,6 +659,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
-   DCHECK(IsLdrRegisterImmediate(instr));
+@@ -644,6 +644,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
    bool positive = offset >= 0;
    if (!positive) offset = -offset;
+   DCHECK(is_uint12(offset));
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +  CHECK(is_uint12(offset));
 +#endif
-   DCHECK(is_uint12(offset));
    // Set bit indicating whether the offset should be added.
    instr = (instr & ~B23) | (positive ? B23 : 0);
+   // Set the actual offset.
 diff --git a/src/arm/assembler-arm.h b/src/arm/assembler-arm.h
-index 536731978b..e073f050f3 100644
+index 2e71ce59e6..0064844f87 100644
 --- a/src/arm/assembler-arm.h
 +++ b/src/arm/assembler-arm.h
-@@ -1718,7 +1718,19 @@ class Assembler : public AssemblerBase {
+@@ -1701,8 +1701,17 @@ class Assembler : public AssemblerBase {
+   void bind_to(Label* L, int pos);
    void next(Label* L);
  
-   // Record reloc info for current pc_
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 + public:
 +  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 +  void reset_pc(int pc_offset) { pc_ = buffer_ + pc_offset; }
-+  void write_instruction(Instr instr) {
-+    *reinterpret_cast<Instr*>(pc_) = instr;
-+  }
 +  void LLVMGrowBuffer() { GrowBuffer(); }
 +
 + private:
 +#else
+   // Record reloc info for current pc_
    void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 +#endif
    void ConstantPoolAddEntry(int position, RelocInfo::Mode rmode,
                              intptr_t value);
    void ConstantPoolAddEntry(int position, Double value);
 diff --git a/src/arm/disasm-arm.cc b/src/arm/disasm-arm.cc
-index 83081f1b66..12ab856761 100644
+index 5dab458889..bbf0f691dd 100644
 --- a/src/arm/disasm-arm.cc
 +++ b/src/arm/disasm-arm.cc
-@@ -1337,7 +1337,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+@@ -1343,7 +1343,11 @@ void Decoder::DecodeType3(Instruction* instr) {
              Format(instr, "sbfx'cond 'rd, 'rm, 'f");
            }
          } else {
@@ -231,10 +192,10 @@ index 83081f1b66..12ab856761 100644
        } else if (!instr->HasW() && (instr->Bits(6, 4) == 0x1)) {
          uint32_t lsbit = static_cast<uint32_t>(instr->Bits(11, 7));
 diff --git a/src/builtins/builtins-math-gen.cc b/src/builtins/builtins-math-gen.cc
-index 3e22a138eb..9897f2b3f8 100644
+index 952bdda5de..b18bb30909 100644
 --- a/src/builtins/builtins-math-gen.cc
 +++ b/src/builtins/builtins-math-gen.cc
-@@ -194,6 +194,9 @@ void MathBuiltinsAssembler::MathMaxMin(
+@@ -172,6 +172,9 @@ void MathBuiltinsAssembler::MathMaxMin(
  
  // ES6 #sec-math.acos
  TF_BUILTIN(MathAcos, MathBuiltinsAssembler) {
@@ -244,7 +205,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Acos);
-@@ -201,6 +204,9 @@ TF_BUILTIN(MathAcos, MathBuiltinsAssembler) {
+@@ -179,6 +182,9 @@ TF_BUILTIN(MathAcos, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.acosh
  TF_BUILTIN(MathAcosh, MathBuiltinsAssembler) {
@@ -254,7 +215,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Acosh);
-@@ -208,6 +214,9 @@ TF_BUILTIN(MathAcosh, MathBuiltinsAssembler) {
+@@ -186,6 +192,9 @@ TF_BUILTIN(MathAcosh, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.asin
  TF_BUILTIN(MathAsin, MathBuiltinsAssembler) {
@@ -264,7 +225,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Asin);
-@@ -215,6 +224,9 @@ TF_BUILTIN(MathAsin, MathBuiltinsAssembler) {
+@@ -193,6 +202,9 @@ TF_BUILTIN(MathAsin, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.asinh
  TF_BUILTIN(MathAsinh, MathBuiltinsAssembler) {
@@ -274,7 +235,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Asinh);
-@@ -222,6 +234,9 @@ TF_BUILTIN(MathAsinh, MathBuiltinsAssembler) {
+@@ -200,6 +212,9 @@ TF_BUILTIN(MathAsinh, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.atan
  TF_BUILTIN(MathAtan, MathBuiltinsAssembler) {
@@ -284,7 +245,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Atan);
-@@ -229,6 +244,9 @@ TF_BUILTIN(MathAtan, MathBuiltinsAssembler) {
+@@ -207,6 +222,9 @@ TF_BUILTIN(MathAtan, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.atanh
  TF_BUILTIN(MathAtanh, MathBuiltinsAssembler) {
@@ -294,7 +255,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Atanh);
-@@ -236,6 +254,9 @@ TF_BUILTIN(MathAtanh, MathBuiltinsAssembler) {
+@@ -214,6 +232,9 @@ TF_BUILTIN(MathAtanh, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.atan2
  TF_BUILTIN(MathAtan2, CodeStubAssembler) {
@@ -304,7 +265,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* y = Parameter(Descriptor::kY);
    Node* x = Parameter(Descriptor::kX);
-@@ -249,6 +270,9 @@ TF_BUILTIN(MathAtan2, CodeStubAssembler) {
+@@ -227,6 +248,9 @@ TF_BUILTIN(MathAtan2, CodeStubAssembler) {
  
  // ES6 #sec-math.ceil
  TF_BUILTIN(MathCeil, MathBuiltinsAssembler) {
@@ -314,7 +275,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathRoundingOperation(context, x, &CodeStubAssembler::Float64Ceil);
-@@ -256,6 +280,9 @@ TF_BUILTIN(MathCeil, MathBuiltinsAssembler) {
+@@ -234,6 +258,9 @@ TF_BUILTIN(MathCeil, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.cbrt
  TF_BUILTIN(MathCbrt, MathBuiltinsAssembler) {
@@ -324,7 +285,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cbrt);
-@@ -321,6 +348,9 @@ TF_BUILTIN(MathClz32, CodeStubAssembler) {
+@@ -299,6 +326,9 @@ TF_BUILTIN(MathClz32, CodeStubAssembler) {
  
  // ES6 #sec-math.cos
  TF_BUILTIN(MathCos, MathBuiltinsAssembler) {
@@ -334,7 +295,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cos);
-@@ -328,6 +358,9 @@ TF_BUILTIN(MathCos, MathBuiltinsAssembler) {
+@@ -306,6 +336,9 @@ TF_BUILTIN(MathCos, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.cosh
  TF_BUILTIN(MathCosh, MathBuiltinsAssembler) {
@@ -344,7 +305,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Cosh);
-@@ -335,6 +368,9 @@ TF_BUILTIN(MathCosh, MathBuiltinsAssembler) {
+@@ -313,6 +346,9 @@ TF_BUILTIN(MathCosh, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.exp
  TF_BUILTIN(MathExp, MathBuiltinsAssembler) {
@@ -354,7 +315,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Exp);
-@@ -342,6 +378,9 @@ TF_BUILTIN(MathExp, MathBuiltinsAssembler) {
+@@ -320,6 +356,9 @@ TF_BUILTIN(MathExp, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.expm1
  TF_BUILTIN(MathExpm1, MathBuiltinsAssembler) {
@@ -364,7 +325,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Expm1);
-@@ -349,6 +388,9 @@ TF_BUILTIN(MathExpm1, MathBuiltinsAssembler) {
+@@ -327,6 +366,9 @@ TF_BUILTIN(MathExpm1, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.floor
  TF_BUILTIN(MathFloor, MathBuiltinsAssembler) {
@@ -374,7 +335,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathRoundingOperation(context, x, &CodeStubAssembler::Float64Floor);
-@@ -356,6 +398,9 @@ TF_BUILTIN(MathFloor, MathBuiltinsAssembler) {
+@@ -334,6 +376,9 @@ TF_BUILTIN(MathFloor, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.fround
  TF_BUILTIN(MathFround, CodeStubAssembler) {
@@ -384,7 +345,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    Node* x_value = TruncateTaggedToFloat64(context, x);
-@@ -367,6 +412,9 @@ TF_BUILTIN(MathFround, CodeStubAssembler) {
+@@ -345,6 +390,9 @@ TF_BUILTIN(MathFround, CodeStubAssembler) {
  
  // ES6 #sec-math.imul
  TF_BUILTIN(MathImul, CodeStubAssembler) {
@@ -394,7 +355,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    Node* y = Parameter(Descriptor::kY);
-@@ -379,6 +427,9 @@ TF_BUILTIN(MathImul, CodeStubAssembler) {
+@@ -357,6 +405,9 @@ TF_BUILTIN(MathImul, CodeStubAssembler) {
  
  // ES6 #sec-math.log
  TF_BUILTIN(MathLog, MathBuiltinsAssembler) {
@@ -404,7 +365,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log);
-@@ -386,6 +437,9 @@ TF_BUILTIN(MathLog, MathBuiltinsAssembler) {
+@@ -364,6 +415,9 @@ TF_BUILTIN(MathLog, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.log1p
  TF_BUILTIN(MathLog1p, MathBuiltinsAssembler) {
@@ -414,7 +375,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log1p);
-@@ -393,6 +447,9 @@ TF_BUILTIN(MathLog1p, MathBuiltinsAssembler) {
+@@ -371,6 +425,9 @@ TF_BUILTIN(MathLog1p, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.log10
  TF_BUILTIN(MathLog10, MathBuiltinsAssembler) {
@@ -424,7 +385,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log10);
-@@ -400,6 +457,9 @@ TF_BUILTIN(MathLog10, MathBuiltinsAssembler) {
+@@ -378,6 +435,9 @@ TF_BUILTIN(MathLog10, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.log2
  TF_BUILTIN(MathLog2, MathBuiltinsAssembler) {
@@ -434,17 +395,17 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Log2);
-@@ -407,6 +467,9 @@ TF_BUILTIN(MathLog2, MathBuiltinsAssembler) {
+@@ -394,6 +454,9 @@ CodeStubAssembler::Node* MathBuiltinsAssembler::MathPow(Node* context,
  
  // ES6 #sec-math.pow
- TF_BUILTIN(MathPow, CodeStubAssembler) {
+ TF_BUILTIN(MathPow, MathBuiltinsAssembler) {
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +  state()->set_llvm_enabled(false);
 +#endif
-   Node* context = Parameter(Descriptor::kContext);
-   Node* x = Parameter(Descriptor::kBase);
-   Node* y = Parameter(Descriptor::kExponent);
-@@ -478,6 +541,9 @@ TF_BUILTIN(MathSign, CodeStubAssembler) {
+   Return(MathPow(Parameter(Descriptor::kContext), Parameter(Descriptor::kBase),
+                  Parameter(Descriptor::kExponent)));
+ }
+@@ -459,6 +522,9 @@ TF_BUILTIN(MathSign, CodeStubAssembler) {
  
  // ES6 #sec-math.sin
  TF_BUILTIN(MathSin, MathBuiltinsAssembler) {
@@ -454,7 +415,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sin);
-@@ -485,6 +551,9 @@ TF_BUILTIN(MathSin, MathBuiltinsAssembler) {
+@@ -466,6 +532,9 @@ TF_BUILTIN(MathSin, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.sinh
  TF_BUILTIN(MathSinh, MathBuiltinsAssembler) {
@@ -464,7 +425,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sinh);
-@@ -492,6 +561,9 @@ TF_BUILTIN(MathSinh, MathBuiltinsAssembler) {
+@@ -473,6 +542,9 @@ TF_BUILTIN(MathSinh, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.sqrt
  TF_BUILTIN(MathSqrt, MathBuiltinsAssembler) {
@@ -474,7 +435,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Sqrt);
-@@ -499,6 +571,9 @@ TF_BUILTIN(MathSqrt, MathBuiltinsAssembler) {
+@@ -480,6 +552,9 @@ TF_BUILTIN(MathSqrt, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.tan
  TF_BUILTIN(MathTan, MathBuiltinsAssembler) {
@@ -484,7 +445,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Tan);
-@@ -506,6 +581,9 @@ TF_BUILTIN(MathTan, MathBuiltinsAssembler) {
+@@ -487,6 +562,9 @@ TF_BUILTIN(MathTan, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.tanh
  TF_BUILTIN(MathTanh, MathBuiltinsAssembler) {
@@ -494,7 +455,7 @@ index 3e22a138eb..9897f2b3f8 100644
    Node* context = Parameter(Descriptor::kContext);
    Node* x = Parameter(Descriptor::kX);
    MathUnaryOperation(context, x, &CodeStubAssembler::Float64Tanh);
-@@ -520,6 +598,9 @@ TF_BUILTIN(MathTrunc, MathBuiltinsAssembler) {
+@@ -501,6 +579,9 @@ TF_BUILTIN(MathTrunc, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.max
  TF_BUILTIN(MathMax, MathBuiltinsAssembler) {
@@ -503,8 +464,8 @@ index 3e22a138eb..9897f2b3f8 100644
 +#endif
    // TODO(ishell): use constants from Descriptor once the JSFunction linkage
    // arguments are reordered.
-   Node* context = Parameter(BuiltinDescriptor::kContext);
-@@ -529,6 +610,9 @@ TF_BUILTIN(MathMax, MathBuiltinsAssembler) {
+   Node* context = Parameter(Descriptor::kContext);
+@@ -510,6 +591,9 @@ TF_BUILTIN(MathMax, MathBuiltinsAssembler) {
  
  // ES6 #sec-math.min
  TF_BUILTIN(MathMin, MathBuiltinsAssembler) {
@@ -513,12 +474,26 @@ index 3e22a138eb..9897f2b3f8 100644
 +#endif
    // TODO(ishell): use constants from Descriptor once the JSFunction linkage
    // arguments are reordered.
-   Node* context = Parameter(BuiltinDescriptor::kContext);
+   Node* context = Parameter(Descriptor::kContext);
+diff --git a/src/builtins/builtins-number-gen.cc b/src/builtins/builtins-number-gen.cc
+index cfc81612f2..7fea982548 100644
+--- a/src/builtins/builtins-number-gen.cc
++++ b/src/builtins/builtins-number-gen.cc
+@@ -930,6 +930,9 @@ TF_BUILTIN(Modulus, NumberBuiltinsAssembler) {
+ }
+ 
+ TF_BUILTIN(Exponentiate, NumberBuiltinsAssembler) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  state()->set_llvm_enabled(false);
++#endif
+   VARIABLE(var_left, MachineRepresentation::kTagged);
+   VARIABLE(var_right, MachineRepresentation::kTagged);
+   Label do_number_exp(this), do_bigint_exp(this);
 diff --git a/src/builtins/builtins-sharedarraybuffer-gen.cc b/src/builtins/builtins-sharedarraybuffer-gen.cc
-index a9e851ff87..56aaff70a1 100644
+index 52673bfd36..596b076722 100644
 --- a/src/builtins/builtins-sharedarraybuffer-gen.cc
 +++ b/src/builtins/builtins-sharedarraybuffer-gen.cc
-@@ -143,6 +143,9 @@ void SharedArrayBufferBuiltinsAssembler::DebugSanityCheckAtomicIndex(
+@@ -135,6 +135,9 @@ void SharedArrayBufferBuiltinsAssembler::DebugSanityCheckAtomicIndex(
  #endif
  
  TF_BUILTIN(AtomicsLoad, SharedArrayBufferBuiltinsAssembler) {
@@ -528,7 +503,7 @@ index a9e851ff87..56aaff70a1 100644
    Node* array = Parameter(Descriptor::kArray);
    Node* index = Parameter(Descriptor::kIndex);
    Node* context = Parameter(Descriptor::kContext);
-@@ -199,6 +202,9 @@ TF_BUILTIN(AtomicsLoad, SharedArrayBufferBuiltinsAssembler) {
+@@ -191,6 +194,9 @@ TF_BUILTIN(AtomicsLoad, SharedArrayBufferBuiltinsAssembler) {
  }
  
  TF_BUILTIN(AtomicsStore, SharedArrayBufferBuiltinsAssembler) {
@@ -538,7 +513,7 @@ index a9e851ff87..56aaff70a1 100644
    Node* array = Parameter(Descriptor::kArray);
    Node* index = Parameter(Descriptor::kIndex);
    Node* value = Parameter(Descriptor::kValue);
-@@ -253,6 +259,9 @@ TF_BUILTIN(AtomicsStore, SharedArrayBufferBuiltinsAssembler) {
+@@ -245,6 +251,9 @@ TF_BUILTIN(AtomicsStore, SharedArrayBufferBuiltinsAssembler) {
  }
  
  TF_BUILTIN(AtomicsExchange, SharedArrayBufferBuiltinsAssembler) {
@@ -548,7 +523,7 @@ index a9e851ff87..56aaff70a1 100644
    Node* array = Parameter(Descriptor::kArray);
    Node* index = Parameter(Descriptor::kIndex);
    Node* value = Parameter(Descriptor::kValue);
-@@ -326,6 +335,9 @@ TF_BUILTIN(AtomicsExchange, SharedArrayBufferBuiltinsAssembler) {
+@@ -318,6 +327,9 @@ TF_BUILTIN(AtomicsExchange, SharedArrayBufferBuiltinsAssembler) {
  }
  
  TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
@@ -558,11 +533,10 @@ index a9e851ff87..56aaff70a1 100644
    Node* array = Parameter(Descriptor::kArray);
    Node* index = Parameter(Descriptor::kIndex);
    Node* old_value = Parameter(Descriptor::kOldValue);
-@@ -408,7 +420,19 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
- #endif  // V8_TARGET_ARCH_MIPS || V8_TARGET_ARCH_MIPS64 || V8_TARGET_ARCH_PPC64
+@@ -400,6 +412,19 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
          // || V8_TARGET_ARCH_PPC || V8_TARGET_ARCH_S390 || V8_TARGET_ARCH_S390X
  }
--
+ 
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +#define BINOP_BUILTIN(op)                                       \
 +  TF_BUILTIN(Atomics##op, SharedArrayBufferBuiltinsAssembler) { \
@@ -579,50 +553,49 @@ index a9e851ff87..56aaff70a1 100644
  #define BINOP_BUILTIN(op)                                       \
    TF_BUILTIN(Atomics##op, SharedArrayBufferBuiltinsAssembler) { \
      Node* array = Parameter(Descriptor::kArray);                \
-@@ -419,6 +443,8 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
+@@ -410,6 +435,7 @@ TF_BUILTIN(AtomicsCompareExchange, SharedArrayBufferBuiltinsAssembler) {
                               &CodeAssembler::Atomic##op,        \
                               Runtime::kAtomics##op);            \
    }
 +#endif
-+
  BINOP_BUILTIN(Add)
  BINOP_BUILTIN(Sub)
  BINOP_BUILTIN(And)
-diff --git a/src/builtins/builtins-typedarray-gen.cc b/src/builtins/builtins-typedarray-gen.cc
-index a58f3a4093..e6d7030d19 100644
---- a/src/builtins/builtins-typedarray-gen.cc
-+++ b/src/builtins/builtins-typedarray-gen.cc
-@@ -22,7 +22,11 @@ namespace internal {
- class TypedArrayBuiltinsAssembler : public CodeStubAssembler {
+diff --git a/src/builtins/builtins-typed-array-gen.h b/src/builtins/builtins-typed-array-gen.h
+index e74469187f..e559b95cd9 100644
+--- a/src/builtins/builtins-typed-array-gen.h
++++ b/src/builtins/builtins-typed-array-gen.h
+@@ -13,7 +13,11 @@ namespace internal {
+ class TypedArrayBuiltinsAssembler : public BaseBuiltinsFromDSLAssembler {
   public:
    explicit TypedArrayBuiltinsAssembler(compiler::CodeAssemblerState* state)
--      : CodeStubAssembler(state) {}
-+      : CodeStubAssembler(state) {
+-      : BaseBuiltinsFromDSLAssembler(state) {}
++      : BaseBuiltinsFromDSLAssembler(state) {
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +    state->set_llvm_enabled(false);
 +#endif
 +  }
  
-  protected:
-   void GenerateTypedArrayPrototypeGetter(Node* context, Node* receiver,
+   TNode<JSTypedArray> SpeciesCreateByLength(TNode<Context> context,
+                                             TNode<JSTypedArray> exemplar,
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
-index aa3ba47197..40f6e043fe 100644
+index 0b77d10072..bf101d2706 100644
 --- a/src/compiler/code-assembler.cc
 +++ b/src/compiler/code-assembler.cc
 @@ -23,6 +23,10 @@
+ #include "src/objects-inl.h"
  #include "src/utils.h"
  #include "src/zone/zone.h"
- 
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +#include "src/llvm/tf/v8-pass-manager.h"
 +#endif
 +
- #define REPEAT_1_TO_2(V, T) V(T) V(T, T)
- #define REPEAT_1_TO_3(V, T) REPEAT_1_TO_2(V, T) V(T, T, T)
- #define REPEAT_1_TO_4(V, T) REPEAT_1_TO_3(V, T) V(T, T, T, T)
-@@ -74,7 +78,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
-       kind_(kind),
-       name_(name),
+ 
+ namespace v8 {
+ namespace internal {
+@@ -82,7 +86,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
+       stub_key_(stub_key),
+       builtin_index_(builtin_index),
        code_generated_(false),
 -      variables_(zone) {}
 +      variables_(zone) {
@@ -633,7 +606,7 @@ index aa3ba47197..40f6e043fe 100644
  
  CodeAssemblerState::~CodeAssemblerState() {}
  
-@@ -146,6 +154,14 @@ void CodeAssembler::CallEpilogue() {
+@@ -156,6 +164,14 @@ void CodeAssembler::CallEpilogue() {
    if (state_->call_epilogue_) {
      state_->call_epilogue_();
    }
@@ -647,18 +620,18 @@ index aa3ba47197..40f6e043fe 100644
 +#endif
  }
  
- // static
-@@ -154,6 +170,38 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state) {
- 
+ bool CodeAssembler::Word32ShiftIsSafe() const {
+@@ -174,6 +190,45 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
    RawMachineAssembler* rasm = state->raw_assembler_.get();
    Schedule* schedule = rasm->Export();
+ 
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +  if (state->is_llvm_enabled()) {
 +    tf_llvm::V8PassManager pass_manager;
 +    state->code_generated_ = true;
-+    Handle<Code> code =
-+        pass_manager.Run(rasm->isolate(), schedule, rasm->call_descriptor(),
-+                         state->name(), state->kind_);
++    Handle<Code> code = pass_manager.Run(
++        rasm->isolate(), schedule, rasm->call_descriptor(), state->name(),
++        state->kind_, state->stub_key_, state->builtin_index_);
 +#if 0
 +    code->Print();
 +    {
@@ -666,17 +639,24 @@ index aa3ba47197..40f6e043fe 100644
 +      bool should_optimize_jumps =
 +          rasm->isolate()->serializer_enabled() && FLAG_turbo_rewrite_far_jumps;
 +
-+      Handle<Code> code = Pipeline::GenerateCodeForCodeStub(
-+          rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
-+          state->kind_, state->name_, should_optimize_jumps ? &jump_opt : nullptr);
++      Handle<Code> code =
++          Pipeline::GenerateCodeForCodeStub(
++              rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
++              state->kind_, state->name_, state->stub_key_, state->builtin_index_,
++              should_optimize_jumps ? &jump_opt : nullptr, rasm->poisoning_level(),
++              options)
++              .ToHandleChecked();
 +
 +      if (jump_opt.is_optimizable()) {
 +        jump_opt.set_optimizing();
 +
 +        // Regenerate machine code
-+        code = Pipeline::GenerateCodeForCodeStub(
-+            rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
-+            state->kind_, state->name_, &jump_opt);
++        code =
++            Pipeline::GenerateCodeForCodeStub(
++                rasm->isolate(), rasm->call_descriptor(), rasm->graph(), schedule,
++                state->kind_, state->name_, state->stub_key_, state->builtin_index_,
++                &jump_opt, rasm->poisoning_level(), options)
++                .ToHandleChecked();
 +      }
 +      code->Print();
 +    }
@@ -684,14 +664,14 @@ index aa3ba47197..40f6e043fe 100644
 +    return code;
 +  }
 +#endif
- 
    JumpOptimizationInfo jump_opt;
    bool should_optimize_jumps =
+       rasm->isolate()->serializer_enabled() && FLAG_turbo_rewrite_far_jumps;
 diff --git a/src/compiler/code-assembler.h b/src/compiler/code-assembler.h
-index d29423558c..9e0c12ea69 100644
+index 6419140a74..0b6da485a2 100644
 --- a/src/compiler/code-assembler.h
 +++ b/src/compiler/code-assembler.h
-@@ -999,6 +999,10 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
+@@ -1393,6 +1393,10 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
  
    const char* name() const { return name_; }
    int parameter_count() const;
@@ -702,7 +682,7 @@ index d29423558c..9e0c12ea69 100644
  
  #if DEBUG
    void PrintCurrentBlock(std::ostream& os);
-@@ -1022,6 +1026,9 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
+@@ -1420,6 +1424,9 @@ class V8_EXPORT_PRIVATE CodeAssemblerState {
    ZoneSet<CodeAssemblerVariable::Impl*> variables_;
    CodeAssemblerCallback call_prologue_;
    CodeAssemblerCallback call_epilogue_;
@@ -713,33 +693,33 @@ index d29423558c..9e0c12ea69 100644
    DISALLOW_COPY_AND_ASSIGN(CodeAssemblerState);
  };
 diff --git a/src/globals.h b/src/globals.h
-index fc9b464935..5afe7d558e 100644
+index ddb222438f..ec7b565734 100644
 --- a/src/globals.h
 +++ b/src/globals.h
-@@ -1459,4 +1459,9 @@ namespace i = v8::internal;
- #define UC_BUILD_ENABLE_DISK_CACHE_PREDICATION 0
- #endif  // UC_BUILD
+@@ -1617,4 +1617,9 @@ namespace i = v8::internal;
+ # define UC_BUILD_ENABLE_DISK_CACHE_PREDICATION 0
+ #endif  // UC_BUILD_ENABLE_V8_CACHE
  
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && UC_BUILD_TF_LLVM_BACKEND
-+#define FEATURE_USE_SAMPLE_PGO
-+#define FEATURE_SAMPLE_PGO
-+#endif
++// #if defined(UC_BUILD_TF_LLVM_BACKEND) && UC_BUILD_TF_LLVM_BACKEND
++// #define FEATURE_USE_SAMPLE_PGO
++// #define FEATURE_SAMPLE_PGO
++// #endif
 +
  #endif  // V8_GLOBALS_H_
 diff --git a/src/interpreter/interpreter.cc b/src/interpreter/interpreter.cc
-index b53d667803..a5d4a33539 100644
+index 8290c82592..8cb8faf446 100644
 --- a/src/interpreter/interpreter.cc
 +++ b/src/interpreter/interpreter.cc
-@@ -240,7 +240,7 @@ bool Interpreter::IsDispatchTableInitialized() {
+@@ -238,7 +238,7 @@ bool Interpreter::IsDispatchTableInitialized() const {
  }
  
- const char* Interpreter::LookupNameOfBytecodeHandler(Code* code) {
+ const char* Interpreter::LookupNameOfBytecodeHandler(const Code* code) {
 -#ifdef ENABLE_DISASSEMBLER
 +#if defined(UC_BUILD_TF_LLVM_BACKEND)
  #define RETURN_NAME(Name, ...)                                 \
    if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name)] == \
        code->entry()) {                                         \
-@@ -248,7 +248,31 @@ const char* Interpreter::LookupNameOfBytecodeHandler(Code* code) {
+@@ -246,7 +246,31 @@ const char* Interpreter::LookupNameOfBytecodeHandler(const Code* code) {
    }
    BYTECODE_LIST(RETURN_NAME)
  #undef RETURN_NAME
@@ -753,7 +733,7 @@ index b53d667803..a5d4a33539 100644
 +#define RETURN_NAME(Name, ...)                                 \
 +  if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name) +   \
 +                      (2 << kBitsPerByte)] == code->entry()) { \
-+    return #Name " (Double Scale";                             \
++    return #Name " (Double Scale)";                            \
 +  }
 +  BYTECODE_LIST(RETURN_NAME)
 +#undef RETURN_NAME
@@ -772,24 +752,24 @@ index b53d667803..a5d4a33539 100644
  }
  
 diff --git a/src/objects.cc b/src/objects.cc
-index de0d4fd1ef..66944a5b61 100644
+index bc786957f9..a534075168 100644
 --- a/src/objects.cc
 +++ b/src/objects.cc
-@@ -14733,6 +14733,9 @@ void Code::Disassemble(const char* name, std::ostream& os) {  // NOLINT
+@@ -15041,6 +15041,9 @@ void Code::Disassemble(const char* name, std::ostream& os, Address current_pc) {
      if (kind() == OPTIMIZED_FUNCTION) {
-       HandlerTable::cast(handler_table())->HandlerTableReturnPrint(os);
+       table.HandlerTableReturnPrint(os);
      }
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+    HandlerTable::cast(handler_table())->HandlerTableReturnPrint(os);
++    table.HandlerTableReturnPrint(os);
 +#endif
      os << "\n";
    }
  
 diff --git a/src/profiler/cpu-profiler.cc b/src/profiler/cpu-profiler.cc
-index bae592b36d..025a333e2a 100644
+index 1c74dca124..155f6a65d9 100644
 --- a/src/profiler/cpu-profiler.cc
 +++ b/src/profiler/cpu-profiler.cc
-@@ -11,6 +11,9 @@
+@@ -17,6 +17,9 @@
  #include "src/log-inl.h"
  #include "src/profiler/cpu-profiler-inl.h"
  #include "src/vm-state-inl.h"
@@ -799,24 +779,25 @@ index bae592b36d..025a333e2a 100644
  
  namespace v8 {
  namespace internal {
-@@ -321,6 +324,12 @@ void CpuProfiler::StartProcessorIfNotStarted() {
+@@ -370,6 +373,13 @@ void CpuProfiler::StartProcessorIfNotStarted() {
    // Disable logging when using the new implementation.
    saved_is_logging_ = logger->is_logging_;
    logger->is_logging_ = false;
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
 +  char name[256];
-+  snprintf(name, 256, "/sdcard/v8_profile_details_%08x.log", static_cast<int>(time(nullptr)));
++  snprintf(name, 256, "/sdcard/v8_profile_details_%08x.log",
++           static_cast<int>(time(nullptr)));
 +  profile_detail_.reset(new std::ofstream(name));
 +  if (profile_detail_->fail()) __builtin_trap();
 +#endif
-   generator_.reset(new ProfileGenerator(profiles_.get()));
-   processor_.reset(new ProfilerEventsProcessor(isolate_, generator_.get(),
-                                                sampling_interval_));
+   if (!generator_) {
+     generator_.reset(new ProfileGenerator(profiles_.get()));
+     CreateEntriesForRuntimeCallStats();
 diff --git a/src/profiler/cpu-profiler.h b/src/profiler/cpu-profiler.h
-index 5fd7fa14da..b37f6c09a7 100644
+index febc154802..cd17b344b1 100644
 --- a/src/profiler/cpu-profiler.h
 +++ b/src/profiler/cpu-profiler.h
-@@ -213,6 +213,9 @@ class CpuProfiler : public CodeEventObserver {
+@@ -220,6 +220,9 @@ class CpuProfiler : public CodeEventObserver {
    ProfileGenerator* generator() const { return generator_.get(); }
    ProfilerEventsProcessor* processor() const { return processor_.get(); }
    Isolate* isolate() const { return isolate_; }
@@ -824,12 +805,12 @@ index 5fd7fa14da..b37f6c09a7 100644
 +  std::ostream& os() { return *profile_detail_; }
 +#endif
  
-  private:
-   void StartProcessorIfNotStarted();
-@@ -228,6 +231,9 @@ class CpuProfiler : public CodeEventObserver {
+   ProfilerListener* profiler_listener_for_test() {
+     return profiler_listener_.get();
+@@ -239,6 +242,9 @@ class CpuProfiler : public CodeEventObserver {
    std::unique_ptr<ProfileGenerator> generator_;
    std::unique_ptr<ProfilerEventsProcessor> processor_;
-   std::vector<std::unique_ptr<CodeEntry>> static_entries_;
+   std::unique_ptr<ProfilerListener> profiler_listener_;
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
 +  std::unique_ptr<std::ostream> profile_detail_;
 +#endif
@@ -837,12 +818,12 @@ index 5fd7fa14da..b37f6c09a7 100644
    bool is_profiling_;
  
 diff --git a/src/profiler/profile-generator.cc b/src/profiler/profile-generator.cc
-index 78fc97b19f..e65de5abba 100644
+index 48f017bd3b..938c9ce223 100644
 --- a/src/profiler/profile-generator.cc
 +++ b/src/profiler/profile-generator.cc
-@@ -14,6 +14,10 @@
- #include "src/tracing/trace-event.h"
+@@ -16,6 +16,10 @@
  #include "src/tracing/traced-value.h"
+ #endif
  #include "src/unicode.h"
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
 +#include "src/code-stubs.h"
@@ -851,10 +832,10 @@ index 78fc97b19f..e65de5abba 100644
  
  namespace v8 {
  namespace internal {
-@@ -624,6 +628,19 @@ void CpuProfilesCollection::AddPathToCurrentProfiles(
-   }
+@@ -682,6 +686,20 @@ void CpuProfilesCollection::AddPathToCurrentProfiles(
    current_profiles_semaphore_.Signal();
  }
+ 
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
 +Isolate* CpuProfilesCollection::isolate() { return profiler_->isolate(); }
 +
@@ -868,14 +849,15 @@ index 78fc97b19f..e65de5abba 100644
 +  profiles_->os().flush();
 +}
 +#endif
- 
++
  ProfileGenerator::ProfileGenerator(CpuProfilesCollection* profiles)
      : profiles_(profiles) {}
-@@ -710,6 +727,71 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
+ 
+@@ -777,6 +795,71 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
        }
-       entries.push_back(entry);
+       stack_trace.push_back({entry, line_number});
      }
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if 0 && defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
 +    bool handled = false;
 +    do {
 +      const char* name = nullptr;
@@ -890,7 +872,7 @@ index 78fc97b19f..e65de5abba 100644
 +        std::ostream& os = profiles_->os();
 +        os << "kind = " << i::Code::Kind2String(code->kind()) << ";";
 +        os << "offset = "
-+           << static_cast<byte* const>(sample.pc) - code->instruction_start()
++           << static_cast<byte* const>(sample.pc) - code->raw_instruction_start()
 +           << ";";
 +
 +        if (code->is_stub()) {
@@ -907,7 +889,7 @@ index 78fc97b19f..e65de5abba 100644
 +          // There are some handlers and ICs that we can also find names for
 +          // with
 +          // Builtins::Lookup.
-+          name = isolate->builtins()->Lookup(code->instruction_start());
++          name = isolate->builtins()->Lookup(code->raw_instruction_start());
 +          if (name != nullptr) {
 +            os << "name = " << name << ";";
 +          }
@@ -944,10 +926,10 @@ index 78fc97b19f..e65de5abba 100644
  
    if (FLAG_prof_browser_mode) {
 diff --git a/src/profiler/profile-generator.h b/src/profiler/profile-generator.h
-index 69a85a1422..7c1037c3ce 100644
+index 3e301a4082..3cde437e46 100644
 --- a/src/profiler/profile-generator.h
 +++ b/src/profiler/profile-generator.h
-@@ -346,6 +346,10 @@ class CpuProfilesCollection {
+@@ -413,6 +413,10 @@ class CpuProfilesCollection {
    const char* GetName(Name* name) { return resource_names_.GetName(name); }
    bool IsLastProfile(const char* title);
    void RemoveProfile(CpuProfile* profile);
@@ -958,7 +940,7 @@ index 69a85a1422..7c1037c3ce 100644
  
    // Called from profile generator thread.
    void AddPathToCurrentProfiles(base::TimeTicks timestamp,
-@@ -371,6 +375,9 @@ class CpuProfilesCollection {
+@@ -437,6 +441,9 @@ class CpuProfilesCollection {
  class ProfileGenerator {
   public:
    explicit ProfileGenerator(CpuProfilesCollection* profiles);
@@ -968,7 +950,7 @@ index 69a85a1422..7c1037c3ce 100644
  
    void RecordTickSample(const TickSample& sample);
  
-@@ -382,6 +389,9 @@ class ProfileGenerator {
+@@ -448,6 +455,9 @@ class ProfileGenerator {
  
    CpuProfilesCollection* profiles_;
    CodeMap code_map_;

@@ -1733,7 +1733,8 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
 void LLVMTFBuilder::VisitRoot(int id, int index) {
   output().setLineNumber(id);
   LValue offset = output().buildGEPWithByteOffset(
-      output().root(), output().constInt32(index * sizeof(void*)),
+      output().root(),
+      output().constInt32(index * sizeof(void*) - kRootRegisterBias),
       pointerType(output().taggedType()));
   LValue value = output().buildLoad(offset);
   GetImpl(current_bb_)->set_value(id, value);
