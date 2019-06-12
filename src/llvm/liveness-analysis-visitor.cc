@@ -23,7 +23,7 @@ struct LivenessBasicBlockImpl {
   std::set<int> defines;
 };
 
-static inline LivenessBasicBlockImpl* GetImpl(BasicBlock* bb) {
+static inline LivenessBasicBlockImpl* GetLAImpl(BasicBlock* bb) {
   return bb->GetImpl<LivenessBasicBlockImpl>();
 }
 
@@ -53,7 +53,7 @@ void LivenessAnalysisVisitor::Define(int id) { current_defines_.insert(id); }
 void LivenessAnalysisVisitor::EndBlock() {
   std::copy(current_references_.begin(), current_references_.end(),
             std::back_inserter(current_basic_block_->liveins()));
-  GetImpl(current_basic_block_)->defines.swap(current_defines_);
+  GetLAImpl(current_basic_block_)->defines.swap(current_defines_);
   current_basic_block_ = nullptr;
   current_references_.clear();
 }
@@ -75,7 +75,7 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
       std::set_union(liveins.begin(), liveins.end(),
                      successor->liveins().begin(), successor->liveins().end(),
                      std::back_inserter(result));
-      auto& phis = GetImpl(successor)->phis;
+      auto& phis = GetLAImpl(successor)->phis;
       for (auto& phi : phis) {
         if (phi.from == now->id()) {
           auto insert_point =
@@ -91,13 +91,13 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
     }
     // clear those defined in this basic block.
     std::vector<int> result;
-    std::copy_if(
-        liveins.begin(), liveins.end(), std::back_inserter(result),
-        [&](int value) {
-          if (GetImpl(now)->defines.end() == GetImpl(now)->defines.find(value))
-            return true;
-          return false;
-        });
+    std::copy_if(liveins.begin(), liveins.end(), std::back_inserter(result),
+                 [&](int value) {
+                   if (GetLAImpl(now)->defines.end() ==
+                       GetLAImpl(now)->defines.find(value))
+                     return true;
+                   return false;
+                 });
 
     if (CompareLiveins(now->liveins(), result)) {
       // FIXME: use marker to optimize.
@@ -112,7 +112,7 @@ void LivenessAnalysisVisitor::CalculateLivesIns() {
   for (auto it = basicBlockManager().rpo().begin();
        it != basicBlockManager().rpo().end(); ++it) {
     BasicBlock* now = basicBlockManager().findBB(*it);
-    auto& phis = GetImpl(now)->phis;
+    auto& phis = GetLAImpl(now)->phis;
     auto& liveins = now->liveins();
     for (auto& phi : phis) {
       auto insert_point =
@@ -516,7 +516,7 @@ void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
   int i = 0;
   for (BasicBlock* pred : current_basic_block_->predecessors()) {
     int value = operands[i++];
-    GetImpl(current_basic_block_)->phis.push_back({pred->id(), value});
+    GetLAImpl(current_basic_block_)->phis.push_back({pred->id(), value});
   }
 }
 

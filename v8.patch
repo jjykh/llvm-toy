@@ -1,5 +1,5 @@
 diff --git a/BUILD.gn b/BUILD.gn
-index 76a06cfa59..c1ef0800b5 100644
+index 76a06cfa59..7d44731d15 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -162,8 +162,21 @@ declare_args() {
@@ -42,7 +42,7 @@ index 76a06cfa59..c1ef0800b5 100644
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1440,6 +1464,55 @@ v8_source_set("v8_initializers") {
+@@ -1440,6 +1464,54 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
@@ -90,7 +90,6 @@ index 76a06cfa59..c1ef0800b5 100644
 +      "src/llvm/tf/v8-pass-manager.cc",
 +      "src/llvm/tf/v8-pass-manager.h",
 +    ]
-+    jumbo_excluded_sources += llvm_sources
 +    sources += llvm_sources
 +    configs += [ ":llvm_configs" ]
 +  }
@@ -98,7 +97,7 @@ index 76a06cfa59..c1ef0800b5 100644
  }
  
  v8_source_set("v8_init") {
-@@ -1460,6 +1533,11 @@ v8_source_set("v8_init") {
+@@ -1460,6 +1532,11 @@ v8_source_set("v8_init") {
    }
  
    configs = [ ":internal_config" ]
@@ -110,7 +109,7 @@ index 76a06cfa59..c1ef0800b5 100644
  }
  
  # This is split out to be a non-code containing target that the Chromium browser
-@@ -3187,6 +3265,9 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
+@@ -3187,6 +3264,9 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
      ]
  
      configs = [ ":internal_config" ]
