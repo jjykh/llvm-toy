@@ -135,11 +135,13 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
 
     tf_llvm::Output output(compiler_state);
     tf_llvm::RegisterParameterDesc input_desc;
-    for (int i = 1; i <= call_descriptor->ParameterCount(); ++i) {
+    for (size_t i = 0; i <= call_descriptor->ParameterCount(); ++i) {
       compiler::LinkageLocation location = call_descriptor->GetInputLocation(i);
-      CHECK((location.IsRegister() && !location.IsAnyRegister()) ||
-            location.IsCallerFrameSlot());
-      input_desc.emplace_back(location.GetLocation(),
+      CHECK((location.IsRegister()) || location.IsCallerFrameSlot());
+      CHECK(!location.IsAnyRegister() || (i == 0));
+      uint32_t linkage_location = location.GetLocation();
+      if (location.IsAnyRegister()) linkage_location = 0;
+      input_desc.emplace_back(linkage_location,
                               GetLLVMType(output.repo(), location.GetType()));
     }
     output.initializeBuild(

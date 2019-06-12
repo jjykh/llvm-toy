@@ -380,11 +380,14 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitChangeUint32ToFloat64(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kChangeFloat64ToInt32:
-      UNREACHABLE();
+      visitor->VisitChangeFloat64ToInt32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kChangeFloat64ToUint32:
-      UNREACHABLE();
+      visitor->VisitChangeFloat64ToUint32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kChangeFloat64ToUint64:
-      UNREACHABLE();
+      visitor->VisitChangeFloat64ToUint64(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat64SilenceNaN:
       if (CanProduceSignalingNaN(node->InputAt(0))) {
         visitor->VisitFloat64SilenceNaN(node->id(), node->InputAt(0)->id());
@@ -430,7 +433,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kRoundInt64ToFloat64:
       UNREACHABLE();
     case compiler::IrOpcode::kBitcastFloat32ToInt32:
-      UNREACHABLE();
+      visitor->VisitBitcastFloat32ToInt32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kRoundUint32ToFloat32:
       UNREACHABLE();
     case compiler::IrOpcode::kRoundUint64ToFloat32:
@@ -440,7 +444,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kBitcastFloat64ToInt64:
       UNREACHABLE();
     case compiler::IrOpcode::kBitcastInt32ToFloat32:
-      UNREACHABLE();
+      visitor->VisitBitcastInt32ToFloat32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kBitcastInt64ToFloat64:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat32Add:
@@ -572,15 +577,20 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kFloat64RoundTiesEven:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64ExtractLowWord32:
-      UNREACHABLE();
+      visitor->VisitFloat64ExtractLowWord32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat64ExtractHighWord32:
       visitor->VisitFloat64ExtractHighWord32(node->id(),
                                              node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kFloat64InsertLowWord32:
-      UNREACHABLE();
+      visitor->VisitFloat64InsertLowWord32(node->id(), node->InputAt(0)->id(),
+                                           node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat64InsertHighWord32:
-      UNREACHABLE();
+      visitor->VisitFloat64InsertHighWord32(node->id(), node->InputAt(0)->id(),
+                                            node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kStackSlot:
       UNREACHABLE();
     case compiler::IrOpcode::kLoadStackPointer:
@@ -981,7 +991,7 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   bool met_stack = false;
   // push callee
   operands.push_back(node->InputAt(0)->id());
-  for (int i = 1; i < descriptor->InputCount(); ++i) {
+  for (size_t i = 1; i < descriptor->InputCount(); ++i) {
     compiler::LinkageLocation location = descriptor->GetInputLocation(i);
     if (location.IsRegister()) {
       CHECK(!met_stack);

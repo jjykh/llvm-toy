@@ -2,6 +2,7 @@
 
 #include "src/llvm/output.h"
 #include <llvm-c/DebugInfo.h>
+#include "src/frames.h"
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/log.h"
 
@@ -17,6 +18,7 @@ Output::Output(CompilerState& state)
       root_(nullptr),
       fp_(nullptr),
       parent_fp_(nullptr),
+      bitcast_space_(nullptr),
       subprogram_(nullptr),
       stack_parameter_count_(0) {}
 
@@ -27,7 +29,6 @@ Output::~Output() {
 
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
-  int len;
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
@@ -39,8 +40,6 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   prologue_ = appendBasicBlock("Prologue");
   positionToBBEnd(prologue_);
   // build parameters
-  char empty[] = "\0";
-  char constraint[256];
   if (v8cc) {
     root_ = LLVMGetParam(state_.function_, 10);
     fp_ = LLVMGetParam(state_.function_, 11);
@@ -73,6 +72,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     ++j;
   }
   EMASSERT(j == stack_parameters.rend());
+  bitcast_space_ = buildAlloca(arrayType(repo().int8, 16));
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
@@ -109,7 +109,6 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
     setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
 
   if (state_.needs_frame_) {
-    LLVMAttributeRef attribute;
     static const char kJSFunctionCall[] = "js-function-call";
     static const char kJSStubCall[] = "js-stub-call";
     switch (state_.prologue_kind_) {
@@ -117,10 +116,13 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSFunctionCall,
                                            nullptr);
         break;
-      case PrologueKind::Stub:
+      case PrologueKind::Stub: {
+        char stub_marker[16];
+        snprintf(stub_marker, sizeof(stub_marker), "%d",
+                 StackFrame::TypeToMarker(StackFrame::STUB));
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSStubCall,
-                                           nullptr);
-        break;
+                                           stub_marker);
+      } break;
       default:
         __builtin_trap();
     }
@@ -357,6 +359,11 @@ LValue Output::buildGEPWithByteOffset(LValue base, LValue offset,
   return buildBitCast(dst_ref8, dstType);
 }
 
+LValue Output::buildGEP(LValue base, LValue offset) {
+  LValue dst = LLVMBuildGEP(builder_, base, &offset, 1, "");
+  return dst;
+}
+
 LValue Output::buildBitCast(LValue val, LType type) {
   return v8::internal::tf_llvm::buildBitCast(builder_, val, type);
 }
@@ -422,6 +429,7 @@ void Output::setLineNumber(int linenum) {
 #endif
 }
 
+#if defined(FEATURE_SAMPLE_PGO)
 static bool ValueKindIsFind(LValue v) {
   switch (LLVMGetValueKind(v)) {
     case LLVMConstantExprValueKind:
@@ -429,9 +437,11 @@ static bool ValueKindIsFind(LValue v) {
     case LLVMConstantFPValueKind:
     case LLVMConstantPointerNullValueKind:
       return false;
+    default:
+      return true;
   }
-  return true;
 }
+#endif
 
 LValue Output::setInstrDebugLoc(LValue v) {
 #if defined(FEATURE_SAMPLE_PGO)

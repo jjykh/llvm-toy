@@ -37,6 +37,7 @@ class Output {
   LValue constTagged(void*);
   LValue buildStructGEP(LValue structVal, unsigned field);
   LValue buildGEPWithByteOffset(LValue base, LValue offset, LType dstType);
+  LValue buildGEP(LValue base, LValue offset);
   LValue buildLoad(LValue toLoad);
   LValue buildStore(LValue val, LValue pointer);
   LValue buildNeg(LValue val);
@@ -114,6 +115,7 @@ class Output {
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
   inline LValue parent_fp() { return parent_fp_; }
+  inline LValue bitcast_space() { return bitcast_space_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
 
  private:
@@ -126,6 +128,7 @@ class Output {
   LValue root_;
   LValue fp_;
   LValue parent_fp_;
+  LValue bitcast_space_;
   LLVMMetadataRef subprogram_;
   size_t stack_parameter_count_;
   std::vector<LValue> registerParameters_;

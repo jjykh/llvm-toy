@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <assert.h>
 #include <string.h>
@@ -18,10 +19,6 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 typedef CompilerState State;
-
-static inline size_t round_up(size_t s, unsigned alignment) {
-  return (s + alignment - 1) & ~(alignment - 1);
-}
 
 static uint8_t* mmAllocateCodeSection(void* opaqueState, uintptr_t size,
                                       unsigned alignment, unsigned,

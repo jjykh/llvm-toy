@@ -1158,14 +1158,19 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      MachineBasicBlock::iterator AfterPush = std::next(GPRCS1Push);
      unsigned PushSize = sizeOfSPAdjustment(*GPRCS1Push);
      emitRegPlusImmediate(!AFI->isThumbFunction(), MBB, AfterPush,
-@@ -609,6 +627,19 @@
+@@ -609,6 +627,24 @@
            .addCFIIndex(CFIIndex)
            .setMIFlags(MachineInstr::FrameSetup);
      }
 +    if (AFI->isJSStub()) {
 +      MachineBasicBlock::iterator MI = AfterPush;
++      int Marker;
++      MF.getFunction()
++          .getFnAttribute("js-stub-call")
++          .getValueAsString()
++          .getAsInteger(10, Marker);
 +      BuildMI(MBB, MI, dl, TII.get(ARM::MOVi), ARM::LR)
-+          .addImm(22)
++          .addImm(Marker)
 +          .add(predOps(ARMCC::AL))
 +          .add(condCodeOp());
 +      BuildMI(MBB, MI, dl, TII.get(ARM::STRi12))
@@ -1178,7 +1183,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    }
  
    // Now that the prologue's actual instructions are finalised, we can insert
-@@ -808,6 +839,10 @@
+@@ -808,6 +844,10 @@
                   AFI->getDPRCalleeSavedGapSize() +
                   AFI->getDPRCalleeSavedAreaSize());
  
@@ -1189,7 +1194,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      // Reset SP based on frame pointer only if the stack frame extends beyond
      // frame pointer stack slot or target is ELF and the function has FP.
      if (AFI->shouldRestoreSPFromFP()) {
-@@ -951,6 +986,9 @@
+@@ -951,6 +991,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1199,7 +1204,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1093,9 @@
+@@ -1055,7 +1098,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1210,7 +1215,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1429,8 +1469,18 @@
+@@ -1429,8 +1474,18 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1231,7 +1236,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, PushOpc, PushOneOpc, false, &isARMArea2Register, 0,
                 MachineInstr::FrameSetup);
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
-@@ -1461,7 +1511,6 @@
+@@ -1461,7 +1516,6 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1239,7 +1244,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1611,6 +1660,21 @@
+@@ -1611,6 +1665,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1261,7 +1266,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1847,10 @@
+@@ -1783,7 +1852,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1273,7 +1278,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1864,6 @@
+@@ -1797,7 +1869,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1281,7 +1286,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2577,25 @@
+@@ -2511,3 +2582,25 @@
    MF.verify();
  #endif
  }

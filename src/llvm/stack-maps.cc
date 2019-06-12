@@ -183,8 +183,9 @@ static std::string LocationKind(const StackMaps::Location& location) {
       return "Constant";
     case StackMaps::Location::ConstantIndex:
       return "ConstantIndex";
+    default:
+      __builtin_trap();
   }
-  __builtin_trap();
 }
 
 std::string StackMaps::RecordMapToString(const RecordMap& rm) {

@@ -83,7 +83,7 @@ LLVMTFBuilderBasicBlockImpl* EnsureImpl(BasicBlock* bb) {
   return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
 }
 
-LLVMTFBuilderBasicBlockImpl* GetImpl(BasicBlock* bb) {
+static LLVMTFBuilderBasicBlockImpl* GetImpl(BasicBlock* bb) {
   return bb->GetImpl<LLVMTFBuilderBasicBlockImpl>();
 }
 
@@ -127,7 +127,7 @@ class CallResolver {
  public:
   CallResolver(BasicBlock* current_bb, Output& output, int id,
                StackMapInfoMap* stack_map_info_map, int patchid);
-  ~CallResolver() = default;
+  virtual ~CallResolver() = default;
   void Resolve(bool code, const CallDescriptor& call_desc,
                const OperandsVector& operands);
 
@@ -223,8 +223,7 @@ class ContinuationResolver {
 class StoreBarrierResolver final : public ContinuationResolver {
  public:
   StoreBarrierResolver(BasicBlock* bb, Output& output, int id,
-                       StackMapInfoMap* stack_map_info_map, int patch_point_id,
-                       bool needs_frame);
+                       StackMapInfoMap* stack_map_info_map, int patch_point_id);
   void Resolve(LValue base, LValue offset, LValue value,
                WriteBarrierKind barrier_kind);
 
@@ -236,7 +235,6 @@ class StoreBarrierResolver final : public ContinuationResolver {
   StackMapInfoMap* stack_map_info_map_;
   int id_;
   int patch_point_id_;
-  bool needs_frame_;
 };
 
 class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
@@ -503,11 +501,10 @@ StoreBarrierResolver::StoreBarrierResolver(BasicBlock* bb, Output& output,
 
                                            int id,
                                            StackMapInfoMap* stack_map_info_map,
-                                           int patch_point_id, bool needs_frame)
+                                           int patch_point_id)
     : ContinuationResolver(bb, output, id),
       stack_map_info_map_(stack_map_info_map),
-      patch_point_id_(patch_point_id),
-      needs_frame_(needs_frame) {}
+      patch_point_id_(patch_point_id) {}
 
 void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
                                    WriteBarrierKind barrier_kind) {
@@ -653,10 +650,11 @@ void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
 
 void TruncateFloat64ToWord32Resolver::SlowPath(LValue fp, LBasicBlock slow_bb) {
   output().positionToBBEnd(slow_bb);
-  LValue fp_storage = output().buildAlloca(typeOf(fp));
+  LValue fp_storage =
+      output().buildBitCast(output().bitcast_space(), pointerType(typeOf(fp)));
   output().buildStore(fp, fp_storage);
   LValue fp_bitcast_pointer_low =
-      output().buildBitCast(fp_storage, output().repo().ref32);
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
   LValue fp_low = output().buildLoad(fp_bitcast_pointer_low);
   LValue fp_bitcast_pointer_high = output().buildGEPWithByteOffset(
       fp_bitcast_pointer_low, output().constInt32(sizeof(int32_t)),
@@ -992,7 +990,7 @@ void LLVMTFBuilder::VisitGoto(int bid) {
 
 void LLVMTFBuilder::VisitParameter(int id, int pid) {
   output().setLineNumber(id);
-  LValue value = output().registerParameter(pid);
+  LValue value = output().registerParameter(pid + 1);
   GetImpl(current_bb_)->set_value(id, value);
 }
 
@@ -1121,6 +1119,7 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
           castType = output().repo().int32;
           break;
         case MachineRepresentation::kWord32:
+        case MachineRepresentation::kTaggedSigned:
           break;
         default:
           LLVM_BUILTIN_TRAP;
@@ -1141,6 +1140,7 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
         default:
           LLVM_BUILTIN_TRAP;
       }
+      break;
     default:
       break;
   }
@@ -1159,16 +1159,24 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   LType value_type = typeOf(llvm_val);
   LType pointer_element_type = getElementType(typeOf(pointer));
   if (pointer_element_type != value_type) {
-    EMASSERT(value_type = output().repo().intPtr);
-    LLVMTypeKind kind = LLVMGetTypeKind(pointer_element_type);
-    if (kind == LLVMPointerTypeKind)
+    if (value_type == output().repo().intPtr) {
+      LLVMTypeKind kind = LLVMGetTypeKind(pointer_element_type);
+      if (kind == LLVMPointerTypeKind)
+        llvm_val =
+            output().buildCast(LLVMIntToPtr, llvm_val, pointer_element_type);
+      else if ((pointer_element_type == output().repo().int8) ||
+               (pointer_element_type == output().repo().int16))
+        llvm_val =
+            output().buildCast(LLVMTrunc, llvm_val, pointer_element_type);
+      else
+        LLVM_BUILTIN_TRAP;
+    } else if ((value_type == output().taggedType()) &&
+               (pointer_element_type == output().repo().intPtr)) {
       llvm_val =
-          output().buildCast(LLVMIntToPtr, llvm_val, pointer_element_type);
-    else if ((pointer_element_type == output().repo().int8) ||
-             (pointer_element_type == output().repo().int16))
-      llvm_val = output().buildCast(LLVMTrunc, llvm_val, pointer_element_type);
-    else
-      __builtin_trap();
+          output().buildCast(LLVMPtrToInt, llvm_val, pointer_element_type);
+    } else {
+      LLVM_BUILTIN_TRAP;
+    }
   }
   LValue val = output().buildStore(llvm_val, pointer);
   LType pointer_type = typeOf(pointer);
@@ -1179,8 +1187,7 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   GetImpl(current_bb_)->set_value(id, val);
   if (barrier != kNoWriteBarrier) {
     StoreBarrierResolver resolver(current_bb_, output(), id,
-                                  stack_map_info_map_, state_point_id_next_++,
-                                  basic_block_manager().needs_frame());
+                                  stack_map_info_map_, state_point_id_next_++);
     resolver.Resolve(GetImpl(current_bb_)->value(base), pointer, llvm_val,
                      barrier);
   }
@@ -1218,6 +1225,52 @@ void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
                                      output().repo().doubleType));
 }
 
+void LLVMTFBuilder::VisitChangeFloat64ToInt32(int id, int e) {
+  output().setLineNumber(id);
+  GetImpl(current_bb_)
+      ->set_value(id,
+                  output().buildCast(LLVMFPToSI, GetImpl(current_bb_)->value(e),
+                                     output().repo().int32));
+}
+
+void LLVMTFBuilder::VisitChangeFloat64ToUint32(int id, int e) {
+  output().setLineNumber(id);
+  GetImpl(current_bb_)
+      ->set_value(id,
+                  output().buildCast(LLVMFPToUI, GetImpl(current_bb_)->value(e),
+                                     output().repo().int32));
+}
+
+void LLVMTFBuilder::VisitChangeFloat64ToUint64(int id, int e) {
+  output().setLineNumber(id);
+  GetImpl(current_bb_)
+      ->set_value(id,
+                  output().buildCast(LLVMFPToUI, GetImpl(current_bb_)->value(e),
+                                     output().repo().int64));
+}
+
+void LLVMTFBuilder::VisitBitcastInt32ToFloat32(int id, int e) {
+  output().setLineNumber(id);
+  LValue value_storage =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
+  output().buildStore(GetImpl(current_bb_)->value(e), value_storage);
+  LValue float_ref =
+      output().buildBitCast(output().bitcast_space(), output().repo().refFloat);
+  LValue result = output().buildLoad(float_ref);
+  GetImpl(current_bb_)->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitBitcastFloat32ToInt32(int id, int e) {
+  output().setLineNumber(id);
+  LValue value_storage =
+      output().buildBitCast(output().bitcast_space(), output().repo().refFloat);
+  output().buildStore(GetImpl(current_bb_)->value(e), value_storage);
+  LValue word_ref =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
+  LValue result = output().buildLoad(word_ref);
+  GetImpl(current_bb_)->set_value(id, result);
+}
+
 void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
   output().setLineNumber(id);
   TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
@@ -1245,13 +1298,26 @@ void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
 void LLVMTFBuilder::VisitFloat64ExtractHighWord32(int id, int e) {
   output().setLineNumber(id);
   LValue value = GetImpl(current_bb_)->value(e);
-  LValue value_storage = output().buildAlloca(output().repo().doubleType);
+  LValue value_storage = output().buildBitCast(output().bitcast_space(),
+                                               output().repo().refDouble);
   output().buildStore(value, value_storage);
   LValue value_bitcast_pointer_high = output().buildGEPWithByteOffset(
-      value_storage, output().constInt32(sizeof(int32_t)),
+      output().bitcast_space(), output().constInt32(sizeof(int32_t)),
       output().repo().ref32);
   LValue value_high = output().buildLoad(value_bitcast_pointer_high);
   GetImpl(current_bb_)->set_value(id, value_high);
+}
+
+void LLVMTFBuilder::VisitFloat64ExtractLowWord32(int id, int e) {
+  output().setLineNumber(id);
+  LValue value = GetImpl(current_bb_)->value(e);
+  LValue value_storage = output().buildBitCast(output().bitcast_space(),
+                                               output().repo().refDouble);
+  output().buildStore(value, value_storage);
+  LValue value_bitcast_pointer_low =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
+  LValue value_low = output().buildLoad(value_bitcast_pointer_low);
+  GetImpl(current_bb_)->set_value(id, value_low);
 }
 
 void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
@@ -1340,6 +1406,33 @@ void LLVMTFBuilder::VisitInt32Mod(int id, int e1, int e2) {
   LValue result = output().buildSub(e1_value, mul);
 #endif
   GetImpl(current_bb_)->set_value(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat64InsertLowWord32(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue float64_value = GetImpl(current_bb_)->value(e1);
+  LValue word32_value = GetImpl(current_bb_)->value(e2);
+  LValue float64_storage = output().buildBitCast(
+      output().bitcast_space(), pointerType(typeOf(float64_value)));
+  output().buildStore(float64_value, float64_storage);
+  LValue word32_ref =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
+  output().buildStore(word32_value, word32_ref);
+  GetImpl(current_bb_)->set_value(id, output().buildLoad(float64_storage));
+}
+
+void LLVMTFBuilder::VisitFloat64InsertHighWord32(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue float64_value = GetImpl(current_bb_)->value(e1);
+  LValue word32_value = GetImpl(current_bb_)->value(e2);
+  LValue float64_storage = output().buildBitCast(
+      output().bitcast_space(), pointerType(typeOf(float64_value)));
+  output().buildStore(float64_value, float64_storage);
+  LValue word32_ref =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref32);
+  word32_ref = output().buildGEP(word32_ref, output().constInt32(1));
+  output().buildStore(word32_value, word32_ref);
+  GetImpl(current_bb_)->set_value(id, output().buildLoad(float64_storage));
 }
 
 void LLVMTFBuilder::VisitInt32MulWithOverflow(int id, int e1, int e2) {

@@ -10,11 +10,7 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 
-enum class StackMapInfoType {
-  kCallInfo,
-  kStoreBarrier,
-  kReturn
-};
+enum class StackMapInfoType { kCallInfo, kStoreBarrier, kReturn };
 
 class StackMapInfo {
  public:
