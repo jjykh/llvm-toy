@@ -269,47 +269,6 @@ void CodeGeneratorLLVM::ProcessForConstantLoad(
         masm_.reset_pc(std::get<1>(entry));
         masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
         break;
-      case LoadConstantRecorder::kIsolateExternalReference: {
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-      } break;
-      case LoadConstantRecorder::kRecordStubCodeConstant: {
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
-      } break;
-      case LoadConstantRecorder::kModuloExternalReference: {
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-      } break;
-      default:
-        UNREACHABLE();
-    }
-  }
-  for (auto& entry : work_list) {
-    switch (std::get<2>(entry)) {
-      case LoadConstantRecorder::kHeapConstant:
-      case LoadConstantRecorder::kCodeConstant:
-      case LoadConstantRecorder::kExternalReference:
-        break;
-      case LoadConstantRecorder::kIsolateExternalReference: {
-        ExternalReference isolate_external_reference =
-            ExternalReference::isolate_address(isolate_);
-        masm_.instr_at_put(
-            std::get<0>(entry),
-            static_cast<Instr>(isolate_external_reference.address()));
-      } break;
-      case LoadConstantRecorder::kRecordStubCodeConstant: {
-        Callable const callable =
-            Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
-        masm_.instr_at_put(std::get<0>(entry),
-                           reinterpret_cast<Instr>(callable.code().location()));
-      } break;
-      case LoadConstantRecorder::kModuloExternalReference: {
-        ExternalReference modulo_reference =
-            ExternalReference::mod_two_doubles_operation();
-        masm_.instr_at_put(std::get<0>(entry),
-                           static_cast<Instr>(modulo_reference.address()));
-      } break;
       default:
         UNREACHABLE();
     }

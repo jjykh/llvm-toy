@@ -47,6 +47,7 @@ struct LLVMTFBuilderBasicBlockImpl {
   LBasicBlock native_bb = nullptr;
   LBasicBlock continuation = nullptr;
   LValue landing_pad = nullptr;
+
   bool started = false;
   bool ended = false;
   bool exception_block = false;
@@ -225,12 +226,14 @@ class StoreBarrierResolver final : public ContinuationResolver {
   StoreBarrierResolver(BasicBlock* bb, Output& output, int id,
                        StackMapInfoMap* stack_map_info_map, int patch_point_id);
   void Resolve(LValue base, LValue offset, LValue value,
-               WriteBarrierKind barrier_kind);
+               WriteBarrierKind barrier_kind, std::function<LValue()> isolate,
+               std::function<LValue()> record_write);
 
  private:
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
-                      LValue save_fp_mode);
+                      LValue save_fp_mode, std::function<LValue()> isolate,
+                      std::function<LValue()> record_write);
   void CheckSmi(LValue value);
   StackMapInfoMap* stack_map_info_map_;
   int id_;
@@ -509,7 +512,9 @@ StoreBarrierResolver::StoreBarrierResolver(BasicBlock* bb, Output& output,
       patch_point_id_(patch_point_id) {}
 
 void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
-                                   WriteBarrierKind barrier_kind) {
+                                   WriteBarrierKind barrier_kind,
+                                   std::function<LValue()> isolate,
+                                   std::function<LValue()> record_write) {
   CreateContination();
   CheckPageFlag(base, MemoryChunk::kPointersFromHereAreInterestingMask);
   if (barrier_kind > kPointerWriteBarrier) {
@@ -524,7 +529,8 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
   CallPatchpoint(
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
-      output().constIntPtr(static_cast<int>(save_fp_mode) << 1));
+      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), isolate,
+      record_write);
   output().buildBr(impl_->continuation);
   output().positionToBBEnd(impl_->continuation);
 }
@@ -558,20 +564,20 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
   output().positionToBBEnd(continuation);
 }
 
-void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
-                                          LValue remembered_set_action,
-                                          LValue save_fp_mode) {
+void StoreBarrierResolver::CallPatchpoint(
+    LValue base, LValue offset, LValue remembered_set_action,
+    LValue save_fp_mode, std::function<LValue()> get_isolate,
+    std::function<LValue()> get_record_write) {
   // blx ip
   // 1 instructions.
   int instructions_count = 1;
   int patchid = patch_point_id_;
   // will not be true again.
-  LValue isolate = output().buildLoadMagic(
-      output().repo().ref8,
-      LoadConstantRecorder::IsolateExternalReferenceMagic());
-  LValue stub = output().buildLoadMagic(
-      output().repo().ref8,
-      LoadConstantRecorder::RecordStubCodeConstantMagic());
+  LValue isolate = get_isolate();
+  LValue stub = get_record_write();
+  LValue stub_entry = output().buildGEPWithByteOffset(
+      stub, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
+      output().repo().ref8);
 
   LValue call = output().buildCall(
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
@@ -579,7 +585,7 @@ void StoreBarrierResolver::CallPatchpoint(LValue base, LValue offset,
       constNull(output().repo().ref8), output().constInt32(8), base, offset,
       isolate, remembered_set_action, save_fp_mode,
       LLVMGetUndef(typeOf(output().root())),
-      LLVMGetUndef(typeOf(output().fp())), stub);
+      LLVMGetUndef(typeOf(output().fp())), stub_entry);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
   std::unique_ptr<StackMapInfo> info(
       new StackMapInfo(StackMapInfoType::kStoreBarrier));
@@ -765,9 +771,12 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       current_bb_(nullptr),
       stack_map_info_map_(&stack_map_info_map),
       load_constant_recorder_(&load_constant_recorder),
+      get_isolate_function_(nullptr),
+      get_record_write_function_(nullptr),
+      get_mod_two_double_function_(nullptr),
       state_point_id_next_(0) {}
 
-void LLVMTFBuilder::End() {
+void LLVMTFBuilder::End(BuiltinFunctionClient* builtin_function_client) {
   EMASSERT(!!current_bb_);
   EndCurrentBlock();
   ProcessPhiWorkList();
@@ -777,6 +786,10 @@ void LLVMTFBuilder::End() {
   output().finalizeDebugInfo();
   v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
       basic_block_manager());
+
+  BuildGetIsolateFunction(builtin_function_client);
+  BuildGetModTwoDoubleFunction(builtin_function_client);
+  BuildGetRecordWriteBuiltin(builtin_function_client);
 }
 
 void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
@@ -1192,7 +1205,9 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
     StoreBarrierResolver resolver(current_bb_, output(), id,
                                   stack_map_info_map_, state_point_id_next_++);
     resolver.Resolve(GetBuilderImpl(current_bb_)->value(base), pointer,
-                     llvm_val, barrier);
+                     llvm_val, barrier,
+                     [this]() { return CallGetIsolateFunction(); },
+                     [this]() { return CallGetRecordWriteBuiltin(); });
   }
 }
 
@@ -1645,8 +1660,7 @@ void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   output().setLineNumber(id);
-  LValue value =
-      output().buildLoadMagic(pointerType(output().repo().int8), magic);
+  LValue value = output().buildLoadMagic(output().repo().ref8, magic);
   GetBuilderImpl(current_bb_)->set_value(id, value);
   load_constant_recorder_->Register(magic,
                                     LoadConstantRecorder::kExternalReference);
@@ -1745,6 +1759,24 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
   GetBuilderImpl(current_bb_)->set_value(id, value);
 }
 
+void LLVMTFBuilder::VisitRootRelative(int id, int offset, bool tagged) {
+  output().setLineNumber(id);
+  LType type =
+      pointerType(tagged ? output().taggedType() : output().repo().ref8);
+  LValue offset_value = output().buildGEPWithByteOffset(
+      output().root(), output().constInt32(offset), type);
+  LValue value = output().buildLoad(offset_value);
+  GetBuilderImpl(current_bb_)->set_value(id, value);
+}
+
+void LLVMTFBuilder::VisitRootOffset(int id, int offset) {
+  output().setLineNumber(id);
+  LType type = output().repo().ref8;
+  LValue offset_value = output().buildGEPWithByteOffset(
+      output().root(), output().constInt32(offset), type);
+  GetBuilderImpl(current_bb_)->set_value(id, offset_value);
+}
+
 void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
   output().setLineNumber(id);
   LValue value = output().buildLoadMagic(output().repo().ref8, magic);
@@ -1807,9 +1839,8 @@ void LLVMTFBuilder::VisitFloat64Mod(int id, int e1, int e2) {
   output().setLineNumber(id);
   LType double_type = output().repo().doubleType;
   LType function_type = functionType(double_type, double_type, double_type);
-  LValue function = output().buildLoadMagic(
-      pointerType(function_type),
-      LoadConstantRecorder::ModuloExternalReferenceMagic());
+  LValue function = CallGetModTwoDoubleFunction();
+  function = output().buildBitCast(function, pointerType(function_type));
   LValue e1_value = GetBuilderImpl(current_bb_)->value(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->value(e2);
   LValue result = output().buildCall(function, e1_value, e2_value);
@@ -1886,6 +1917,70 @@ void LLVMTFBuilder::VisitReturn(int id, int pop_count,
 #endif
   } else
     __builtin_trap();
+}
+
+LValue LLVMTFBuilder::CallGetIsolateFunction() {
+  if (!get_isolate_function_) {
+    get_isolate_function_ = output().addFunction(
+        "GetIsolate",
+        functionType(output().repo().ref8, pointerType(output().taggedType())));
+    LLVMSetLinkage(get_isolate_function_, LLVMInternalLinkage);
+  }
+  return output().buildCall(get_isolate_function_, output().root());
+}
+
+LValue LLVMTFBuilder::CallGetRecordWriteBuiltin() {
+  if (!get_record_write_function_) {
+    get_record_write_function_ = output().addFunction(
+        "GetRecordWrite", functionType(output().taggedType(),
+                                       pointerType(output().taggedType())));
+    LLVMSetLinkage(get_record_write_function_, LLVMInternalLinkage);
+  }
+  return output().buildCall(get_record_write_function_, output().root());
+}
+
+LValue LLVMTFBuilder::CallGetModTwoDoubleFunction() {
+  if (!get_mod_two_double_function_) {
+    get_mod_two_double_function_ = output().addFunction(
+        "GetModTwoDouble",
+        functionType(output().repo().ref8, pointerType(output().taggedType())));
+    LLVMSetLinkage(get_mod_two_double_function_, LLVMInternalLinkage);
+  }
+  return output().buildCall(get_mod_two_double_function_, output().root());
+}
+
+void LLVMTFBuilder::BuildFunctionUtil(LValue func,
+                                      std::function<void(LValue)> f) {
+  if (func) {
+    LBasicBlock bb = output().appendBasicBlock(func);
+    output().positionToBBEnd(bb);
+    f(LLVMGetParam(func, 0));
+  }
+}
+
+void LLVMTFBuilder::BuildGetIsolateFunction(
+    BuiltinFunctionClient* builtin_function_client) {
+  BuildFunctionUtil(
+      get_isolate_function_, [this, builtin_function_client](LValue root) {
+        builtin_function_client->BuildGetIsolateFunction(output(), root);
+      });
+}
+
+void LLVMTFBuilder::BuildGetRecordWriteBuiltin(
+    BuiltinFunctionClient* builtin_function_client) {
+  BuildFunctionUtil(
+      get_record_write_function_, [this, builtin_function_client](LValue root) {
+        builtin_function_client->BuildGetRecordWriteFunction(output(), root);
+      });
+}
+
+void LLVMTFBuilder::BuildGetModTwoDoubleFunction(
+    BuiltinFunctionClient* builtin_function_client) {
+  BuildFunctionUtil(get_mod_two_double_function_,
+                    [this, builtin_function_client](LValue root) {
+                      builtin_function_client->BuildGetModTwoDoubleFunction(
+                          output(), root);
+                    });
 }
 }  // namespace tf_llvm
 }  // namespace internal

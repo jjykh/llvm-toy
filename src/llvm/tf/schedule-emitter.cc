@@ -11,6 +11,7 @@
 #include "src/llvm/log.h"
 #include "src/llvm/tf/tf-visitor.h"
 #include "src/objects-inl.h"
+#include "src/snapshot/serializer-common.h"
 
 namespace v8 {
 namespace internal {
@@ -105,6 +106,24 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kExternalConstant: {
       const ExternalReference& external_reference =
           compiler::OpParameter<ExternalReference>(node->op());
+      if (TurboAssemblerBase::IsAddressableThroughRootRegister(
+              isolate_, external_reference)) {
+        intptr_t offset =
+            TurboAssemblerBase::RootRegisterOffsetForExternalReference(
+                isolate_, external_reference);
+        visitor->VisitRootOffset(node->id(), offset);
+        return;
+      } else {
+        ExternalReferenceEncoder encoder(isolate_);
+        ExternalReferenceEncoder::Value v =
+            encoder.Encode(external_reference.address());
+        visitor->VisitRootRelative(
+            node->id(),
+            TurboAssemblerBase::RootRegisterOffsetForExternalReferenceIndex(
+                v.index()),
+            false);
+        return;
+      }
       int64_t magic = static_cast<int64_t>(external_reference.address());
       visitor->VisitExternalConstant(node->id(), magic);
     }
@@ -122,8 +141,17 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       Handle<HeapObject> object =
           compiler::OpParameter<Handle<HeapObject>>(node->op());
       Heap::RootListIndex index;
+      int builtin_index;
       if (IsMaterializableFromRoot(object, &index)) {
         visitor->VisitRoot(node->id(), static_cast<int>(index));
+        return;
+      } else if (isolate_->builtins()->IsBuiltinHandle(object,
+                                                       &builtin_index)) {
+        visitor->VisitRootRelative(
+            node->id(),
+            TurboAssemblerBase::RootRegisterOffsetForBuiltinIndex(
+                builtin_index),
+            true);
         return;
       } else if (object->IsCode()) {
         auto uses = node->uses();

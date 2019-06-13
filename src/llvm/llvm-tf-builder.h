@@ -15,11 +15,19 @@ class BasicBlock;
 class BasicBlockManager;
 class LoadConstantRecorder;
 
+class BuiltinFunctionClient {
+ public:
+  virtual ~BuiltinFunctionClient() = default;
+  virtual void BuildGetIsolateFunction(Output&, LValue root) = 0;
+  virtual void BuildGetRecordWriteFunction(Output&, LValue root) = 0;
+  virtual void BuildGetModTwoDoubleFunction(Output&, LValue root) = 0;
+};
+
 class LLVMTFBuilder final : public TFVisitor {
  public:
   explicit LLVMTFBuilder(Output&, BasicBlockManager&, StackMapInfoMap&,
                          LoadConstantRecorder&);
-  void End();
+  void End(BuiltinFunctionClient* builtin_function_client);
 
  private:
   void VisitBlock(int id, bool, const OperandsVector& predecessors) override;
@@ -43,11 +51,26 @@ class LLVMTFBuilder final : public TFVisitor {
   LValue EnsureWord32(LValue);
   LValue EnsurePhiInput(BasicBlock*, int, LType);
   LValue EnsurePhiInputAndPosition(BasicBlock*, int, LType);
+  LValue CallGetIsolateFunction();
+  LValue CallGetRecordWriteBuiltin();
+  LValue CallGetModTwoDoubleFunction();
+  void BuildGetIsolateFunction(BuiltinFunctionClient* builtin_function_client);
+  void BuildGetRecordWriteBuiltin(
+      BuiltinFunctionClient* builtin_function_client);
+  void BuildGetModTwoDoubleFunction(
+      BuiltinFunctionClient* builtin_function_client);
+  void BuildFunctionUtil(LValue func, std::function<void(LValue)> f);
+
   Output* output_;
   BasicBlockManager* basic_block_manager_;
   BasicBlock* current_bb_;
   StackMapInfoMap* stack_map_info_map_;
   LoadConstantRecorder* load_constant_recorder_;
+  // builtin_functions
+  LValue get_isolate_function_;
+  LValue get_record_write_function_;
+  LValue get_mod_two_double_function_;
+
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
   int64_t state_point_id_next_;

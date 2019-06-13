@@ -28,7 +28,8 @@ class Output {
   ~Output();
   void initializeBuild(const RegisterParameterDesc&, bool v8cc);
   void initializeFunction(const RegisterParameterDesc&, bool v8cc);
-  LBasicBlock appendBasicBlock(const char* name = nullptr);
+  LBasicBlock appendBasicBlock(const char* name = "");
+  LBasicBlock appendBasicBlock(LValue function, const char* name = "");
   void positionToBBEnd(LBasicBlock);
   void positionBefore(LValue);
   LValue constInt32(int);
@@ -104,6 +105,7 @@ class Output {
   LValue buildLandingPad();
   void setLineNumber(int linenum);
   void finalizeDebugInfo();
+  LValue addFunction(const char* name, LType type);
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }

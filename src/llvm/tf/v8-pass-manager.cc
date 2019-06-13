@@ -92,6 +92,84 @@ static void disassemble(CompilerState& state) {
   }
 }
 
+namespace {
+class BuiltinFunctionClientImpl : public BuiltinFunctionClient {
+ public:
+  BuiltinFunctionClientImpl(Isolate*);
+  ~BuiltinFunctionClientImpl() = default;
+  void BuildGetIsolateFunction(Output&, LValue root) override;
+  void BuildGetRecordWriteFunction(Output&, LValue root) override;
+  void BuildGetModTwoDoubleFunction(Output&, LValue root) override;
+
+ private:
+  void BuildLoadExternalRef(Output& output,
+                            ExternalReference external_reference, LValue root);
+
+  Isolate* isolate_;
+};
+
+BuiltinFunctionClientImpl::BuiltinFunctionClientImpl(Isolate* isolate)
+    : isolate_(isolate) {}
+void BuiltinFunctionClientImpl::BuildGetIsolateFunction(Output& output,
+                                                        LValue root) {
+  ExternalReference isolate_external_reference =
+      ExternalReference::isolate_address(isolate_);
+  BuildLoadExternalRef(output, isolate_external_reference, root);
+}
+
+void BuiltinFunctionClientImpl::BuildGetRecordWriteFunction(Output& output,
+                                                            LValue root) {
+  Callable const callable =
+      Builtins::CallableFor(isolate_, Builtins::kRecordWrite);
+  Handle<HeapObject> object = callable.code();
+  int builtin_index;
+
+  EMASSERT(isolate_->builtins()->IsBuiltinHandle(object, &builtin_index));
+
+  int offset =
+      TurboAssemblerBase::RootRegisterOffsetForBuiltinIndex(builtin_index);
+
+  LType type = pointerType(output.taggedType());
+  LValue offset_value =
+      output.buildGEPWithByteOffset(root, output.constInt32(offset), type);
+  LValue value = output.buildLoad(offset_value);
+  output.buildRet(value);
+}
+
+void BuiltinFunctionClientImpl::BuildGetModTwoDoubleFunction(Output& output,
+                                                             LValue root) {
+  ExternalReference modulo_reference =
+      ExternalReference::mod_two_doubles_operation();
+  BuildLoadExternalRef(output, modulo_reference, root);
+}
+
+void BuiltinFunctionClientImpl::BuildLoadExternalRef(
+    Output& output, ExternalReference external_reference, LValue root) {
+  if ((TurboAssemblerBase::IsAddressableThroughRootRegister(
+          isolate_, external_reference))) {
+    intptr_t offset =
+        TurboAssemblerBase::RootRegisterOffsetForExternalReference(
+            isolate_, external_reference);
+    LType type = output.repo().ref8;
+    LValue offset_value =
+        output.buildGEPWithByteOffset(root, output.constInt32(offset), type);
+    output.buildRet(offset_value);
+  } else {
+    ExternalReferenceEncoder encoder(isolate_);
+    ExternalReferenceEncoder::Value v =
+        encoder.Encode(external_reference.address());
+    int offset =
+        TurboAssemblerBase::RootRegisterOffsetForExternalReferenceIndex(
+            v.index());
+    LType type = pointerType(output.repo().ref8);
+    LValue offset_value =
+        output.buildGEPWithByteOffset(root, output.constInt32(offset), type);
+    LValue value = output.buildLoad(offset_value);
+    output.buildRet(value);
+  }
+}
+}  // namespace
+
 Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                                 compiler::CallDescriptor* call_descriptor,
                                 const char* name, Code::Kind kind,
@@ -153,7 +231,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
                                    compiler_state.stack_map_info_map_,
                                    compiler_state.load_constant_recorder_);
     llvm_emitter.Visit(&builder);
-    builder.End();
+    BuiltinFunctionClientImpl builtin_function_client(isolate);
+    builder.End(&builtin_function_client);
 #if 0
     tf_llvm::dumpModule(compiler_state.module_);
 #endif

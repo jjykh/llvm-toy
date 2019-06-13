@@ -99,10 +99,9 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       params_types.push_back(registerParameter.type);
     }
   }
-  state_.function_ =
-      addFunction(state_.module_, state_.function_name_,
-                  functionType(taggedType(), params_types.data(),
-                               params_types.size(), NotVariadic));
+  state_.function_ = addFunction(
+      state_.function_name_, functionType(taggedType(), params_types.data(),
+                                          params_types.size(), NotVariadic));
   if (v8cc)
     setFunctionCallingConv(state_.function_, LLVMV8CallConv);
   else
@@ -149,6 +148,11 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
 LBasicBlock Output::appendBasicBlock(const char* name) {
   return v8::internal::tf_llvm::appendBasicBlock(state_.context_,
                                                  state_.function_, name);
+}
+
+LBasicBlock Output::appendBasicBlock(LValue function, const char* name) {
+  return v8::internal::tf_llvm::appendBasicBlock(state_.context_, function,
+                                                 name);
 }
 
 void Output::positionToBBEnd(LBasicBlock bb) {
@@ -451,6 +455,10 @@ LValue Output::setInstrDebugLoc(LValue v) {
 }
 
 void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
+
+LValue Output::addFunction(const char* name, LType type) {
+  return tf_llvm::addFunction(state_.module_, name, type);
+}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

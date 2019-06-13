@@ -88,6 +88,8 @@ struct CallDescriptor {
   V(SmiConstant, (int id, void* smi_value))                                   \
   V(Float64Constant, (int id, double value))                                  \
   V(Root, (int id, int index))                                                \
+  V(RootRelative, (int id, int offset, bool tagged))                          \
+  V(RootOffset, (int id, int offset))                                         \
   V(CodeForCall, (int id, int64_t magic))                                     \
   V(ExternalConstant, (int id, int64_t magic))                                \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
