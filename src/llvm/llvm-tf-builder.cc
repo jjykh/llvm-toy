@@ -129,14 +129,16 @@ class CallResolver {
   CallResolver(BasicBlock* current_bb, Output& output, int id,
                StackMapInfoMap* stack_map_info_map, int patchid);
   virtual ~CallResolver() = default;
-  void Resolve(bool code, const CallDescriptor& call_desc,
-               const OperandsVector& operands);
+  void Resolve(
+      bool code, const CallDescriptor& call_desc,
+      const OperandsVector& operands,
+      const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map);
 
  protected:
   virtual LValue EmitCallInstr(LValue function, LValue* operands,
                                size_t operands_count);
   virtual void BuildCall(const CallDescriptor& call_desc);
-  virtual void PopulateCallInfo(CallInfo*) {}
+  virtual void PopulateCallInfo(CallInfo*);
   inline Output& output() { return *output_; }
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
@@ -152,8 +154,13 @@ class CallResolver {
   }
 
  private:
-  void ResolveOperands(bool code, const OperandsVector& operands,
-                       const RegistersForOperands& registers_for_operands);
+  void ResolveOperands(
+      bool code, const OperandsVector& operands,
+      const RegistersForOperands& registers_for_operands,
+      const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map);
+  void ResolveCallTarget(
+      bool code, int target_id,
+      const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map);
   void UpdateAfterStatePoint(const CallDescriptor& call_desc,
                              LValue statepoint_ret);
   void EmitToSuccessors(std::vector<LValue>&);
@@ -173,6 +180,7 @@ class CallResolver {
   StackMapInfoMap* stack_map_info_map_;
   Output* output_;
   LValue target_;
+  int64_t relative_target_;
   int id_;
   int next_reg_;
   int patchid_;
@@ -271,6 +279,7 @@ CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
       stack_map_info_map_(stack_map_info_map),
       output_(&output),
       target_(nullptr),
+      relative_target_(0),
       id_(id),
       next_reg_(0),
       patchid_(patchid) {}
@@ -299,22 +308,25 @@ void CallResolver::SetOperandValue(int reg, LValue llvm_val) {
   }
 }
 
-void CallResolver::Resolve(bool code, const CallDescriptor& call_desc,
-                           const OperandsVector& operands) {
-  ResolveOperands(code, operands, call_desc.registers_for_operands);
+void CallResolver::Resolve(
+    bool code, const CallDescriptor& call_desc, const OperandsVector& operands,
+    const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map) {
+  ResolveOperands(code, operands, call_desc.registers_for_operands,
+                  node_call_target_map);
   BuildCall(call_desc);
   PopulateToStackMap();
 }
 
-void CallResolver::ResolveOperands(
-    bool code, const OperandsVector& operands,
-    const RegistersForOperands& registers_for_operands) {
-  auto operands_iterator = operands.begin();
-  // layout
-  // return value | register operands | stack operands | artifact operands
+void CallResolver::ResolveCallTarget(
+    bool code, int target_id,
+    const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map) {
   if (code) {
-    LValue code_value =
-        GetBuilderImpl(current_bb_)->value(*(operands_iterator++));
+    auto relative_target_iter = node_call_target_map.find(target_id);
+    if (relative_target_iter != node_call_target_map.end()) {
+      relative_target_ = relative_target_iter->second;
+      return;
+    }
+    LValue code_value = GetBuilderImpl(current_bb_)->value(target_id);
     if (typeOf(code_value) != output().taggedType()) {
       EMASSERT(typeOf(code_value) == output().repo().ref8);
       target_ = code_value;
@@ -324,9 +336,20 @@ void CallResolver::ResolveOperands(
           output().repo().ref8);
     }
   } else {
-    int addr_value = *(operands_iterator++);
+    int addr_value = target_id;
     target_ = GetBuilderImpl(current_bb_)->value(addr_value);
   }
+}
+
+void CallResolver::ResolveOperands(
+    bool code, const OperandsVector& operands,
+    const RegistersForOperands& registers_for_operands,
+    const LLVMTFBuilder::NodeRelativeCallTargetMap& node_call_target_map) {
+  auto operands_iterator = operands.begin();
+  // layout
+  // return value | register operands | stack operands | artifact operands
+  int target_id = *(operands_iterator++);
+  ResolveCallTarget(code, target_id, node_call_target_map);
   // setup register operands
   OperandsVector stack_operands;
   for (int reg : registers_for_operands) {
@@ -340,9 +363,11 @@ void CallResolver::ResolveOperands(
     SetOperandValue(reg, llvm_val);
   }
   // setup callee value.
-  int target_reg = FindNextReg();
-  SetOperandValue(target_reg, target_);
-  locations_.push_back(target_reg);
+  if (target_) {
+    int target_reg = FindNextReg();
+    SetOperandValue(target_reg, target_);
+    locations_.push_back(target_reg);
+  }
 
   std::vector<int> allocated_regs;
 
@@ -440,6 +465,10 @@ void CallResolver::PopulateToStackMap() {
 #endif
 }
 
+void CallResolver::PopulateCallInfo(CallInfo* callinfo) {
+  if (relative_target_) callinfo->set_relative_target(relative_target_);
+}
+
 TCCallResolver::TCCallResolver(BasicBlock* current_bb, Output& output, int id,
                                StackMapInfoMap* stack_map_info_map, int patchid)
     : CallResolver(current_bb, output, id, stack_map_info_map, patchid) {}
@@ -463,6 +492,7 @@ void TCCallResolver::BuildCall(const CallDescriptor& call_desc) {
 }
 
 void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
+  CallResolver::PopulateCallInfo(callinfo);
   callinfo->set_is_tailcall(true);
   callinfo->set_tailcall_return_count(output().stack_parameter_count());
 }
@@ -929,7 +959,7 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
     call_resolver.reset(new TCCallResolver(current_bb_, output(), id,
                                            stack_map_info_map_,
                                            state_point_id_next_++));
-  call_resolver->Resolve(code, call_desc, operands);
+  call_resolver->Resolve(code, call_desc, operands, node_call_target_map_);
 }
 
 LValue LLVMTFBuilder::EnsureWord32(LValue v) {
@@ -1720,7 +1750,7 @@ void LLVMTFBuilder::VisitInvoke(int id, bool code,
   EnsureNativeBB(exception_bb, output());
   InvokeResolver resolver(current_bb_, output(), id, stack_map_info_map_,
                           state_point_id_next_++, then_bb, exception_bb);
-  resolver.Resolve(code, call_desc, operands);
+  resolver.Resolve(code, call_desc, operands, node_call_target_map_);
 }
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
@@ -1777,11 +1807,34 @@ void LLVMTFBuilder::VisitRootOffset(int id, int offset) {
   GetBuilderImpl(current_bb_)->set_value(id, offset_value);
 }
 
-void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic) {
+void LLVMTFBuilder::VisitLoadFromConstantTable(int id, int constant_index) {
   output().setLineNumber(id);
-  LValue value = output().buildLoadMagic(output().repo().ref8, magic);
-  GetBuilderImpl(current_bb_)->set_value(id, value);
-  load_constant_recorder_->Register(magic, LoadConstantRecorder::kCodeConstant);
+  LValue constant_table_offset = output().buildGEPWithByteOffset(
+      output().root(),
+      output().constInt32(Heap::kBuiltinsConstantsTableRootIndex *
+                              sizeof(void*) -
+                          kRootRegisterBias),
+      pointerType(output().taggedType()));
+  LValue constant_table = output().buildLoad(constant_table_offset);
+  LValue offset = output().buildGEPWithByteOffset(
+      constant_table,
+      output().constInt32(FixedArray::kHeaderSize +
+                          constant_index * kPointerSize - kHeapObjectTag),
+      pointerType(output().taggedType()));
+
+  GetBuilderImpl(current_bb_)->set_value(id, output().buildLoad(offset));
+}
+
+void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic, bool relative) {
+  output().setLineNumber(id);
+  if (relative) {
+    node_call_target_map_.emplace(id, magic);
+  } else {
+    LValue value = output().buildLoadMagic(output().repo().ref8, magic);
+    GetBuilderImpl(current_bb_)->set_value(id, value);
+    load_constant_recorder_->Register(magic,
+                                      LoadConstantRecorder::kCodeConstant);
+  }
 }
 
 void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {

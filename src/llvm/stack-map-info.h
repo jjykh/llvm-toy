@@ -33,9 +33,14 @@ class CallInfo final : public StackMapInfo {
   void set_is_tailcall(bool _tailcall) { is_tailcall_ = _tailcall; }
   unsigned tailcall_return_count() const { return tailcall_return_count_; }
   void set_tailcall_return_count(unsigned c) { tailcall_return_count_ = c; }
+  int64_t relative_target() const { return relative_target_; }
+  void set_relative_target(int64_t relative_target) {
+    relative_target_ = relative_target;
+  }
 
  private:
   LocationVector locations_;
+  int64_t relative_target_;
   unsigned tailcall_return_count_;
   bool is_tailcall_;
 };

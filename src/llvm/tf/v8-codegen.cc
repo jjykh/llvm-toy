@@ -19,6 +19,31 @@ namespace internal {
 namespace tf_llvm {
 
 namespace {
+class RelocationProcessor {
+ public:
+  enum Type {
+    // must sync with LoadConstantRecorder's Type
+    kExternalReference,
+    kHeapConstant,
+    kCodeConstant,
+    kRelativeCall
+  };
+  void ProcessConstantLoad(const uint8_t* code_start, const uint8_t* pc,
+                           const LoadConstantRecorder&);
+  void EmitRelativeCall(int pc);
+  void ProcessRelocationWorkList(MacroAssembler* masm);
+  RelocationProcessor() = default;
+  ~RelocationProcessor() = default;
+
+ private:
+  void EmitLoadRelocation(int constant, int pc, Type type);
+  // constant pc, pc, type
+  using WorkListEntry = std::tuple<int, int, Type>;
+  std::vector<WorkListEntry> work_list_;
+  using ConstantLocationSet = std::unordered_set<int>;
+  ConstantLocationSet constant_location_set_;
+};
+
 class CodeGeneratorLLVM {
  public:
   CodeGeneratorLLVM(Isolate*);
@@ -31,9 +56,6 @@ class CodeGeneratorLLVM {
   int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
-  void ProcessForConstantLoad(const uint32_t* code_start,
-                              const uint32_t* code_end,
-                              const LoadConstantRecorder&);
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
   // Exception Handling
@@ -57,6 +79,7 @@ class CodeGeneratorLLVM {
   MacroAssembler masm_;
   SafepointTableBuilder safepoint_table_builder_;
   RecordReferenceMap record_reference_map_;
+  RelocationProcessor relocation_processor_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
   int handler_table_offset_ = 0;
@@ -72,9 +95,12 @@ CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
 int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
                                   const StackMaps::Record& record) {
   auto call_paramters_iterator = call_info->locations().begin();
-  int call_target_reg = *(call_paramters_iterator++);
+  int call_target_reg = -1;
   int pc_offset = masm_.pc_offset();
+  int64_t relative_target = call_info->relative_target();
+  ;
   RegList reg_list = 0;
+  if (!relative_target) call_target_reg = *(call_paramters_iterator++);
   for (; call_paramters_iterator != call_info->locations().end();
        ++call_paramters_iterator) {
     int reg = *call_paramters_iterator;
@@ -84,11 +110,21 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     masm_.add(sp, sp, Operand(call_info->tailcall_return_count() * 4));
   }
   if (reg_list != 0) masm_.stm(db_w, sp, reg_list);
-
-  if (!call_info->is_tailcall())
-    masm_.blx(Register::from_code(call_target_reg));
-  else
-    masm_.bx(Register::from_code(call_target_reg));
+  // Emit branch instr.
+  if (!relative_target) {
+    if (!call_info->is_tailcall())
+      masm_.blx(Register::from_code(call_target_reg));
+    else
+      masm_.bx(Register::from_code(call_target_reg));
+  } else {
+    int code_target_index = masm_.LLVMAddCodeTarget(
+        Handle<Code>(reinterpret_cast<Code**>(relative_target)));
+    relocation_processor_.EmitRelativeCall(masm_.pc_offset());
+    if (!call_info->is_tailcall())
+      masm_.bl(code_target_index * Instruction::kInstrSize);
+    else
+      masm_.b(code_target_index * Instruction::kInstrSize);
+  }
   if (!call_info->is_tailcall()) {
     // record safepoint
     // FIXME: (UC_linzj) kLazyDeopt is abusing, pass frame-state flags to
@@ -159,8 +195,9 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   const ByteBuffer& code = state.codeSectionList_.front();
   needs_frame_ = state.needs_frame_;
 
-  const uint32_t* instruction_pointer =
-      reinterpret_cast<const uint32_t*>(code.data());
+  const uint32_t* code_start = reinterpret_cast<const uint32_t*>(code.data());
+  const uint32_t* instruction_pointer = code_start;
+
   unsigned num_bytes = code.size();
   const uint32_t* instruction_end =
       reinterpret_cast<const uint32_t*>(code.data() + num_bytes);
@@ -186,6 +223,10 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
             HandleStackMapInfo(record_reference.info, record_reference.record);
         continue;
       }
+      relocation_processor_.ProcessConstantLoad(
+          reinterpret_cast<const uint8_t*>(code_start),
+          reinterpret_cast<const uint8_t*>(instruction_pointer),
+          state.load_constant_recorder_);
       incremental = 1;
       uint32_t instruction = *instruction_pointer;
       masm_.dd(instruction);
@@ -193,8 +234,7 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
   }
   EmitHandlerTable(state, isolate_);
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
-  ProcessForConstantLoad(instruction_pointer, instruction_end,
-                         state.load_constant_recorder_);
+  relocation_processor_.ProcessRelocationWorkList(&masm_);
   record_reference_map_.clear();
   safepoint_table_builder_.Emit(&masm_, slot_count_);
   CodeDesc desc;
@@ -213,67 +253,6 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
     return Handle<Code>();
   }
   return result;
-}
-
-void CodeGeneratorLLVM::ProcessForConstantLoad(
-    const uint32_t* code_start, const uint32_t* code_end,
-    const LoadConstantRecorder& load_constant_recorder) {
-  // constant_pc_offset, pc_offset, type.
-  using WorkListEntry = std::tuple<int, int, LoadConstantRecorder::Type>;
-  std::vector<WorkListEntry> work_list;
-  typedef std::unordered_set<int> ConstantLocationSet;
-  ConstantLocationSet constant_location_set;
-  int pc_offset = masm_.pc_offset();
-  masm_.LLVMGrowBuffer();
-  for (auto instruction_pointer = code_start; instruction_pointer != code_end;
-       instruction_pointer += 1) {
-    uint32_t instruction = *instruction_pointer;
-    if (Assembler::IsLdrPcImmediateOffset(instruction)) {
-      Address& address =
-          Memory::Address_at(Assembler::constant_pool_entry_address(
-              reinterpret_cast<Address>(
-                  const_cast<uint32_t*>(instruction_pointer)),
-              0));
-      std::unique_ptr<StackMapInfo> to_push;
-      int constant_pc_offset =
-          std::distance(reinterpret_cast<const uint8_t*>(code_start),
-                        reinterpret_cast<const uint8_t*>(&address));
-      if (constant_location_set.find(constant_pc_offset) !=
-          constant_location_set.end())
-        continue;
-      constant_location_set.insert(constant_pc_offset);
-      int pc_offset =
-          std::distance(reinterpret_cast<const uint8_t*>(code_start),
-                        reinterpret_cast<const uint8_t*>(instruction_pointer));
-
-      LoadConstantRecorder::Type type =
-          load_constant_recorder.Query(static_cast<int64_t>(address));
-      work_list.emplace_back(constant_pc_offset, pc_offset, type);
-    }
-  }
-  std::stable_sort(work_list.begin(), work_list.end(),
-                   [](const WorkListEntry& lhs, const WorkListEntry& rhs) {
-                     return std::get<0>(lhs) < std::get<0>(rhs);
-                   });
-  for (auto& entry : work_list) {
-    switch (std::get<2>(entry)) {
-      case LoadConstantRecorder::kHeapConstant:
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
-        break;
-      case LoadConstantRecorder::kCodeConstant:
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::CODE_TARGET);
-        break;
-      case LoadConstantRecorder::kExternalReference:
-        masm_.reset_pc(std::get<1>(entry));
-        masm_.RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
-  masm_.reset_pc(pc_offset);
 }
 
 void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
@@ -347,6 +326,71 @@ void CodeGeneratorLLVM::AdjustHandler(int* handler) {
 CodeGeneratorLLVM::RecordReference::RecordReference(
     const StackMaps::Record* _record, const StackMapInfo* _info)
     : record(_record), info(_info) {}
+
+void RelocationProcessor::ProcessConstantLoad(
+    const uint8_t* code_start, const uint8_t* instruction_pointer,
+    const LoadConstantRecorder& load_constant_recorder) {
+  Instr instruction = *reinterpret_cast<const Instr*>(instruction_pointer);
+  if (Assembler::IsLdrPcImmediateOffset(instruction)) {
+    Address& address =
+        Memory::Address_at(Assembler::constant_pool_entry_address(
+            reinterpret_cast<Address>(
+                const_cast<uint8_t*>(instruction_pointer)),
+            0));
+    std::unique_ptr<StackMapInfo> to_push;
+    int constant_pc_offset =
+        std::distance(code_start, reinterpret_cast<const uint8_t*>(&address));
+    if (constant_location_set_.find(constant_pc_offset) !=
+        constant_location_set_.end())
+      return;
+    constant_location_set_.insert(constant_pc_offset);
+    int pc_offset = std::distance(code_start, instruction_pointer);
+
+    LoadConstantRecorder::Type type =
+        load_constant_recorder.Query(static_cast<int64_t>(address));
+    EmitLoadRelocation(constant_pc_offset, pc_offset, static_cast<Type>(type));
+  }
+}
+
+void RelocationProcessor::EmitLoadRelocation(int constant, int pc, Type type) {
+  work_list_.emplace_back(constant, pc, type);
+}
+
+void RelocationProcessor::EmitRelativeCall(int pc) {
+  work_list_.emplace_back(0, pc, kRelativeCall);
+}
+
+void RelocationProcessor::ProcessRelocationWorkList(MacroAssembler* masm) {
+  int pc_offset = masm->pc_offset();
+  masm->LLVMGrowBuffer();
+  std::stable_sort(work_list_.begin(), work_list_.end(),
+                   [](const WorkListEntry& lhs, const WorkListEntry& rhs) {
+                     return std::get<0>(lhs) < std::get<0>(rhs);
+                   });
+  for (auto& entry : work_list_) {
+    switch (std::get<2>(entry)) {
+      case kHeapConstant:
+        masm->reset_pc(std::get<1>(entry));
+        masm->RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
+        break;
+      case kCodeConstant:
+        masm->reset_pc(std::get<1>(entry));
+        masm->RecordRelocInfo(RelocInfo::CODE_TARGET);
+        break;
+      case kExternalReference:
+        masm->reset_pc(std::get<1>(entry));
+        masm->RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+        break;
+      case kRelativeCall:
+        masm->reset_pc(std::get<1>(entry));
+        masm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  masm->reset_pc(pc_offset);
+}
 }  // namespace
 
 Handle<Code> GenerateCode(Isolate* isolate, const CompilerState& state) {

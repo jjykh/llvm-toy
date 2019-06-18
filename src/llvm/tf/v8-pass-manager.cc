@@ -183,7 +183,8 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     tf_llvm::initLLVM();
     llvm_initialized = true;
   }
-  tf_llvm::ScheduleEmitter llvm_emitter(isolate, schedule, call_descriptor);
+  tf_llvm::ScheduleEmitter llvm_emitter(isolate, schedule, call_descriptor,
+                                        builtin_index);
   tf_llvm::BasicBlockManager BBM;
   {
     tf_llvm::LivenessAnalysisVisitor lav(BBM);

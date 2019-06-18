@@ -90,7 +90,8 @@ struct CallDescriptor {
   V(Root, (int id, int index))                                                \
   V(RootRelative, (int id, int offset, bool tagged))                          \
   V(RootOffset, (int id, int offset))                                         \
-  V(CodeForCall, (int id, int64_t magic))                                     \
+  V(LoadFromConstantTable, (int id, int constant_index))                      \
+  V(CodeForCall, (int id, int64_t magic, bool relative))                      \
   V(ExternalConstant, (int id, int64_t magic))                                \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call, (int id, bool code, const CallDescriptor& call_desc,                \

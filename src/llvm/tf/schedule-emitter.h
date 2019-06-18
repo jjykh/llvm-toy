@@ -18,7 +18,7 @@ class TFVisitor;
 class ScheduleEmitter final {
  public:
   explicit ScheduleEmitter(Isolate* isolate, compiler::Schedule*,
-                           compiler::CallDescriptor*);
+                           compiler::CallDescriptor*, int32_t builtin_index);
   ~ScheduleEmitter();
   void Visit(TFVisitor* visitor);
   void VisitBlock(compiler::BasicBlock*, TFVisitor*);
@@ -39,11 +39,18 @@ class ScheduleEmitter final {
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
                                 Heap::RootListIndex* index_return);
   bool ShouldEmitCall(compiler::Node* node);
+  bool HandleCodeForCall(compiler::Node*, Handle<HeapObject>, TFVisitor*,
+                         bool /*relative_call*/);
+  bool TryLoadFromConstantTable(compiler::Node*, Handle<HeapObject>,
+                                TFVisitor*);
+  bool HandleIsolateIndependentBuiltin(compiler::Node* node, Handle<Code> code,
+                                       TFVisitor* visitor, int builtin_index);
 
   Isolate* isolate_;
   compiler::Schedule* schedule_;
   compiler::CallDescriptor* incoming_descriptor_;
   compiler::BasicBlock* current_block_;
+  int32_t builtin_index_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

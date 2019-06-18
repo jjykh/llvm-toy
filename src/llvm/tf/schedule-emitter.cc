@@ -3,6 +3,7 @@
 #include "src/llvm/tf/schedule-emitter.h"
 
 #include <unordered_map>
+#include "src/builtins/constants-table-builder.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/machine-operator.h"
@@ -17,11 +18,13 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 ScheduleEmitter::ScheduleEmitter(Isolate* isolate, compiler::Schedule* schedule,
-                                 compiler::CallDescriptor* incoming_descriptor)
+                                 compiler::CallDescriptor* incoming_descriptor,
+                                 int32_t builtin_index)
     : isolate_(isolate),
       schedule_(schedule),
       incoming_descriptor_(incoming_descriptor),
-      current_block_(nullptr) {}
+      current_block_(nullptr),
+      builtin_index_(builtin_index) {}
 
 ScheduleEmitter::~ScheduleEmitter() {}
 
@@ -147,6 +150,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
         return;
       } else if (isolate_->builtins()->IsBuiltinHandle(object,
                                                        &builtin_index)) {
+        if (HandleIsolateIndependentBuiltin(node, Handle<Code>::cast(object),
+                                            visitor, builtin_index))
+          return;
         visitor->VisitRootRelative(
             node->id(),
             TurboAssemblerBase::RootRegisterOffsetForBuiltinIndex(
@@ -154,21 +160,12 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
             true);
         return;
       } else if (object->IsCode()) {
-        auto uses = node->uses();
-        if (uses.empty()) return;  // WTF???
-        auto iterator = uses.begin();
-        auto expected_call = *iterator;
-        ++iterator;
-        if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
-             (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
-            (iterator == uses.end())) {
-          visitor->VisitCodeForCall(
-              node->id(), reinterpret_cast<int64_t>(object.location()));
-          return;
-        }
+        if (HandleCodeForCall(node, object, visitor, false)) return;
       }
-      visitor->VisitHeapConstant(node->id(),
-                                 reinterpret_cast<int64_t>(object.location()));
+      if (!TryLoadFromConstantTable(node, object, visitor)) {
+        visitor->VisitHeapConstant(
+            node->id(), reinterpret_cast<int64_t>(object.location()));
+      }
     }
       return;
     case compiler::IrOpcode::kNumberConstant: {
@@ -1069,6 +1066,48 @@ bool ScheduleEmitter::ShouldEmitCall(compiler::Node* node) {
   return true;
 }
 
+bool ScheduleEmitter::HandleCodeForCall(compiler::Node* node,
+                                        Handle<HeapObject> object,
+                                        TFVisitor* visitor,
+                                        bool relative_call) {
+  auto uses = node->uses();
+  if (uses.empty()) return false;  // WTF???
+  auto iterator = uses.begin();
+  auto expected_call = *iterator;
+  ++iterator;
+  if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
+       (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
+      (iterator == uses.end())) {
+    if (!TryLoadFromConstantTable(node, object, visitor)) {
+      visitor->VisitCodeForCall(node->id(),
+                                reinterpret_cast<int64_t>(object.location()),
+                                relative_call);
+    }
+    return true;
+  }
+  return false;
+}
+
+bool ScheduleEmitter::HandleIsolateIndependentBuiltin(compiler::Node* node,
+                                                      Handle<Code> code,
+                                                      TFVisitor* visitor,
+                                                      int builtin_index) {
+  if (!FLAG_embedded_builtins || Builtins::IsIsolateIndependent(builtin_index))
+    return false;
+  return HandleCodeForCall(node, code, visitor, true);
+}
+
+bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
+                                               Handle<HeapObject> object,
+                                               TFVisitor* visitor) {
+  if (!FLAG_embedded_builtins || !isolate()->ShouldLoadConstantsFromRootList())
+    return false;
+  BuiltinsConstantsTableBuilder* builder =
+      isolate()->builtins_constants_table_builder();
+  uint32_t index = builder->AddObject(object);
+  visitor->VisitLoadFromConstantTable(node->id(), index);
+  return true;
+}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8
