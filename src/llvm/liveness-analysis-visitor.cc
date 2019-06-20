@@ -564,17 +564,23 @@ void LivenessAnalysisVisitor::VisitTailCall(int id, bool code,
 }
 
 void LivenessAnalysisVisitor::VisitRoot(int id, int) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitRootRelative(int id, int, bool) {
   Define(id);
 }
+
 void LivenessAnalysisVisitor::VisitRootOffset(int id, int) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitLoadFromConstantTable(int id, int) {
   Define(id);
 }
+
 void LivenessAnalysisVisitor::VisitCodeForCall(int id, int64_t, bool relative) {
-  if (relative) Define(id);
+  if (!relative) Define(id);
 }
+
 void LivenessAnalysisVisitor::VisitSmiConstant(int id, void*) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
   Define(id);
 }

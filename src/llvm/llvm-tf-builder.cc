@@ -363,11 +363,12 @@ void CallResolver::ResolveOperands(
     SetOperandValue(reg, llvm_val);
   }
   // setup callee value.
+  int target_reg = -1;
   if (target_) {
-    int target_reg = FindNextReg();
+    target_reg = FindNextReg();
     SetOperandValue(target_reg, target_);
-    locations_.push_back(target_reg);
   }
+  locations_.push_back(target_reg);
 
   std::vector<int> allocated_regs;
 

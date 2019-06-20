@@ -148,7 +148,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       if (IsMaterializableFromRoot(object, &index)) {
         visitor->VisitRoot(node->id(), static_cast<int>(index));
         return;
-      } else if (isolate_->builtins()->IsBuiltinHandle(object,
+      } else if (ShouldUseRelativeBranchOrLoadFromConstant() &&
+                 isolate_->builtins()->IsBuiltinHandle(object,
                                                        &builtin_index)) {
         if (HandleIsolateIndependentBuiltin(node, Handle<Code>::cast(object),
                                             visitor, builtin_index))
@@ -1092,7 +1093,8 @@ bool ScheduleEmitter::HandleIsolateIndependentBuiltin(compiler::Node* node,
                                                       Handle<Code> code,
                                                       TFVisitor* visitor,
                                                       int builtin_index) {
-  if (!FLAG_embedded_builtins || Builtins::IsIsolateIndependent(builtin_index))
+  if (!ShouldUseRelativeBranchOrLoadFromConstant() ||
+      !Builtins::IsIsolateIndependent(builtin_index))
     return false;
   return HandleCodeForCall(node, code, visitor, true);
 }
@@ -1100,13 +1102,17 @@ bool ScheduleEmitter::HandleIsolateIndependentBuiltin(compiler::Node* node,
 bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
                                                Handle<HeapObject> object,
                                                TFVisitor* visitor) {
-  if (!FLAG_embedded_builtins || !isolate()->ShouldLoadConstantsFromRootList())
-    return false;
+  if (!ShouldUseRelativeBranchOrLoadFromConstant()) return false;
   BuiltinsConstantsTableBuilder* builder =
       isolate()->builtins_constants_table_builder();
   uint32_t index = builder->AddObject(object);
   visitor->VisitLoadFromConstantTable(node->id(), index);
   return true;
+}
+
+bool ScheduleEmitter::ShouldUseRelativeBranchOrLoadFromConstant() {
+  return FLAG_embedded_builtins &&
+         isolate()->ShouldLoadConstantsFromRootList() && (builtin_index_ != -1);
 }
 }  // namespace tf_llvm
 }  // namespace internal

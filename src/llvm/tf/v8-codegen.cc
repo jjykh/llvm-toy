@@ -95,12 +95,10 @@ CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
 int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
                                   const StackMaps::Record& record) {
   auto call_paramters_iterator = call_info->locations().begin();
-  int call_target_reg = -1;
+  int call_target_reg = *(call_paramters_iterator++);
   int pc_offset = masm_.pc_offset();
   int64_t relative_target = call_info->relative_target();
-  ;
   RegList reg_list = 0;
-  if (!relative_target) call_target_reg = *(call_paramters_iterator++);
   for (; call_paramters_iterator != call_info->locations().end();
        ++call_paramters_iterator) {
     int reg = *call_paramters_iterator;

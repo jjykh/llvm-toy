@@ -45,6 +45,7 @@ class ScheduleEmitter final {
                                 TFVisitor*);
   bool HandleIsolateIndependentBuiltin(compiler::Node* node, Handle<Code> code,
                                        TFVisitor* visitor, int builtin_index);
+  bool ShouldUseRelativeBranchOrLoadFromConstant();
 
   Isolate* isolate_;
   compiler::Schedule* schedule_;
