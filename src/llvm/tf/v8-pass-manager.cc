@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include "src/assembler-inl.h"
+#include "src/builtins/builtins.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/schedule.h"
 #include "src/llvm/compile.h"
@@ -21,6 +22,7 @@
 #include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/tf/tf-parser.h"
 #include "src/llvm/tf/v8-codegen.h"
+#include "src/snapshot/serializer-common.h"
 
 namespace v8 {
 namespace internal {

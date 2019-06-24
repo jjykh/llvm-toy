@@ -116,7 +116,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
                 isolate_, external_reference);
         visitor->VisitRootOffset(node->id(), offset);
         return;
-      } else {
+      } else if (ShouldUseRelativeBranchOrLoadFromConstant()) {
         ExternalReferenceEncoder encoder(isolate_);
         ExternalReferenceEncoder::Value v =
             encoder.Encode(external_reference.address());
