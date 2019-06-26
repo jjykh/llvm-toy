@@ -234,13 +234,6 @@ static inline LLVMBool createMemoryBufferWithContentsOfFile(
   return LLVMCreateMemoryBufferWithContentsOfFile(path, outMemBuf, outMessage);
 }
 
-static inline LLVMBool parseBitcodeInContext(LLVMContextRef contextRef,
-                                             LLVMMemoryBufferRef memBuf,
-                                             LModule* outModule,
-                                             char** outMessage) {
-  return LLVMParseBitcodeInContext(contextRef, memBuf, outModule, outMessage);
-}
-
 static inline void disposeMemoryBuffer(LLVMMemoryBufferRef memBuf) {
   LLVMDisposeMemoryBuffer(memBuf);
 }

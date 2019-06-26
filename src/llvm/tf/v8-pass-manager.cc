@@ -5,6 +5,7 @@
 #include <iostream>
 #include "src/assembler-inl.h"
 #include "src/builtins/builtins.h"
+#include "src/callable.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/schedule.h"
 #include "src/llvm/compile.h"
