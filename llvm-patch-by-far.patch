@@ -180,7 +180,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
  
    void markValueUsed(LiveInterval*, VNInfo*);
    bool reMaterializeFor(LiveInterval &, MachineInstr &MI);
-@@ -924,11 +926,60 @@
+@@ -924,11 +926,64 @@
      HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
  }
  
@@ -200,6 +200,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +    }
 +  }
 +  VisitedSet.emplace(InputReg);
++  LiveInterval &OldLI = LIS.getInterval(InputReg);
 +  while (!WorkList.empty()) {
 +    unsigned Reg = WorkList.pop_back_val();
 +    // Fold the use of state point.
@@ -216,6 +217,9 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        }
 +        continue;
 +      }
++      SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
++      if (OldLI.end() == OldLI.FindSegmentContaining(Idx))
++        continue;
 +      // Handle STATEPOINT, PATCHPOINT
 +      switch (MI.getOpcode()) {
 +      case TargetOpcode::STATEPOINT:
