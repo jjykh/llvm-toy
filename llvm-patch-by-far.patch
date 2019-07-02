@@ -180,6 +180,67 @@ Index: lib/CodeGen/InlineSpiller.cpp
  
    void markValueUsed(LiveInterval*, VNInfo*);
    bool reMaterializeFor(LiveInterval &, MachineInstr &MI);
+@@ -924,11 +926,60 @@
+     HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
+ }
+ 
++void InlineSpiller::foldStatePoints(unsigned InputReg) {
++  SmallVector<unsigned, 8> WorkList;
++  std::unordered_set<unsigned> VisitedSet;
++  // Don't add Reg to WorkList, spillAroundUses will handle it.
++  for (MachineRegisterInfo::reg_bundle_iterator
++           RegI = MRI.reg_bundle_begin(InputReg),
++           E = MRI.reg_bundle_end();
++       RegI != E;) {
++    MachineInstr &MI = *RegI++;
++    unsigned SibReg = isFullCopyOf(MI, InputReg);
++    if (SibReg && isSibling(SibReg) && SibReg != InputReg) {
++      WorkList.push_back(SibReg);
++      VisitedSet.emplace(SibReg);
++    }
++  }
++  VisitedSet.emplace(InputReg);
++  while (!WorkList.empty()) {
++    unsigned Reg = WorkList.pop_back_val();
++    // Fold the use of state point.
++    for (MachineRegisterInfo::use_instr_nodbg_iterator
++             UI = MRI.use_instr_nodbg_begin(Reg),
++             E = MRI.use_instr_nodbg_end();
++         UI != E;) {
++      MachineInstr &MI = *UI++;
++      if (unsigned DstReg = isFullCopyOf(MI, Reg)) {
++        if (isSibling(DstReg)) {
++          auto pair = VisitedSet.emplace(DstReg);
++          if (pair.second)
++            WorkList.push_back(DstReg);
++        }
++        continue;
++      }
++      // Handle STATEPOINT, PATCHPOINT
++      switch (MI.getOpcode()) {
++      case TargetOpcode::STATEPOINT:
++      case TargetOpcode::PATCHPOINT: {
++        // Analyze instruction.
++        SmallVector<std::pair<MachineInstr *, unsigned>, 8> Ops;
++        MIBundleOperands(MI).analyzeVirtReg(Reg, &Ops);
++        foldMemoryOperand(Ops);
++      } break;
++      default:
++        break;
++      }
++    }
++  }
++}
++
+ /// spillAroundUses - insert spill code around each use of Reg.
+ void InlineSpiller::spillAroundUses(unsigned Reg) {
+   LLVM_DEBUG(dbgs() << "spillAroundUses " << printReg(Reg) << '\n');
+   LiveInterval &OldLI = LIS.getInterval(Reg);
+ 
++  foldStatePoints(Reg);
+   // Iterate over instructions using Reg.
+   for (MachineRegisterInfo::reg_bundle_iterator
+        RegI = MRI.reg_bundle_begin(Reg), E = MRI.reg_bundle_end();
 Index: lib/CodeGen/LocalStackSlotAllocation.cpp
 ===================================================================
 --- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 359070)
@@ -1552,18 +1613,6 @@ Index: lib/Transforms/IPO/SampleProfile.cpp
 +std::string SampleProfileLoaderPass::SampleProfileFileFromOption() {
 +  return SampleProfileFile;
 +}
-Index: lib/Transforms/Scalar/ADCE.cpp
-===================================================================
---- lib/Transforms/Scalar/ADCE.cpp	(revision 359070)
-+++ lib/Transforms/Scalar/ADCE.cpp	(working copy)
-@@ -335,6 +335,7 @@
-     return false;
-   if (RemoveControlFlowFlag && (isa<BranchInst>(I) || isa<SwitchInst>(I)))
-     return false;
-+  const IntrinsicInst *II = dyn_cast<IntrinsicInst>(II);
-   return true;
- }
- 
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
