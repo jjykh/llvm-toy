@@ -180,7 +180,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
  
    void markValueUsed(LiveInterval*, VNInfo*);
    bool reMaterializeFor(LiveInterval &, MachineInstr &MI);
-@@ -924,11 +926,64 @@
+@@ -924,11 +926,66 @@
      HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
  }
  
@@ -217,13 +217,15 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        }
 +        continue;
 +      }
-+      SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
-+      if (OldLI.end() == OldLI.FindSegmentContaining(Idx))
-+        continue;
 +      // Handle STATEPOINT, PATCHPOINT
 +      switch (MI.getOpcode()) {
 +      case TargetOpcode::STATEPOINT:
 +      case TargetOpcode::PATCHPOINT: {
++        // Ignore if the input reg's live range does not contain
++        // the MI.
++        SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
++        if (OldLI.end() == OldLI.FindSegmentContaining(Idx))
++          continue;
 +        // Analyze instruction.
 +        SmallVector<std::pair<MachineInstr *, unsigned>, 8> Ops;
 +        MIBundleOperands(MI).analyzeVirtReg(Reg, &Ops);
