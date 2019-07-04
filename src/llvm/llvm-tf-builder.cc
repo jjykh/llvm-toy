@@ -1616,7 +1616,8 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   LValue cmp_val = GetBuilderImpl(current_bb_)->value(cmp);
   if (typeOf(cmp_val) == output().repo().intPtr) {
     // need to trunc before continue
-    cmp_val = output().buildCast(LLVMTrunc, cmp_val, output().repo().boolean);
+    cmp_val =
+        output().buildICmp(LLVMIntNE, cmp_val, output().repo().intPtrZero);
   }
 #if !defined(FEATURE_SAMPLE_PGO)
   if (expected_value != -1) {
