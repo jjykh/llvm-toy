@@ -576,7 +576,7 @@ void LivenessAnalysisVisitor::VisitLoadFromConstantTable(int id, int) {
 }
 
 void LivenessAnalysisVisitor::VisitCodeForCall(int id, int64_t, bool relative) {
-  if (!relative) Define(id);
+  Define(id);
 }
 
 void LivenessAnalysisVisitor::VisitSmiConstant(int id, void*) { Define(id); }

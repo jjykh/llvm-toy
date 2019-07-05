@@ -29,8 +29,6 @@ class LLVMTFBuilder final : public TFVisitor {
                          LoadConstantRecorder&);
   void End(BuiltinFunctionClient* builtin_function_client);
 
-  using NodeRelativeCallTargetMap = std::unordered_map<int, int64_t>;
-
  private:
   void VisitBlock(int id, bool, const OperandsVector& predecessors) override;
   void VisitGoto(int bid) override;
@@ -75,7 +73,6 @@ class LLVMTFBuilder final : public TFVisitor {
 
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
-  NodeRelativeCallTargetMap node_call_target_map_;
   int64_t state_point_id_next_;
 };
 }  // namespace tf_llvm

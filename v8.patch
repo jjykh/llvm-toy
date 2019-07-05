@@ -1,16 +1,27 @@
+diff --git a/.gitattributes b/.gitattributes
+index 7ef1e1b74b..11113c22ad 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -3,3 +3,4 @@
+ # Do not modify line endings for binary files (which are sometimes auto
+ # detected as text files by git).
+ *.png binary
++*.so binary
 diff --git a/BUILD.gn b/BUILD.gn
-index 76a06cfa59..7d44731d15 100644
+index 75bc940455..0201210679 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
-@@ -162,8 +162,21 @@ declare_args() {
+@@ -162,8 +162,28 @@ declare_args() {
  
    # Enable minor mark compact.
    v8_enable_minor_mc = true
-+#if UC_BUILD_TF_LLVM_BACKEND
++
++  #if UC_BUILD_TF_LLVM_BACKEND
 +  v8_enable_llvm = false
-+#endif
- }
- 
++
++  #endif
++}
++
 +#if UC_BUILD_TF_LLVM_BACKEND
 +if (uc_build_tf_llvm_backend && current_toolchain == v8_snapshot_toolchain) {
 +  v8_enable_llvm = true
@@ -19,34 +30,54 @@ index 76a06cfa59..7d44731d15 100644
 +  v8_enable_disassembler = true
 +  v8_enable_object_print = true
 +}
++
++if (uc_build_tf_llvm_backend) {
++  v8_enable_embedded_builtins = true
+ }
+ 
 +#endif
 +
  # Derived defaults.
  if (v8_enable_verify_heap == "") {
    v8_enable_verify_heap = v8_enable_debugging_features
-@@ -628,6 +641,17 @@ config("toolchain") {
+@@ -192,6 +212,10 @@ if (uc_build_embedded_bytecode_handlers) {
+   v8_enable_embedded_builtins = true
+ }
+ 
++if (uc_build_v8_interpreted_regexp) {
++  v8_interpreted_regexp = true
++}
++
+ assert(!v8_enable_embedded_builtins || v8_use_snapshot,
+        "Embedded builtins only work with snapshots")
+ 
+@@ -632,6 +656,20 @@ config("toolchain") {
    }
  }
  
 +#if UC_BUILD_TF_LLVM_BACKEND
-+config("llvm_configs") {
-+  include_dirs = [ "src/llvm/include" ]
-+  libs = [ "LLVM-8" ]
-+  defines = [ "LLVMLOG_LEVEL=1" ]
-+  ldflags = [ "-Wl,-rpath,../../v8/lib" ]
++if (v8_enable_llvm) {
++  config("llvm_configs") {
++    include_dirs = [ "src/llvm/include" ]
++    libs = [ "LLVM-8" ]
++    defines = [ "LLVMLOG_LEVEL=1" ]
++    ldflags = [ "-Wl,-rpath,../../v8/lib" ]
 +
-+  lib_dirs = [ "lib/" ]
++    lib_dirs = [ "lib/" ]
++  }
 +}
++
 +#endif
 +
  # Configs for code coverage with gcov. Separate configs for cflags and ldflags
  # to selectively influde cflags in non-test targets only.
  config("v8_gcov_coverage_cflags") {
-@@ -1440,6 +1464,54 @@ v8_source_set("v8_initializers") {
+@@ -1501,6 +1539,56 @@ v8_source_set("v8_initializers") {
    }
  
    configs = [ ":internal_config" ]
-+#if UC_BUILD_TF_LLVM_BACKEND
++
++  #if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    llvm_sources = [
 +      "src/llvm/abbreviated-types.h",
@@ -93,32 +124,39 @@ index 76a06cfa59..7d44731d15 100644
 +    sources += llvm_sources
 +    configs += [ ":llvm_configs" ]
 +  }
-+#endif
++
++  #endif
  }
  
  v8_source_set("v8_init") {
-@@ -1460,6 +1532,11 @@ v8_source_set("v8_init") {
+@@ -1521,6 +1609,13 @@ v8_source_set("v8_init") {
    }
  
    configs = [ ":internal_config" ]
-+#if UC_BUILD_TF_LLVM_BACKEND
++
++  #if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    configs += [ ":llvm_configs" ]
 +  }
-+#endif
++
++  #endif
  }
  
  # This is split out to be a non-code containing target that the Chromium browser
-@@ -3187,6 +3264,9 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
-     ]
+@@ -3256,6 +3351,13 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
  
      configs = [ ":internal_config" ]
-+#if UC_BUILD_TF_LLVM_BACKEND
-+    configs += [ ":llvm_configs" ]
-+#endif
  
++    #if UC_BUILD_TF_LLVM_BACKEND
++    if (v8_enable_llvm) {
++      configs += [ ":llvm_configs" ]
++    }
++
++    #endif
++
      deps = [
        ":v8_base",
+       ":v8_init",
 diff --git a/gni/v8.gni b/gni/v8.gni
 index e6f9c2424d..acea2acfd1 100644
 --- a/gni/v8.gni
@@ -138,11 +176,145 @@ index e6f9c2424d..acea2acfd1 100644
    } else {
      v8_add_configs += [ "//build/config/compiler:optimize_max" ]
    }
+diff --git a/include/v8.h b/include/v8.h
+index 853167e9e8..9ba65e8482 100644
+--- a/include/v8.h
++++ b/include/v8.h
+@@ -10864,6 +10864,21 @@ void DeleteStdString(std::string*);
+ const char* GetCString(std::string* s);
+ #endif
+ 
++#if defined(UC_BUILD_CRASH_CALLBACK)
++// for crash callback info: u4memory
++// Get last few messages when v8 meet oom crash.
++const char* GetLastFewMessagesOnOOM();
++// Get last few messages when v8 meet oom crash.
++const char* GetStackTraceOnOOM();
++
++// Get last few messages of isolate, buff len must bigger than
++// kTraceRingBufferSize which can be get by GetLastFewMessages(nullptr, nullptr)
++int GetLastFewMessages(Isolate* isolate, char* buff);
++// Get last few messages of isolate, buff len must bigger than
++// kStacktraceBufferSize which can be get by GetStackTrace(nullptr, nullptr)
++int GetStackTrace(Isolate* isolate, char* buff);
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
++
+ }  // namespace v8
+ 
+ 
+diff --git a/src/api-compat-m63.cc b/src/api-compat-m63.cc
+index 2db3d5918d..03d77100dd 100644
+--- a/src/api-compat-m63.cc
++++ b/src/api-compat-m63.cc
+@@ -322,6 +322,20 @@ void _ZN2v88TryCatchC1EPNS_7IsolateE(void*, Isolate*);
+ void V8_EXPORT _ZN2v88TryCatchC1Ev(void* This) {
+   _ZN2v88TryCatchC1EPNS_7IsolateE(This, Isolate::GetCurrent());
+ }
++
++MaybeLocal<Function> V8_EXPORT
++_ZN2v88Function3NewENS_5LocalINS_7ContextEEEPFvRKNS_20FunctionCallbackInfoINS_5ValueEEEENS1_IS5_EEiNS_19ConstructorBehaviorE(
++    Local<Context> context, FunctionCallback callback, Local<Value> data,
++    int length, ConstructorBehavior behavior) {
++  return Function::New(context, callback, data, length, behavior);
++}
++
++MaybeLocal<Array> V8_EXPORT
++_ZN2v86Object16GetPropertyNamesENS_5LocalINS_7ContextEEENS_17KeyCollectionModeENS_14PropertyFilterENS_11IndexFilterE(
++    v8::Object* This, Local<Context> context, KeyCollectionMode mode,
++    PropertyFilter property_filter, IndexFilter index_filter) {
++  return This->GetPropertyNames(context, mode, property_filter, index_filter);
++}
+ }
+ 
+ void* v8::ArrayBuffer::Allocator::Reserve(size_t length) { UNIMPLEMENTED(); }
+diff --git a/src/api.cc b/src/api.cc
+index 28b4012ba4..ad6e58450c 100644
+--- a/src/api.cc
++++ b/src/api.cc
+@@ -229,6 +229,11 @@ namespace v8 {
+ 
+ namespace {
+ 
++#if defined(UC_BUILD_CRASH_CALLBACK)
++static const char* g_last_few_messages_storage = nullptr;
++static const char* g_stack_trace_storage = nullptr;
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
++
+ Local<Context> ContextFromNeverReadOnlySpaceObject(
+     i::Handle<i::NeverReadOnlySpaceObject> obj) {
+   return reinterpret_cast<v8::Isolate*>(obj->GetIsolate())->GetCurrentContext();
+@@ -388,6 +393,11 @@ void i::V8::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location,
+ 
+   memset(last_few_messages, 0, Heap::kTraceRingBufferSize + 1);
+   memset(js_stacktrace, 0, Heap::kStacktraceBufferSize + 1);
++#if defined(UC_BUILD_CRASH_CALLBACK)
++  // prepare for signal function to read
++  g_last_few_messages_storage = last_few_messages;
++  g_stack_trace_storage = js_stacktrace;
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
+ 
+   intptr_t start_marker;
+   heap_stats.start_marker = &start_marker;
+@@ -452,6 +462,11 @@ void i::V8::FatalProcessOutOfMemory(i::Isolate* isolate, const char* location,
+     PrintF("\n<--- JS stacktrace --->\n%s\n", js_stacktrace);
+   }
+   Utils::ReportOOMFailure(isolate, location, is_heap_oom);
++#if defined(UC_BUILD_CRASH_CALLBACK)
++  // The data becomes unreachable so we clear it
++  g_last_few_messages_storage = nullptr;
++  g_stack_trace_storage = nullptr;
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
+   // If the fatal error handler returns, we stop execution.
+   FATAL("API fatal error handler returned after process out of memory");
+ }
+@@ -11050,4 +11065,31 @@ void InvokeFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info,
+ #undef RESET_DEPRECATED_WARNINGS
+ 
+ }  // namespace internal
++
++#if defined(UC_BUILD_CRASH_CALLBACK)
++const char* GetLastFewMessagesOnOOM() { return g_last_few_messages_storage; }
++
++const char* GetStackTraceOnOOM() { return g_stack_trace_storage; }
++
++int GetLastFewMessages(Isolate* isolate, char* buff) {
++  if (!isolate || !buff) return i::Heap::kTraceRingBufferSize;
++  i::Heap* heap = reinterpret_cast<i::Isolate*>(isolate)->heap();
++  heap->GetFromRingBufferPublic(buff);
++  return i::Heap::kTraceRingBufferSize;
++}
++
++int GetStackTrace(Isolate* isolate, char* buff) {
++  if (!isolate || !buff) return i::Heap::kStacktraceBufferSize;
++  i::FixedStringAllocator fixed(buff, i::Heap::kStacktraceBufferSize - 1);
++  i::StringStream accumulator(&fixed, i::StringStream::kPrintObjectConcise);
++  i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
++  i::Heap* heap = internal_isolate->heap();
++  if (heap->gc_state() == i::Heap::NOT_IN_GC) {
++    internal_isolate->PrintStack(&accumulator, i::Isolate::kPrintStackConcise);
++  } else {
++    accumulator.Add("Cannot get stack trace in GC.");
++  }
++  return i::Heap::kStacktraceBufferSize;
++}
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
+ }  // namespace v8
 diff --git a/src/arm/assembler-arm.cc b/src/arm/assembler-arm.cc
-index 576bcb30f6..2882ece13e 100644
+index 576bcb30f6..ecdd1f8877 100644
 --- a/src/arm/assembler-arm.cc
 +++ b/src/arm/assembler-arm.cc
-@@ -644,6 +644,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
+@@ -510,6 +510,10 @@ const Instr kBlxRegMask =
+     15 * B24 | 15 * B20 | 15 * B16 | 15 * B12 | 15 * B8 | 15 * B4;
+ const Instr kBlxRegPattern =
+     B24 | B21 | 15 * B16 | 15 * B12 | 15 * B8 | BLX;
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++const Instr kBlOffsetMask = B27 | B26 | B25 | B24;
++const Instr kBlOffsetPattern = B27 | B25 | B24;
++#endif
+ const Instr kBlxIp = al | kBlxRegPattern | ip.code();
+ const Instr kMovMvnMask = 0x6D * B21 | 0xF * B16;
+ const Instr kMovMvnPattern = 0xD * B21;
+@@ -644,6 +648,9 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
    bool positive = offset >= 0;
    if (!positive) offset = -offset;
    DCHECK(is_uint12(offset));
@@ -152,11 +324,33 @@ index 576bcb30f6..2882ece13e 100644
    // Set bit indicating whether the offset should be added.
    instr = (instr & ~B23) | (positive ? B23 : 0);
    // Set the actual offset.
+@@ -767,6 +774,11 @@ bool Assembler::IsBlxIp(Instr instr) {
+   return instr == kBlxIp;
+ }
+ 
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++bool Assembler::IsBlOffset(Instr instr) {
++  return (instr & kBlOffsetMask) == kBlOffsetPattern;
++}
++#endif
+ 
+ bool Assembler::IsTstImmediate(Instr instr) {
+   return (instr & (B27 | B26 | I | kOpCodeMask | S | kRdMask)) ==
 diff --git a/src/arm/assembler-arm.h b/src/arm/assembler-arm.h
-index 2e71ce59e6..0064844f87 100644
+index 2e71ce59e6..361406c435 100644
 --- a/src/arm/assembler-arm.h
 +++ b/src/arm/assembler-arm.h
-@@ -1701,8 +1701,17 @@ class Assembler : public AssemblerBase {
+@@ -1494,6 +1494,9 @@ class Assembler : public AssemblerBase {
+   static bool IsVldrDPcImmediateOffset(Instr instr);
+   static bool IsBlxReg(Instr instr);
+   static bool IsBlxIp(Instr instr);
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  static bool IsBlOffset(Instr instr);
++#endif
+   static bool IsTstImmediate(Instr instr);
+   static bool IsCmpRegister(Instr instr);
+   static bool IsCmpImmediate(Instr instr);
+@@ -1701,8 +1704,18 @@ class Assembler : public AssemblerBase {
    void bind_to(Label* L, int pos);
    void next(Label* L);
  
@@ -165,6 +359,7 @@ index 2e71ce59e6..0064844f87 100644
 +  void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 +  void reset_pc(int pc_offset) { pc_ = buffer_ + pc_offset; }
 +  void LLVMGrowBuffer() { GrowBuffer(); }
++  int LLVMAddCodeTarget(Handle<Code> target) { return AddCodeTarget(target); }
 +
 + private:
 +#else
@@ -174,6 +369,129 @@ index 2e71ce59e6..0064844f87 100644
    void ConstantPoolAddEntry(int position, RelocInfo::Mode rmode,
                              intptr_t value);
    void ConstantPoolAddEntry(int position, Double value);
+diff --git a/src/arm/cpu-arm.cc b/src/arm/cpu-arm.cc
+index d7110946c7..e00e8739a9 100644
+--- a/src/arm/cpu-arm.cc
++++ b/src/arm/cpu-arm.cc
+@@ -22,118 +22,10 @@
+ 
+ namespace v8 {
+ namespace internal {
+-#if defined(UC_BUILD) && !USE_SIMULATOR
+-namespace {
+-#if !defined(CPU_SETSIZE)
+-#define CPU_SETSIZE 32
+-
+-#define __CPU_BITTYPE unsigned long int /* mandated by the kernel  */
+-#define __CPU_BITSHIFT 5                /* should be log2(BITTYPE) */
+-#define __CPU_BITS (1 << __CPU_BITSHIFT)
+-#define __CPU_ELT(x) ((x) >> __CPU_BITSHIFT)
+-#define __CPU_MASK(x) ((__CPU_BITTYPE)1 << ((x) & (__CPU_BITS - 1)))
+-
+-typedef struct { __CPU_BITTYPE __bits[CPU_SETSIZE / __CPU_BITS]; } cpu_set_t;
+-#define CPU_ZERO(set_)     \
+-  do {                     \
+-    (set_)->__bits[0] = 0; \
+-  } while (0)
+-
+-#define CPU_SET(cpu_, set_)                                          \
+-  do {                                                               \
+-    size_t __cpu = (cpu_);                                           \
+-    if (__cpu < CPU_SETSIZE) (set_)->__bits[0] |= __CPU_MASK(__cpu); \
+-  } while (0)
+-#endif
+-class Flusher {
+- public:
+-  Flusher() = default;
+-  ~Flusher() = default;
+-
+-  void Flush(void* start, size_t size);
+-
+- private:
+-  class FlusherCpuScope {
+-   public:
+-    FlusherCpuScope();
+-    ~FlusherCpuScope();
+-
+-   private:
+-    void CallSetAffinity(const cpu_set_t& cpuset);
+-  };
+-  void DoFlush(void* start, size_t size);
+-  void GenerateCode(Isolate*, int constant);
+-};
+-
+-Flusher::FlusherCpuScope::FlusherCpuScope() {
+-  cpu_set_t cpuset;
+-  CPU_ZERO(&cpuset);
+-  CPU_SET(0, &cpuset);
+-  CallSetAffinity(cpuset);
+-}
+-
+-Flusher::FlusherCpuScope::~FlusherCpuScope() {
+-  cpu_set_t cpuset;
+-  memset(&cpuset, 0xff, sizeof(cpu_set_t));
+-  CallSetAffinity(cpuset);
+-}
+-
+-void Flusher::FlusherCpuScope::CallSetAffinity(const cpu_set_t& cpuset) {
+-  int ret = syscall(__NR_sched_setaffinity, 0, sizeof(cpu_set_t), &cpuset);
+-  if (ret != 0) {
+-    PrintF("CallSetAffinity failed: %s %d\n", strerror(errno), errno);
+-  }
+-}
+-
+-void Flusher::Flush(void* start, size_t size) {
+-  FlusherCpuScope scope;
+-  DoFlush(start, size);
+-}
+-
+-void Flusher::DoFlush(void* start, size_t size) {
+-  register uint32_t beg asm("r0") = reinterpret_cast<uint32_t>(start);
+-  register uint32_t end asm("r1") = beg + size;
+-  register uint32_t flg asm("r2") = 0;
+-#ifdef __clang__
+-  // This variant of the asm avoids a constant pool entry, which can be
+-  // problematic when LTO'ing. It is also slightly shorter.
+-  register uint32_t scno asm("r7") = __ARM_NR_cacheflush;
+-
+-  asm volatile("svc 0\n"
+-               :
+-               : "r"(beg), "r"(end), "r"(flg), "r"(scno)
+-               : "memory");
+-#else
+-  // Use a different variant of the asm with GCC because some versions doesn't
+-  // support r7 as an asm input.
+-  asm volatile(
+-      // This assembly works for both ARM and Thumb targets.
+-
+-      // Preserve r7; it is callee-saved, and GCC uses it as a frame pointer for
+-      // Thumb targets.
+-      "  push {r7}\n"
+-      // r0 = beg
+-      // r1 = end
+-      // r2 = flags (0)
+-      "  ldr r7, =%c[scno]\n"  // r7 = syscall number
+-      "  svc 0\n"
+-
+-      "  pop {r7}\n"
+-      :
+-      : "r"(beg), "r"(end), "r"(flg), [scno] "i"(__ARM_NR_cacheflush)
+-      : "memory");
+-#endif
+-}
+-}
+-#endif
+-
+ void CpuFeatures::FlushICache(void* start, size_t size) {
+ #if !defined(USE_SIMULATOR)
+ #if V8_OS_QNX
+   msync(start, size, MS_SYNC | MS_INVALIDATE_ICACHE);
+-#elif defined(UC_BUILD)
+-  Flusher flusher;
+-  flusher.Flush(start, size);
+ #else
+   register uint32_t beg asm("r0") = reinterpret_cast<uint32_t>(start);
+   register uint32_t end asm("r1") = beg + size;
 diff --git a/src/arm/disasm-arm.cc b/src/arm/disasm-arm.cc
 index 5dab458889..bbf0f691dd 100644
 --- a/src/arm/disasm-arm.cc
@@ -577,6 +895,43 @@ index e74469187f..e559b95cd9 100644
  
    TNode<JSTypedArray> SpeciesCreateByLength(TNode<Context> context,
                                              TNode<JSTypedArray> exemplar,
+diff --git a/src/builtins/builtins-utils-gen.h b/src/builtins/builtins-utils-gen.h
+index 9984330980..e81b1515c1 100644
+--- a/src/builtins/builtins-utils-gen.h
++++ b/src/builtins/builtins-utils-gen.h
+@@ -48,6 +48,32 @@ class CodeAssemblerState;
+     assembler.Generate##Name##Impl();                                    \
+   }                                                                      \
+   void Name##Assembler::Generate##Name##Impl()
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++
++#define TF_BUILTIN_LLVM(Name, AssemblerBase)                            \
++  class Name##Assembler : public AssemblerBase {                        \
++   public:                                                              \
++    typedef Builtin_##Name##_InterfaceDescriptor Descriptor;            \
++                                                                        \
++    explicit Name##Assembler(compiler::CodeAssemblerState* state)       \
++        : AssemblerBase(state) {}                                       \
++    void Generate##Name##Impl();                                        \
++                                                                        \
++    Node* Parameter(Descriptor::ParameterIndices index) {               \
++      return CodeAssembler::Parameter(static_cast<int>(index));         \
++    }                                                                   \
++  };                                                                    \
++  void Builtins::Generate_##Name(compiler::CodeAssemblerState* state) { \
++    Name##Assembler assembler(state);                                   \
++    state->set_llvm_enabled(true);                                      \
++    state->SetInitialDebugInformation(#Name, __FILE__, __LINE__);       \
++    if (Builtins::KindOf(Builtins::k##Name) == Builtins::TFJ) {         \
++      assembler.PerformStackCheck(assembler.GetJSContextParameter());   \
++    }                                                                   \
++    assembler.Generate##Name##Impl();                                   \
++  }                                                                     \
++  void Name##Assembler::Generate##Name##Impl()
++#endif
+ 
+ }  // namespace internal
+ }  // namespace v8
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
 index 0b77d10072..bf101d2706 100644
 --- a/src/compiler/code-assembler.cc
@@ -705,11 +1060,103 @@ index ddb222438f..ec7b565734 100644
 +// #endif
 +
  #endif  // V8_GLOBALS_H_
+diff --git a/src/heap/heap.h b/src/heap/heap.h
+index 0f3c9ea389..ade6d84337 100644
+--- a/src/heap/heap.h
++++ b/src/heap/heap.h
+@@ -403,7 +403,11 @@ class Heap {
+       16 * kPointerMultiplier * ((1 << kPageSizeBits) / KB);
+ 
+   static const int kTraceRingBufferSize = 512;
++#if defined(UC_BUILD_CRASH_CALLBACK)
++  static const int kStacktraceBufferSize = 32 * KB;
++#else
+   static const int kStacktraceBufferSize = 512;
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
+ 
+   static const int kNoGCFlags = 0;
+   static const int kReduceMemoryFootprintMask = 1;
+@@ -2282,6 +2286,11 @@ class Heap {
+   FRIEND_TEST(HeapControllerTest, OldGenerationAllocationLimit);
+ 
+   DISALLOW_COPY_AND_ASSIGN(Heap);
++
++#if defined(UC_BUILD_CRASH_CALLBACK)
++ public:
++  void GetFromRingBufferPublic(char* buffer) { GetFromRingBuffer(buffer); }
++#endif  // defined(UC_BUILD_CRASH_CALLBACK)
+ };
+ 
+ 
+diff --git a/src/inspector/BUILD.gn b/src/inspector/BUILD.gn
+index 3951f7caad..e08b49942d 100644
+--- a/src/inspector/BUILD.gn
++++ b/src/inspector/BUILD.gn
+@@ -4,6 +4,11 @@
+ 
+ import("../../gni/v8.gni")
+ 
++#if UC_BUILD_DISABLE_INSPECTOR_V8
++import("../../snapshot_toolchain.gni")
++
++#endif  // UC_BUILD_DISABLE_INSPECTOR_V8
++
+ _inspector_protocol = v8_path_prefix + "/third_party/inspector_protocol"
+ import("$_inspector_protocol/inspector_protocol.gni")
+ 
+@@ -160,7 +165,7 @@ v8_source_set("inspector") {
+   #if UC_BUILD_DISABLE_INSPECTOR_V8
+   if (uc_build_disable_inspector_v8) {
+     sources = []
+-    sources = [
++    sources += [
+       "inspected-context.cc",
+       "inspected-context.h",
+       "string-16.cc",
+@@ -179,5 +184,6 @@ v8_source_set("inspector") {
+       "v8-stack-trace-impl.h",
+     ]
+   }
++
+   #endif  // UC_BUILD_DISABLE_INSPECTOR_V8
+ }
+diff --git a/src/interpreter/interpreter-generator.cc b/src/interpreter/interpreter-generator.cc
+index ec728e4e4d..f7bafdbf3d 100644
+--- a/src/interpreter/interpreter-generator.cc
++++ b/src/interpreter/interpreter-generator.cc
+@@ -52,6 +52,27 @@ typedef CodeStubAssembler::Variable Variable;
+   }                                                                   \
+   void Name##Assembler::GenerateImpl()
+ 
++#define IGNITION_HANDLER_LLVM(Name, BaseAssembler)                    \
++  class Name##Assembler : public BaseAssembler {                      \
++   public:                                                            \
++    explicit Name##Assembler(compiler::CodeAssemblerState* state,     \
++                             Bytecode bytecode, OperandScale scale)   \
++        : BaseAssembler(state, bytecode, scale) {}                    \
++    static void Generate(compiler::CodeAssemblerState* state,         \
++                         OperandScale scale);                         \
++                                                                      \
++   private:                                                           \
++    void GenerateImpl();                                              \
++    DISALLOW_COPY_AND_ASSIGN(Name##Assembler);                        \
++  };                                                                  \
++  void Name##Assembler::Generate(compiler::CodeAssemblerState* state, \
++                                 OperandScale scale) {                \
++    Name##Assembler assembler(state, Bytecode::k##Name, scale);       \
++    state->SetInitialDebugInformation(#Name, __FILE__, __LINE__);     \
++    assembler.GenerateImpl();                                         \
++  }                                                                   \
++  void Name##Assembler::GenerateImpl()
++
+ // LdaZero
+ //
+ // Load literal '0' into the accumulator.
 diff --git a/src/interpreter/interpreter.cc b/src/interpreter/interpreter.cc
-index 8290c82592..8cb8faf446 100644
+index 7efbfbc302..4570c624d7 100644
 --- a/src/interpreter/interpreter.cc
 +++ b/src/interpreter/interpreter.cc
-@@ -238,7 +238,7 @@ bool Interpreter::IsDispatchTableInitialized() const {
+@@ -293,7 +293,7 @@ bool Interpreter::IsDispatchTableInitialized() const {
  }
  
  const char* Interpreter::LookupNameOfBytecodeHandler(const Code* code) {
@@ -718,7 +1165,7 @@ index 8290c82592..8cb8faf446 100644
  #define RETURN_NAME(Name, ...)                                 \
    if (dispatch_table_[Bytecodes::ToByte(Bytecode::k##Name)] == \
        code->entry()) {                                         \
-@@ -246,7 +246,31 @@ const char* Interpreter::LookupNameOfBytecodeHandler(const Code* code) {
+@@ -301,7 +301,31 @@ const char* Interpreter::LookupNameOfBytecodeHandler(const Code* code) {
    }
    BYTECODE_LIST(RETURN_NAME)
  #undef RETURN_NAME

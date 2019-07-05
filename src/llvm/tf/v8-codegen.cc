@@ -65,6 +65,7 @@ class CodeGeneratorLLVM {
   // allocates result other than r0.
   void AdjustCallSite(int* callsite);
   void AdjustHandler(int* handler);
+  bool IsCallAt(int offset);
 
   struct RecordReference {
     const StackMaps::Record* record;
@@ -303,10 +304,11 @@ void CodeGeneratorLLVM::EmitHandlerTable(const CompilerState& state,
 // allocates result other than r0.
 void CodeGeneratorLLVM::AdjustCallSite(int* callsite) {
   int callsite_adj = *callsite;
-  callsite -= sizeof(Instr);
-  while (!Assembler::IsBlxReg(masm_.instr_at(callsite_adj))) {
+  callsite_adj -= sizeof(Instr);
+  while ((callsite_adj >= 0) && !IsCallAt(callsite_adj)) {
     callsite_adj -= sizeof(Instr);
   }
+  EMASSERT(callsite_adj >= 0);
   *callsite = callsite_adj;
 }
 
@@ -319,6 +321,11 @@ void CodeGeneratorLLVM::AdjustHandler(int* handler) {
     handler_adj = handler_adj + where->GetBranchOffset() + 8;
   }
   *handler = handler_adj;
+}
+
+bool CodeGeneratorLLVM::IsCallAt(int offset) {
+  Instr instr = masm_.instr_at(offset);
+  return Assembler::IsBlxReg(instr) || Assembler::IsBlOffset(instr);
 }
 
 CodeGeneratorLLVM::RecordReference::RecordReference(

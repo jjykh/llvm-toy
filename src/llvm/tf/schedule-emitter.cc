@@ -145,12 +145,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
           compiler::OpParameter<Handle<HeapObject>>(node->op());
       Heap::RootListIndex index;
       int builtin_index;
-      if (IsMaterializableFromRoot(object, &index)) {
-        visitor->VisitRoot(node->id(), static_cast<int>(index));
-        return;
-      } else if (ShouldUseRelativeBranchOrLoadFromConstant() &&
-                 isolate_->builtins()->IsBuiltinHandle(object,
-                                                       &builtin_index)) {
+      if (ShouldUseRelativeBranchOrLoadFromConstant() &&
+          isolate_->builtins()->IsBuiltinHandle(object, &builtin_index)) {
         if (HandleIsolateIndependentBuiltin(node, Handle<Code>::cast(object),
                                             visitor, builtin_index))
           return;
@@ -159,6 +155,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
             TurboAssemblerBase::RootRegisterOffsetForBuiltinIndex(
                 builtin_index),
             true);
+        return;
+      } else if (IsMaterializableFromRoot(object, &index)) {
+        visitor->VisitRoot(node->id(), static_cast<int>(index));
         return;
       } else if (object->IsCode()) {
         if (HandleCodeForCall(node, object, visitor, false)) return;
@@ -1079,6 +1078,12 @@ bool ScheduleEmitter::HandleCodeForCall(compiler::Node* node,
   if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
        (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
       (iterator == uses.end())) {
+    if (relative_call) {
+      visitor->VisitCodeForCall(node->id(),
+                                reinterpret_cast<int64_t>(object.location()),
+                                relative_call);
+      return true;
+    }
     if (!TryLoadFromConstantTable(node, object, visitor)) {
       visitor->VisitCodeForCall(node->id(),
                                 reinterpret_cast<int64_t>(object.location()),
