@@ -309,7 +309,7 @@ void CodeGeneratorLLVM::AdjustCallSite(int* callsite) {
     callsite_adj -= sizeof(Instr);
   }
   EMASSERT(callsite_adj >= 0);
-  *callsite = callsite_adj;
+  *callsite = callsite_adj + sizeof(Instr);
 }
 
 // Adjust for LLVM's unmergeable block, which results in a branch.
