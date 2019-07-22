@@ -22,7 +22,6 @@
 #include "src/llvm/llvm-tf-builder.h"
 #include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/tf/tf-parser.h"
-#include "src/llvm/tf/v8-codegen.h"
 #include "src/snapshot/serializer-common.h"
 
 namespace v8 {
@@ -173,10 +172,10 @@ void BuiltinFunctionClientImpl::BuildLoadExternalRef(
 }
 }  // namespace
 
-Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
-                                compiler::CallDescriptor* call_descriptor,
-                                const char* name, Code::Kind kind,
-                                uint32_t stub_key, int32_t builtin_index) {
+std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
+    Isolate* isolate, compiler::Schedule* schedule,
+    compiler::CallDescriptor* call_descriptor, const char* name,
+    Code::Kind kind, int32_t builtin_index) {
   static bool llvm_initialized = false;
 #if 0
   std::cout << "name: " << name << "\n" << *schedule;
@@ -207,7 +206,9 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
 #endif
   }
   do {
-    tf_llvm::CompilerState compiler_state(name);
+    std::unique_ptr<tf_llvm::CompilerState> compiler_state_storage(
+        new tf_llvm::CompilerState(name));
+    tf_llvm::CompilerState& compiler_state = *compiler_state_storage.get();
     compiler_state.code_kind_ = static_cast<int>(kind);
     compiler_state.needs_frame_ = BBM.needs_frame();
     if (call_descriptor->IsJSFunctionCall()) {
@@ -215,8 +216,6 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
     } else {
       compiler_state.prologue_kind_ = PrologueKind::Stub;
     }
-    compiler_state.stub_key_ = stub_key;
-    compiler_state.builtin_index_ = builtin_index;
 
     tf_llvm::Output output(compiler_state);
     tf_llvm::RegisterParameterDesc input_desc;
@@ -246,7 +245,11 @@ Handle<Code> V8PassManager::Run(Isolate* isolate, compiler::Schedule* schedule,
 #if 0
     disassemble(compiler_state);
 #endif
-    return tf_llvm::GenerateCode(isolate, compiler_state);
+    if (compiler_state.stackMapsSection_) {
+      DataView dv(compiler_state.stackMapsSection_->data());
+      compiler_state.sm_.parse(&dv);
+    }
+    return compiler_state_storage;
   } while (true);
 }
 }  // namespace tf_llvm

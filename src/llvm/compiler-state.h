@@ -11,6 +11,7 @@
 #include "src/llvm/llvm-headers.h"
 #include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/stack-map-info.h"
+#include "src/llvm/stack-maps.h"
 
 namespace v8 {
 namespace internal {
@@ -29,6 +30,7 @@ struct CompilerState {
   StringList dataSectionNames_;
   StackMapInfoMap stack_map_info_map_;
   LoadConstantRecorder load_constant_recorder_;
+  StackMaps sm_;
   ByteBuffer* stackMapsSection_;
   ByteBuffer* exception_table_;
   LLVMModuleRef module_;
@@ -38,8 +40,6 @@ struct CompilerState {
   const char* function_name_;
   int code_kind_;
   PrologueKind prologue_kind_;
-  int32_t builtin_index_;
-  uint32_t stub_key_;
   bool needs_frame_;
   CompilerState(const char* FunctionName);
   ~CompilerState();

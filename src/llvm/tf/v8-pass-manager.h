@@ -5,16 +5,18 @@
 #include "src/objects/code.h"
 namespace v8 {
 namespace internal {
+class TurboAssembler;
 namespace compiler {
 class Schedule;
 class CallDescriptor;
 }  // namespace compiler
 namespace tf_llvm {
+struct CompilerState;
 class V8PassManager {
  public:
-  Handle<Code> Run(Isolate* isolate, compiler::Schedule*,
-                   compiler::CallDescriptor*, const char* name, Code::Kind kind,
-                   uint32_t stub_key, int32_t builtin_index);
+  std::unique_ptr<CompilerState> SelectInstructions(
+      Isolate* isolate, compiler::Schedule*, compiler::CallDescriptor*,
+      const char* name, Code::Kind kind, int32_t builtin_index);
 };
 }  // namespace tf_llvm
 }  // namespace internal

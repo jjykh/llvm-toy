@@ -17,8 +17,6 @@ CompilerState::CompilerState(const char* function_name)
       function_name_(function_name),
       code_kind_(0),
       prologue_kind_(PrologueKind::Unset),
-      builtin_index_(0),
-      stub_key_(0),
       needs_frame_(false) {
   context_ = LLVMContextCreate();
   module_ = LLVMModuleCreateWithNameInContext("main", context_);

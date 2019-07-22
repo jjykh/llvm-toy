@@ -1,6 +1,6 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
-#include "src/llvm/tf/v8-codegen.h"
+#include "src/llvm/tf/v8-code-assemble.h"
 
 #include "src/assembler-inl.h"
 #include "src/llvm/compiler-state.h"
@@ -31,7 +31,7 @@ class RelocationProcessor {
   void ProcessConstantLoad(const uint8_t* code_start, const uint8_t* pc,
                            const LoadConstantRecorder&);
   void EmitRelativeCall(int pc);
-  void ProcessRelocationWorkList(MacroAssembler* masm);
+  void ProcessRelocationWorkList(TurboAssembler* tasm);
   RelocationProcessor() = default;
   ~RelocationProcessor() = default;
 
@@ -44,11 +44,12 @@ class RelocationProcessor {
   ConstantLocationSet constant_location_set_;
 };
 
-class CodeGeneratorLLVM {
+class CodeAssemblerLLVM {
  public:
-  CodeGeneratorLLVM(Isolate*);
-  ~CodeGeneratorLLVM() = default;
-  Handle<Code> Generate(const CompilerState& state);
+  CodeAssemblerLLVM(Isolate*, TurboAssembler*, SafepointTableBuilder*, int*,
+                    Zone*);
+  ~CodeAssemblerLLVM() = default;
+  bool Assemble(const CompilerState& state);
 
  private:
   int HandleCall(const CallInfo*, const StackMaps::Record&);
@@ -76,28 +77,31 @@ class CodeGeneratorLLVM {
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
   Isolate* isolate_;
-  Zone zone_;
-  MacroAssembler masm_;
-  SafepointTableBuilder safepoint_table_builder_;
+  Zone* zone_;
+  TurboAssembler& tasm_;
+  SafepointTableBuilder& safepoint_table_builder_;
   RecordReferenceMap record_reference_map_;
   RelocationProcessor relocation_processor_;
+  int& handler_table_offset_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
-  int handler_table_offset_ = 0;
-  bool needs_frame_ = false;
 };
 
-CodeGeneratorLLVM::CodeGeneratorLLVM(Isolate* isolate)
+CodeAssemblerLLVM::CodeAssemblerLLVM(
+    Isolate* isolate, TurboAssembler* tasm,
+    SafepointTableBuilder* safepoint_table_builder, int* handler_table_offset,
+    Zone* zone)
     : isolate_(isolate),
-      zone_(isolate->allocator(), "llvm"),
-      masm_(isolate, nullptr, 0, CodeObjectRequired::kYes),
-      safepoint_table_builder_(&zone_) {}
+      zone_(zone),
+      tasm_(*tasm),
+      safepoint_table_builder_(*safepoint_table_builder),
+      handler_table_offset_(*handler_table_offset) {}
 
-int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
+int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
                                   const StackMaps::Record& record) {
   auto call_paramters_iterator = call_info->locations().begin();
   int call_target_reg = *(call_paramters_iterator++);
-  int pc_offset = masm_.pc_offset();
+  int pc_offset = tasm_.pc_offset();
   int64_t relative_target = call_info->relative_target();
   RegList reg_list = 0;
   for (; call_paramters_iterator != call_info->locations().end();
@@ -106,71 +110,70 @@ int CodeGeneratorLLVM::HandleCall(const CallInfo* call_info,
     reg_list |= 1 << reg;
   }
   if (call_info->is_tailcall() && call_info->tailcall_return_count()) {
-    masm_.add(sp, sp, Operand(call_info->tailcall_return_count() * 4));
+    tasm_.add(sp, sp, Operand(call_info->tailcall_return_count() * 4));
   }
-  if (reg_list != 0) masm_.stm(db_w, sp, reg_list);
+  if (reg_list != 0) tasm_.stm(db_w, sp, reg_list);
   // Emit branch instr.
   if (!relative_target) {
     if (!call_info->is_tailcall())
-      masm_.blx(Register::from_code(call_target_reg));
+      tasm_.blx(Register::from_code(call_target_reg));
     else
-      masm_.bx(Register::from_code(call_target_reg));
+      tasm_.bx(Register::from_code(call_target_reg));
   } else {
-    int code_target_index = masm_.LLVMAddCodeTarget(
+    int code_target_index = tasm_.LLVMAddCodeTarget(
         Handle<Code>(reinterpret_cast<Code**>(relative_target)));
-    relocation_processor_.EmitRelativeCall(masm_.pc_offset());
+    relocation_processor_.EmitRelativeCall(tasm_.pc_offset());
     if (!call_info->is_tailcall())
-      masm_.bl(code_target_index * Instruction::kInstrSize);
+      tasm_.bl(code_target_index * Instruction::kInstrSize);
     else
-      masm_.b(code_target_index * Instruction::kInstrSize);
+      tasm_.b(code_target_index * Instruction::kInstrSize);
   }
   if (!call_info->is_tailcall()) {
     // record safepoint
     // FIXME: (UC_linzj) kLazyDeopt is abusing, pass frame-state flags to
     // determine.
     Safepoint safepoint = safepoint_table_builder_.DefineSafepoint(
-        &masm_, Safepoint::kSimple, 0, Safepoint::kLazyDeopt);
+        &tasm_, Safepoint::kSimple, 0, Safepoint::kLazyDeopt);
     for (auto& location : record.locations) {
       if (location.kind != StackMaps::Location::Indirect) continue;
       // only understand stack slot
       if (location.dwarfReg == 13) {
         // Remove the effect from safepoint-table.cc
         safepoint.DefinePointerSlot(
-            slot_count_ - 1 - location.offset / kPointerSize, &zone_);
+            slot_count_ - 1 - location.offset / kPointerSize, zone_);
       } else {
         CHECK(location.dwarfReg == 11);
-        safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1,
-                                    &zone_);
+        safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1, zone_);
       }
     }
   }
-  CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
-  return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
+  CHECK(0 == ((tasm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
+  return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
-int CodeGeneratorLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
-  int pc_offset = masm_.pc_offset();
-  masm_.blx(ip);
-  CHECK(0 == ((masm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
-  return (masm_.pc_offset() - pc_offset) / sizeof(uint32_t);
+int CodeAssemblerLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
+  int pc_offset = tasm_.pc_offset();
+  tasm_.blx(ip);
+  CHECK(0 == ((tasm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
+  return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
-int CodeGeneratorLLVM::HandleReturn(const ReturnInfo* info,
+int CodeAssemblerLLVM::HandleReturn(const ReturnInfo* info,
                                     const StackMaps::Record&) {
   int instruction_count = 2;
   if (info->pop_count_is_constant()) {
     if (info->constant() != 0)
-      masm_.add(sp, sp, Operand(info->constant() * 4));
+      tasm_.add(sp, sp, Operand(info->constant() * 4));
     else
       instruction_count = 1;
   } else {
-    masm_.add(sp, sp, Operand(r1, LSL, 2));
+    tasm_.add(sp, sp, Operand(r1, LSL, 2));
   }
-  masm_.bx(lr);
+  tasm_.bx(lr);
   return instruction_count;
 }
 
-int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
+int CodeAssemblerLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
                                           const StackMaps::Record* record) {
   switch (stack_map_info->GetType()) {
     case StackMapInfoType::kCallInfo:
@@ -184,15 +187,9 @@ int CodeGeneratorLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
   UNREACHABLE();
 }
 
-Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
-  StackMaps sm;
-  if (state.stackMapsSection_) {
-    DataView dv(state.stackMapsSection_->data());
-    sm.parse(&dv);
-  }
-  auto rm = sm.computeRecordMap();
+bool CodeAssemblerLLVM::Assemble(const CompilerState& state) {
+  auto rm = state.sm_.computeRecordMap();
   const ByteBuffer& code = state.codeSectionList_.front();
-  needs_frame_ = state.needs_frame_;
 
   const uint32_t* code_start = reinterpret_cast<const uint32_t*>(code.data());
   const uint32_t* instruction_pointer = code_start;
@@ -202,17 +199,16 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
       reinterpret_cast<const uint32_t*>(code.data() + num_bytes);
   ProcessRecordMap(rm, state.stack_map_info_map_);
 
-  slot_count_ = sm.stackSize() / kPointerSize;
+  slot_count_ = state.sm_.stackSize() / kPointerSize;
   CHECK(slot_count_ < 0x1000);
   int incremental = 0;
-  int base_offset = masm_.pc_offset();
-  masm_.set_builtin_index(state.builtin_index_);
+  int base_offset = tasm_.pc_offset();
   {
-    Assembler::BlockConstPoolScope block_const_pool(&masm_);
+    Assembler::BlockConstPoolScope block_const_pool(&tasm_);
 
     for (; num_bytes; num_bytes -= incremental * sizeof(uint32_t),
                       instruction_pointer += incremental) {
-      int pc_offset = masm_.pc_offset() - base_offset;
+      int pc_offset = tasm_.pc_offset() - base_offset;
       CHECK((pc_offset + num_bytes) == code.size());
       auto found = record_reference_map_.find(pc_offset);
       if (found != record_reference_map_.end()) {
@@ -228,33 +224,18 @@ Handle<Code> CodeGeneratorLLVM::Generate(const CompilerState& state) {
           state.load_constant_recorder_);
       incremental = 1;
       uint32_t instruction = *instruction_pointer;
-      masm_.dd(instruction);
+      tasm_.dd(instruction);
     }
   }
   EmitHandlerTable(state, isolate_);
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
-  relocation_processor_.ProcessRelocationWorkList(&masm_);
+  relocation_processor_.ProcessRelocationWorkList(&tasm_);
   record_reference_map_.clear();
-  safepoint_table_builder_.Emit(&masm_, slot_count_);
-  CodeDesc desc;
-  masm_.GetCode(isolate_, &desc);
-
-  MaybeHandle<Code> maybe_code = isolate_->factory()->TryNewCode(
-      desc, static_cast<Code::Kind>(state.code_kind_), Handle<Object>(),
-      state.builtin_index_, MaybeHandle<ByteArray>(),
-      MaybeHandle<DeoptimizationData>(), kMovable, state.stub_key_, true,
-      slot_count_, safepoint_table_builder_.GetCodeOffset(),
-      handler_table_offset_);
-
-  Handle<Code> result;
-  if (!maybe_code.ToHandle(&result)) {
-    masm_.AbortedCodeGeneration();
-    return Handle<Code>();
-  }
-  return result;
+  safepoint_table_builder_.Emit(&tasm_, slot_count_);
+  return true;
 }
 
-void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
+void CodeAssemblerLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
                                          const StackMapInfoMap& info_map) {
   for (auto& item : rm) {
     CHECK(item.second.size() == 1);
@@ -281,7 +262,7 @@ void CodeGeneratorLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
   }
 }
 
-void CodeGeneratorLLVM::EmitHandlerTable(const CompilerState& state,
+void CodeAssemblerLLVM::EmitHandlerTable(const CompilerState& state,
                                          Isolate* isolate) {
   if (!state.exception_table_) return;
   ExceptionTableARM exception_table(state.exception_table_->data(),
@@ -289,20 +270,20 @@ void CodeGeneratorLLVM::EmitHandlerTable(const CompilerState& state,
   const std::vector<std::tuple<int, int>>& callsite_handler_pairs =
       exception_table.CallSiteHandlerPairs();
   handler_table_offset_ = HandlerTable::EmitReturnTableStart(
-      &masm_, static_cast<int>(callsite_handler_pairs.size()));
+      &tasm_, static_cast<int>(callsite_handler_pairs.size()));
   for (size_t i = 0; i < callsite_handler_pairs.size(); ++i) {
     int callsite, handler;
     std::tie(callsite, handler) = callsite_handler_pairs[i];
     AdjustCallSite(&callsite);
     AdjustHandler(&handler);
-    HandlerTable::EmitReturnEntry(&masm_, callsite, handler);
+    HandlerTable::EmitReturnEntry(&tasm_, callsite, handler);
   }
 }
 
 // Adjust for LLVM's callseq_end, which will emit a SDNode
 // Copy r0. And it will becomes a defined instruction if register allocator
 // allocates result other than r0.
-void CodeGeneratorLLVM::AdjustCallSite(int* callsite) {
+void CodeAssemblerLLVM::AdjustCallSite(int* callsite) {
   int callsite_adj = *callsite;
   callsite_adj -= sizeof(Instr);
   while ((callsite_adj >= 0) && !IsCallAt(callsite_adj)) {
@@ -313,9 +294,9 @@ void CodeGeneratorLLVM::AdjustCallSite(int* callsite) {
 }
 
 // Adjust for LLVM's unmergeable block, which results in a branch.
-void CodeGeneratorLLVM::AdjustHandler(int* handler) {
+void CodeAssemblerLLVM::AdjustHandler(int* handler) {
   int handler_adj = *handler;
-  Instr instr = masm_.instr_at(handler_adj);
+  Instr instr = tasm_.instr_at(handler_adj);
   Instruction* where = Instruction::At(reinterpret_cast<Address>(&instr));
   if (where->IsBranch()) {
     handler_adj = handler_adj + where->GetBranchOffset() + 8;
@@ -323,12 +304,12 @@ void CodeGeneratorLLVM::AdjustHandler(int* handler) {
   *handler = handler_adj;
 }
 
-bool CodeGeneratorLLVM::IsCallAt(int offset) {
-  Instr instr = masm_.instr_at(offset);
+bool CodeAssemblerLLVM::IsCallAt(int offset) {
+  Instr instr = tasm_.instr_at(offset);
   return Assembler::IsBlxReg(instr) || Assembler::IsBlOffset(instr);
 }
 
-CodeGeneratorLLVM::RecordReference::RecordReference(
+CodeAssemblerLLVM::RecordReference::RecordReference(
     const StackMaps::Record* _record, const StackMapInfo* _info)
     : record(_record), info(_info) {}
 
@@ -365,9 +346,9 @@ void RelocationProcessor::EmitRelativeCall(int pc) {
   work_list_.emplace_back(0, pc, kRelativeCall);
 }
 
-void RelocationProcessor::ProcessRelocationWorkList(MacroAssembler* masm) {
-  int pc_offset = masm->pc_offset();
-  masm->LLVMGrowBuffer();
+void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
+  int pc_offset = tasm->pc_offset();
+  tasm->LLVMGrowBuffer();
   std::stable_sort(work_list_.begin(), work_list_.end(),
                    [](const WorkListEntry& lhs, const WorkListEntry& rhs) {
                      return std::get<0>(lhs) < std::get<0>(rhs);
@@ -375,33 +356,37 @@ void RelocationProcessor::ProcessRelocationWorkList(MacroAssembler* masm) {
   for (auto& entry : work_list_) {
     switch (std::get<2>(entry)) {
       case kHeapConstant:
-        masm->reset_pc(std::get<1>(entry));
-        masm->RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
+        tasm->reset_pc(std::get<1>(entry));
+        tasm->RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
         break;
       case kCodeConstant:
-        masm->reset_pc(std::get<1>(entry));
-        masm->RecordRelocInfo(RelocInfo::CODE_TARGET);
+        tasm->reset_pc(std::get<1>(entry));
+        tasm->RecordRelocInfo(RelocInfo::CODE_TARGET);
         break;
       case kExternalReference:
-        masm->reset_pc(std::get<1>(entry));
-        masm->RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
+        tasm->reset_pc(std::get<1>(entry));
+        tasm->RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
         break;
       case kRelativeCall:
-        masm->reset_pc(std::get<1>(entry));
-        masm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
+        tasm->reset_pc(std::get<1>(entry));
+        tasm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
         break;
       default:
         UNREACHABLE();
     }
   }
-  masm->reset_pc(pc_offset);
+  tasm->reset_pc(pc_offset);
 }
 }  // namespace
 
-Handle<Code> GenerateCode(Isolate* isolate, const CompilerState& state) {
+bool AssembleCode(Isolate* isolate, const CompilerState& state,
+                  TurboAssembler* tasm,
+                  SafepointTableBuilder* safepoint_builder,
+                  int* handler_table_offset, Zone* zone) {
   HandleScope handle_scope(isolate);
-  CodeGeneratorLLVM code_generator(isolate);
-  return handle_scope.CloseAndEscape(code_generator.Generate(state));
+  CodeAssemblerLLVM code_assembler(isolate, tasm, safepoint_builder,
+                                   handler_table_offset, zone);
+  return code_assembler.Assemble(state);
 }
 }  // namespace tf_llvm
 }  // namespace internal
