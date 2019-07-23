@@ -1,35 +1,3 @@
-Index: include/llvm/CodeGen/MachineFrameInfo.h
-===================================================================
---- include/llvm/CodeGen/MachineFrameInfo.h	(revision 359070)
-+++ include/llvm/CodeGen/MachineFrameInfo.h	(working copy)
-@@ -331,6 +331,8 @@
-   /// stack objects like arguments so we can't treat them as immutable.
-   bool HasTailCall = false;
- 
-+  bool TailCallsNotClobberFunctionArgs = false;
-+
-   /// Not null, if shrink-wrapping found a better place for the prologue.
-   MachineBasicBlock *Save = nullptr;
-   /// Not null, if shrink-wrapping found a better place for the epilogue.
-@@ -599,6 +601,9 @@
-   bool hasTailCall() const { return HasTailCall; }
-   void setHasTailCall() { HasTailCall = true; }
- 
-+  void setTailCallsNotClobberFunctionArgs() {
-+    TailCallsNotClobberFunctionArgs = true;
-+  }
-   /// Computes the maximum size of a callframe and the AdjustsStack property.
-   /// This only works for targets defining
-   /// TargetInstrInfo::getCallFrameSetupOpcode(), getCallFrameDestroyOpcode(),
-@@ -661,7 +666,7 @@
-   /// Returns true if the specified index corresponds to an immutable object.
-   bool isImmutableObjectIndex(int ObjectIdx) const {
-     // Tail calling functions can clobber their function arguments.
--    if (HasTailCall)
-+    if (HasTailCall && !TailCallsNotClobberFunctionArgs)
-       return false;
-     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
-            "Invalid Object Idx!");
 Index: include/llvm/IR/CallingConv.h
 ===================================================================
 --- include/llvm/IR/CallingConv.h	(revision 359070)
@@ -1457,17 +1425,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2185,6 +2220,9 @@
- 
-   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
-   if (isTailCall) {
-+    // JS tailcalls will not clobber function arguments.
-+    if (CallerIsJS)
-+      MF.getFrameInfo().setTailCallsNotClobberFunctionArgs();
-     MF.getFrameInfo().setHasTailCall();
-     return DAG.getNode(ARMISD::TC_RETURN, dl, NodeTys, Ops);
-   }
-@@ -2191,6 +2229,12 @@
+@@ -2191,6 +2226,12 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
@@ -1480,7 +1438,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9254,6 +9298,17 @@
+@@ -9254,6 +9295,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -1498,7 +1456,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -10961,6 +11016,10 @@
+@@ -10961,6 +11013,10 @@
    unsigned Mask = MaskC->getZExtValue();
    if (Mask == 0xffff)
      return SDValue();
@@ -1509,7 +1467,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    SDValue Res;
    // Case (1): or (and A, mask), val => ARMbfi A, val, mask
    ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
-@@ -13136,6 +13195,23 @@
+@@ -13136,6 +13192,23 @@
    return -1;
  }
  
