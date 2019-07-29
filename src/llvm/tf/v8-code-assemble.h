@@ -7,8 +7,7 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 struct CompilerState;
-bool AssembleCode(Isolate* isolate, const CompilerState& state,
-                  TurboAssembler* tasm,
+bool AssembleCode(const CompilerState& state, TurboAssembler* tasm,
                   SafepointTableBuilder* safepoint_builder,
                   int* handler_table_offset, Zone* zone);
 }  // namespace tf_llvm

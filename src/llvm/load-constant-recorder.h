@@ -14,14 +14,16 @@ class LoadConstantRecorder {
     kExternalReference,
     kHeapConstant,
     kCodeConstant,
+    kRelativeCall,
+    kRelocatableInt32Constant,
   };
   LoadConstantRecorder() = default;
   ~LoadConstantRecorder() = default;
-  void Register(int64_t magic, Type type);
-  Type Query(int64_t magic) const;
+  void Register(int64_t magic, Type type, int rmode = 0);
+  std::tuple<Type, int> Query(int64_t magic) const;
 
  private:
-  std::unordered_map<int64_t, Type> map_;
+  std::unordered_map<int64_t, std::tuple<Type, int> > map_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

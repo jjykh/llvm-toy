@@ -110,10 +110,7 @@ class Output {
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
   inline LType taggedType() const { return repo_.taggedType; }
-  inline LValue registerParameter(int i) { return registerParameters_[i]; }
-  inline LValue context() {
-    return registerParameters_[registerParameters_.size() - 1];
-  }
+  inline LValue parameter(int i) { return parameters_[i]; }
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
   inline LValue parent_fp() { return parent_fp_; }
@@ -133,7 +130,7 @@ class Output {
   LValue bitcast_space_;
   LLVMMetadataRef subprogram_;
   size_t stack_parameter_count_;
-  std::vector<LValue> registerParameters_;
+  std::vector<LValue> parameters_;
   std::unordered_map<LType, LValue> statepoint_function_map_;
 };
 }  // namespace tf_llvm

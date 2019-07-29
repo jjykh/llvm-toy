@@ -818,7 +818,7 @@ index 6419140a74..0b6da485a2 100644
    DISALLOW_COPY_AND_ASSIGN(CodeAssemblerState);
  };
 diff --git a/src/compiler/code-generator.cc b/src/compiler/code-generator.cc
-index 28bb8618d2..93afa42a71 100644
+index 28bb8618d2..16f69d70b3 100644
 --- a/src/compiler/code-generator.cc
 +++ b/src/compiler/code-generator.cc
 @@ -16,6 +16,9 @@
@@ -851,7 +851,7 @@ index 28bb8618d2..93afa42a71 100644
  
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +void CodeGenerator::AssembleCodeLLVM() {
-+  CHECK(tf_llvm::AssembleCode(isolate(), *compiler_state_, tasm(), safepoints(),
++  CHECK(tf_llvm::AssembleCode(*compiler_state_, tasm(), safepoints(),
 +                              &handler_table_offset_, zone()));
 +  result_ = kSuccess;
 +}
@@ -1037,6 +1037,47 @@ index 95d13f3169..42d87d4722 100644
  
    // ---------------------------------------------------------------------------
    // The following methods are for testing purposes only. Avoid production use.
+diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
+index 73dc70a768..1a893ab741 100644
+--- a/src/compiler/wasm-compiler.cc
++++ b/src/compiler/wasm-compiler.cc
+@@ -2561,6 +2561,10 @@ Node* WasmGraphBuilder::BuildWasmCall(wasm::FunctionSig* sig, Node** args,
+   if (position > 0) SetSourcePosition(call, position);
+ 
+   *effect_ = call;
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  CommonOperatorBuilder* common = mcgraph()->common();
++  *control_ = graph()->NewNode(common->Merge(1), call);
++#endif
+   size_t ret_count = sig->return_count();
+   if (ret_count == 0) return call;  // No return value.
+ 
+@@ -3425,11 +3429,15 @@ Signature<MachineRepresentation>* CreateMachineSignature(
+ }  // namespace
+ 
+ void WasmGraphBuilder::LowerInt64() {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  return;
++#else
+   if (mcgraph()->machine()->Is64()) return;
+   Int64Lowering r(mcgraph()->graph(), mcgraph()->machine(), mcgraph()->common(),
+                   mcgraph()->zone(),
+                   CreateMachineSignature(mcgraph()->zone(), sig_));
+   r.LowerGraph();
++#endif
+ }
+ 
+ void WasmGraphBuilder::SimdScalarLoweringForTesting() {
+@@ -5178,6 +5186,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
+         GetDebugName(&compilation_zone, wasm_unit_->func_name_,
+                      wasm_unit_->func_index_),
+         &compilation_zone, Code::WASM_FUNCTION);
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++    info.set_llvm_enabled(true);
++#endif
+ 
+     NodeOriginTable* node_origins = info.trace_turbo_json_enabled()
+                                         ? new (&graph_zone)
 diff --git a/src/d8.cc b/src/d8.cc
 index 8feefa4634..51c0529831 100644
 --- a/src/d8.cc
@@ -1093,6 +1134,20 @@ index ef0ea7d898..4a08563ca4 100644
    static Local<String> ReadFromStdin(Isolate* isolate);
    static void ReadLine(const v8::FunctionCallbackInfo<v8::Value>& args) {
      args.GetReturnValue().Set(ReadFromStdin(args.GetIsolate()));
+diff --git a/src/flag-definitions.h b/src/flag-definitions.h
+index 052869f308..1cc40c595a 100644
+--- a/src/flag-definitions.h
++++ b/src/flag-definitions.h
+@@ -1082,6 +1082,9 @@ DEFINE_BOOL(serialization_statistics, false,
+             "Collect statistics on serialized objects.")
+ DEFINE_UINT(serialization_chunk_size, 4096,
+             "Custom size for serialization chunks")
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++DEFINE_BOOL(mkwasmllvm, false, "building for wasm")
++#endif
+ 
+ // Regexp
+ DEFINE_BOOL(regexp_optimization, true, "generate optimized regexp code")
 diff --git a/src/globals.h b/src/globals.h
 index ddb222438f..a05d4471f5 100644
 --- a/src/globals.h

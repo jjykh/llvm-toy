@@ -9,6 +9,27 @@
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
+namespace {
+StackFrame::Type GetOutputStackFrameType(Code::Kind kind) {
+  switch (kind) {
+    case Code::STUB:
+    case Code::BYTECODE_HANDLER:
+    case Code::BUILTIN:
+      return StackFrame::STUB;
+    case Code::WASM_FUNCTION:
+      return StackFrame::WASM_COMPILED;
+    case Code::JS_TO_WASM_FUNCTION:
+      return StackFrame::JS_TO_WASM;
+    case Code::WASM_TO_JS_FUNCTION:
+      return StackFrame::WASM_TO_JS;
+    case Code::WASM_INTERPRETER_ENTRY:
+      return StackFrame::WASM_INTERPRETER_ENTRY;
+    default:
+      UNIMPLEMENTED();
+      return StackFrame::NONE;
+  }
+}
+}  // namespace
 Output::Output(CompilerState& state)
     : state_(state),
       repo_(state.context_, state.module_),
@@ -27,6 +48,7 @@ Output::~Output() {
   LLVMDisposeDIBuilder(di_builder_);
 }
 
+// parameter layout: register parameter, stack parameter, double parameter
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
   EMASSERT(!builder_);
@@ -48,30 +70,43 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     root_ = LLVMGetParam(state_.function_, 5);
     fp_ = LLVMGetParam(state_.function_, 6);
   }
-  std::vector<LValue> stack_parameters;
+  enum class LateParameterType { Stack, Double };
+  std::vector<LateParameterType> late_parameters;
   for (auto& registerParameter : registerParameters) {
-    if (registerParameter.name >= 0) {
+    if (registerParameter.type == repo().doubleType) {
+      parameters_.emplace_back(nullptr);
+      late_parameters.emplace_back(LateParameterType::Double);
+    } else if ((registerParameter.name >= 0)) {
       EMASSERT(registerParameter.name < 10);
       LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
-      registerParameters_.push_back(rvalue);
+      parameters_.emplace_back(rvalue);
     } else {
       // callee frame
-      LValue rvalue =
-          LLVMGetParam(state_.function_,
-                       kV8CCRegisterParameterCount + stack_parameter_count_);
-      stack_parameters.push_back(rvalue);
-      registerParameters_.push_back(nullptr);
       stack_parameter_count_++;
+      parameters_.emplace_back(nullptr);
+      late_parameters.emplace_back(LateParameterType::Stack);
     }
   }
-  auto j = stack_parameters.rbegin();
-  for (auto i = registerParameters_.begin(); i != registerParameters_.end();
-       ++i) {
+  auto j = late_parameters.begin();
+  int stack_parameter_index =
+      kV8CCRegisterParameterCount + stack_parameter_count_ - 1;
+  int double_parameter_index =
+      kV8CCRegisterParameterCount + stack_parameter_count_;
+  for (auto i = parameters_.begin(); i != parameters_.end(); ++i) {
     if (*i != nullptr) continue;
-    *i = *j;
+    LValue v;
+    switch (*j) {
+      case LateParameterType::Stack:
+        v = LLVMGetParam(state_.function_, stack_parameter_index--);
+        break;
+      case LateParameterType::Double:
+        v = LLVMGetParam(state_.function_, double_parameter_index++);
+        break;
+    }
+    *i = v;
     ++j;
   }
-  EMASSERT(j == stack_parameters.rend());
+  EMASSERT(j == late_parameters.end());
   bitcast_space_ = buildAlloca(arrayType(repo().int8, 16));
 }
 
@@ -90,15 +125,20 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
                                      pointerType(taggedType()),
                                      pointerType(repo().ref8)};
   EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
-
+  size_t double_parameters_count = 0;
   for (auto& registerParameter : registerParameters) {
-    if (registerParameter.name >= 0) {
+    if (registerParameter.type == repo().doubleType) {
+      double_parameters_count++;
+    } else if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);
       params_types[registerParameter.name] = registerParameter.type;
     } else {
-      params_types.push_back(registerParameter.type);
+      params_types.emplace_back(registerParameter.type);
     }
   }
+  if (double_parameters_count > 0)
+    params_types.resize(params_types.size() + double_parameters_count,
+                        repo().doubleType);
   state_.function_ = addFunction(
       state_.function_name_, functionType(taggedType(), params_types.data(),
                                           params_types.size(), NotVariadic));
@@ -118,7 +158,8 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       case PrologueKind::Stub: {
         char stub_marker[16];
         snprintf(stub_marker, sizeof(stub_marker), "%d",
-                 StackFrame::TypeToMarker(StackFrame::STUB));
+                 StackFrame::TypeToMarker(GetOutputStackFrameType(
+                     static_cast<Code::Kind>(state_.code_kind_))));
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSStubCall,
                                            stub_marker);
       } break;
@@ -380,11 +421,11 @@ LValue Output::getStatePointFunction(LType callee_type) {
   auto found = statepoint_function_map_.find(callee_type);
   if (found != statepoint_function_map_.end()) return found->second;
   std::vector<LType> wrapped_argument_types;
-  wrapped_argument_types.push_back(repo().int64);
-  wrapped_argument_types.push_back(repo().int32);
-  wrapped_argument_types.push_back(callee_type);
-  wrapped_argument_types.push_back(repo().int32);
-  wrapped_argument_types.push_back(repo().int32);
+  wrapped_argument_types.emplace_back(repo().int64);
+  wrapped_argument_types.emplace_back(repo().int32);
+  wrapped_argument_types.emplace_back(callee_type);
+  wrapped_argument_types.emplace_back(repo().int32);
+  wrapped_argument_types.emplace_back(repo().int32);
   LType function_type =
       functionType(repo().tokenType, wrapped_argument_types.data(),
                    wrapped_argument_types.size(), Variadic);

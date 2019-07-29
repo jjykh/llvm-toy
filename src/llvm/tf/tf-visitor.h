@@ -23,7 +23,11 @@ struct CallDescriptor {
   V(LoadFramePointer, (int id))                                               \
   V(LoadStackPointer, (int id))                                               \
   V(DebugBreak, (int id))                                                     \
+  V(TrapIf, (int id, int value))                                              \
+  V(TrapUnless, (int id, int value))                                          \
   V(Int32Constant, (int id, int32_t value))                                   \
+  V(Int64Constant, (int id, int64_t value))                                   \
+  V(RelocatableInt32Constant, (int id, int32_t value, int rmode))             \
   V(Float64SilenceNaN, (int id, int value))                                   \
   V(Identity, (int id, int value))                                            \
   V(Load, (int id, MachineRepresentation rep, MachineSemantic semantic,       \
@@ -37,9 +41,13 @@ struct CallDescriptor {
   V(ChangeFloat64ToInt32, (int id, int e))                                    \
   V(ChangeFloat64ToUint32, (int id, int e))                                   \
   V(ChangeFloat64ToUint64, (int id, int e))                                   \
+  V(ChangeUint32ToUint64, (int id, int e))                                    \
+  V(ChangeInt32ToInt64, (int id, int e))                                      \
   V(BitcastInt32ToFloat32, (int id, int e))                                   \
   V(BitcastFloat32ToInt32, (int id, int e))                                   \
+  V(BitcastFloat64ToInt64, (int id, int e))                                   \
   V(TruncateFloat64ToWord32, (int id, int e))                                 \
+  V(TruncateInt64ToWord32, (int id, int e))                                   \
   V(TruncateFloat64ToFloat32, (int id, int e))                                \
   V(RoundFloat64ToInt32, (int id, int e))                                     \
   V(Float64ExtractHighWord32, (int id, int e))                                \
@@ -47,8 +55,10 @@ struct CallDescriptor {
   V(RoundInt32ToFloat32, (int id, int e))                                     \
   V(Projection, (int id, int e, int index))                                   \
   V(Int32Add, (int id, int e1, int e2))                                       \
+  V(Int64Add, (int id, int e1, int e2))                                       \
   V(Int32AddWithOverflow, (int id, int e1, int e2))                           \
   V(Int32Sub, (int id, int e1, int e2))                                       \
+  V(Int64Sub, (int id, int e1, int e2))                                       \
   V(Int32SubWithOverflow, (int id, int e1, int e2))                           \
   V(Int32Mul, (int id, int e1, int e2))                                       \
   V(Int32MulWithOverflow, (int id, int e1, int e2))                           \
@@ -67,8 +77,22 @@ struct CallDescriptor {
   V(Word32And, (int id, int e1, int e2))                                      \
   V(Word32Or, (int id, int e1, int e2))                                       \
   V(Word32Xor, (int id, int e1, int e2))                                      \
+  V(Word32Ror, (int id, int e1, int e2))                                      \
   V(Word32Equal, (int id, int e1, int e2))                                    \
   V(Word32Clz, (int id, int e))                                               \
+  V(Word64Clz, (int id, int e))                                               \
+  V(Word64Shl, (int id, int e1, int e2))                                      \
+  V(Word64Shr, (int id, int e1, int e2))                                      \
+  V(Word64Sar, (int id, int e1, int e2))                                      \
+  V(Word64And, (int id, int e1, int e2))                                      \
+  V(Word64Or, (int id, int e1, int e2))                                       \
+  V(Word64Xor, (int id, int e1, int e2))                                      \
+  V(Word64Equal, (int id, int e1, int e2))                                    \
+  V(Int64Mul, (int id, int e1, int e2))                                       \
+  V(Int64LessThanOrEqual, (int id, int e1, int e2))                           \
+  V(Int64LessThan, (int id, int e1, int e2))                                  \
+  V(Uint64LessThanOrEqual, (int id, int e1, int e2))                          \
+  V(Uint64LessThan, (int id, int e1, int e2))                                 \
   V(Float64Add, (int id, int e1, int e2))                                     \
   V(Float64Sub, (int id, int e1, int e2))                                     \
   V(Float64Mul, (int id, int e1, int e2))                                     \

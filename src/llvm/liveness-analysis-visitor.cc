@@ -163,7 +163,24 @@ void LivenessAnalysisVisitor::VisitLoadStackPointer(int id) { Define(id); }
 
 void LivenessAnalysisVisitor::VisitDebugBreak(int id) {}
 
+void LivenessAnalysisVisitor::VisitTrapIf(int id, int value) {
+  AddIfNotInDefines(value);
+}
+
+void LivenessAnalysisVisitor::VisitTrapUnless(int id, int value) {
+  AddIfNotInDefines(value);
+}
+
 void LivenessAnalysisVisitor::VisitInt32Constant(int id, int32_t value) {
+  Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitInt64Constant(int id, int64_t) {
+  Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitRelocatableInt32Constant(int id, int32_t,
+                                                            int) {
   Define(id);
 }
 
@@ -228,7 +245,22 @@ void LivenessAnalysisVisitor::VisitChangeFloat64ToUint64(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitChangeUint32ToUint64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitChangeInt32ToInt64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitBitcastInt32ToFloat32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitBitcastFloat64ToInt64(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -239,6 +271,11 @@ void LivenessAnalysisVisitor::VisitBitcastFloat32ToInt32(int id, int e) {
 }
 
 void LivenessAnalysisVisitor::VisitTruncateFloat64ToWord32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitTruncateInt64ToWord32(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -269,6 +306,12 @@ void LivenessAnalysisVisitor::VisitRoundInt32ToFloat32(int id, int e) {
 }
 
 void LivenessAnalysisVisitor::VisitInt32Add(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt64Add(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -358,7 +401,19 @@ void LivenessAnalysisVisitor::VisitInt32Sub(int id, int e1, int e2) {
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitInt64Sub(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitInt32Mul(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt64Mul(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -409,6 +464,12 @@ void LivenessAnalysisVisitor::VisitWord32Xor(int id, int e1, int e2) {
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitWord32Ror(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitWord32Shr(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
@@ -445,7 +506,18 @@ void LivenessAnalysisVisitor::VisitWord32Equal(int id, int e1, int e2) {
   AddIfNotInDefines(e2);
 }
 
+void LivenessAnalysisVisitor::VisitWord64Equal(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitWord32Clz(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Clz(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -471,6 +543,68 @@ void LivenessAnalysisVisitor::VisitUint32LessThanOrEqual(int id, int e1,
 }
 
 void LivenessAnalysisVisitor::VisitUint32LessThan(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Shl(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Shr(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Sar(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64And(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Or(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord64Xor(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt64LessThanOrEqual(int id, int e1,
+                                                        int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitInt64LessThan(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitUint64LessThanOrEqual(int id, int e1,
+                                                         int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitUint64LessThan(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);

@@ -40,6 +40,8 @@ static tf_llvm::LType GetLLVMType(CommonValues& cv, MachineType mt) {
     case MachineRepresentation::kTaggedPointer:
     case MachineRepresentation::kTagged:
       return cv.taggedType;
+    case MachineRepresentation::kFloat64:
+      return cv.doubleType;
     default:
       UNREACHABLE();
   }

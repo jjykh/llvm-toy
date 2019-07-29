@@ -106,6 +106,10 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitInt32Constant(node->id(),
                                   compiler::OpParameter<int32_t>(node->op()));
       return;
+    case compiler::IrOpcode::kInt64Constant:
+      visitor->VisitInt64Constant(node->id(),
+                                  compiler::OpParameter<int64_t>(node->op()));
+      return;
     case compiler::IrOpcode::kExternalConstant: {
       const ExternalReference& external_reference =
           compiler::OpParameter<ExternalReference>(node->op());
@@ -131,8 +135,13 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitExternalConstant(node->id(), magic);
     }
       return;
-    case compiler::IrOpcode::kInt64Constant:
-    case compiler::IrOpcode::kRelocatableInt32Constant:
+    case compiler::IrOpcode::kRelocatableInt32Constant: {
+      auto& info = compiler::OpParameter<compiler::RelocatablePtrConstantInfo>(
+          node->op());
+      visitor->VisitRelocatableInt32Constant(node->id(), info.value(),
+                                             info.rmode());
+    }
+      return;
     case compiler::IrOpcode::kRelocatableInt64Constant:
     case compiler::IrOpcode::kFloat32Constant:
       UNREACHABLE();
@@ -192,9 +201,11 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kDeoptimizeUnless:
       UNREACHABLE();
     case compiler::IrOpcode::kTrapIf:
-      UNREACHABLE();
+      visitor->VisitTrapIf(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kTrapUnless:
-      UNREACHABLE();
+      visitor->VisitTrapUnless(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFrameState:
     case compiler::IrOpcode::kStateValues:
     case compiler::IrOpcode::kObjectState:
@@ -261,7 +272,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
                               node->InputAt(1)->id());
       return;
     case compiler::IrOpcode::kWord32Ror:
-      UNREACHABLE();
+      visitor->VisitWord32Ror(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord32Equal:
       visitor->VisitWord32Equal(node->id(), node->InputAt(0)->id(),
                                 node->InputAt(1)->id());
@@ -282,21 +295,34 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kWord64Popcnt:
       UNREACHABLE();
     case compiler::IrOpcode::kWord64And:
-      UNREACHABLE();
+      visitor->VisitWord64And(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Or:
-      UNREACHABLE();
+      visitor->VisitWord64Or(node->id(), node->InputAt(0)->id(),
+                             node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Xor:
-      UNREACHABLE();
+      visitor->VisitWord64Xor(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Shl:
-      UNREACHABLE();
+      visitor->VisitWord64Shl(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Shr:
-      UNREACHABLE();
+      visitor->VisitWord64Shr(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Sar:
-      UNREACHABLE();
+      visitor->VisitWord64Sar(node->id(), node->InputAt(0)->id(),
+                              node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kWord64Ror:
       UNREACHABLE();
     case compiler::IrOpcode::kWord64Clz:
-      UNREACHABLE();
+      visitor->VisitWord64Clz(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kWord64Ctz:
       UNREACHABLE();
     case compiler::IrOpcode::kWord64ReverseBits:
@@ -306,7 +332,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kInt64AbsWithOverflow:
       UNREACHABLE();
     case compiler::IrOpcode::kWord64Equal:
-      UNREACHABLE();
+      visitor->VisitWord64Equal(node->id(), node->InputAt(0)->id(),
+                                node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kInt32Add:
       visitor->VisitInt32Add(node->id(), node->InputAt(0)->id(),
                              node->InputAt(1)->id());
@@ -364,29 +392,43 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kUint32MulHigh:
       UNREACHABLE();
     case compiler::IrOpcode::kInt64Add:
-      UNREACHABLE();
+      visitor->VisitInt64Add(node->id(), node->InputAt(0)->id(),
+                             node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kInt64AddWithOverflow:
       UNREACHABLE();
     case compiler::IrOpcode::kInt64Sub:
-      UNREACHABLE();
+      visitor->VisitInt64Sub(node->id(), node->InputAt(0)->id(),
+                             node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kInt64SubWithOverflow:
       UNREACHABLE();
     case compiler::IrOpcode::kInt64Mul:
-      UNREACHABLE();
+      visitor->VisitInt64Mul(node->id(), node->InputAt(0)->id(),
+                             node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kInt64Div:
       UNREACHABLE();
     case compiler::IrOpcode::kInt64Mod:
       UNREACHABLE();
     case compiler::IrOpcode::kInt64LessThan:
-      UNREACHABLE();
+      visitor->VisitInt64LessThan(node->id(), node->InputAt(0)->id(),
+                                  node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kInt64LessThanOrEqual:
-      UNREACHABLE();
+      visitor->VisitInt64LessThanOrEqual(node->id(), node->InputAt(0)->id(),
+                                         node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kUint64Div:
       UNREACHABLE();
     case compiler::IrOpcode::kUint64LessThan:
-      UNREACHABLE();
+      visitor->VisitUint64LessThan(node->id(), node->InputAt(0)->id(),
+                                   node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kUint64LessThanOrEqual:
-      UNREACHABLE();
+      visitor->VisitUint64LessThanOrEqual(node->id(), node->InputAt(0)->id(),
+                                          node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kUint64Mod:
       UNREACHABLE();
     case compiler::IrOpcode::kBitcastTaggedToWord:
@@ -436,9 +478,11 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kTryTruncateFloat64ToUint64:
       UNREACHABLE();
     case compiler::IrOpcode::kChangeInt32ToInt64:
-      UNREACHABLE();
+      visitor->VisitChangeInt32ToInt64(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kChangeUint32ToUint64:
-      UNREACHABLE();
+      visitor->VisitChangeUint32ToUint64(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kTruncateFloat64ToFloat32:
       visitor->VisitTruncateFloat64ToFloat32(node->id(),
                                              node->InputAt(0)->id());
@@ -447,7 +491,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitTruncateFloat64ToWord32(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kTruncateInt64ToInt32:
-      UNREACHABLE();
+      visitor->VisitTruncateInt64ToWord32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kRoundFloat64ToInt32:
       visitor->VisitRoundFloat64ToInt32(node->id(), node->InputAt(0)->id());
       return;
@@ -468,7 +513,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kRoundUint64ToFloat64:
       UNREACHABLE();
     case compiler::IrOpcode::kBitcastFloat64ToInt64:
-      UNREACHABLE();
+      visitor->VisitBitcastFloat64ToInt64(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kBitcastInt32ToFloat32:
       visitor->VisitBitcastInt32ToFloat32(node->id(), node->InputAt(0)->id());
       return;
@@ -1010,13 +1056,13 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   }
   bool code = false;
   switch (descriptor->kind()) {
+    case compiler::CallDescriptor::kCallWasmFunction:
     case compiler::CallDescriptor::kCallAddress:
       break;
     case compiler::CallDescriptor::kCallCodeObject:
       code = true;
       break;
     case compiler::CallDescriptor::kCallJSFunction:
-    case compiler::CallDescriptor::kCallWasmFunction:
       UNREACHABLE();
   }
   CHECK(descriptor->ReturnCount() <= 2);
@@ -1116,7 +1162,7 @@ bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
 }
 
 bool ScheduleEmitter::ShouldUseRelativeBranchOrLoadFromConstant() {
-  return FLAG_embedded_builtins &&
+  return FLAG_embedded_builtins && !FLAG_mkwasmllvm &&
          isolate()->ShouldLoadConstantsFromRootList() && (builtin_index_ != -1);
 }
 }  // namespace tf_llvm

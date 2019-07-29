@@ -49,6 +49,7 @@ class LLVMTFBuilder final : public TFVisitor {
                   const OperandsVector& operands);
   void EndCurrentBlock();
   LValue EnsureWord32(LValue);
+  LValue EnsureWord64(LValue);
   LValue EnsurePhiInput(BasicBlock*, int, LType);
   LValue EnsurePhiInputAndPosition(BasicBlock*, int, LType);
   LValue CallGetIsolateFunction();

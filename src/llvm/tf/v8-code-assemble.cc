@@ -26,7 +26,8 @@ class RelocationProcessor {
     kExternalReference,
     kHeapConstant,
     kCodeConstant,
-    kRelativeCall
+    kRelativeCall,
+    kRelocatableInt32Constant,
   };
   void ProcessConstantLoad(const uint8_t* code_start, const uint8_t* pc,
                            const LoadConstantRecorder&);
@@ -36,9 +37,9 @@ class RelocationProcessor {
   ~RelocationProcessor() = default;
 
  private:
-  void EmitLoadRelocation(int constant, int pc, Type type);
-  // constant pc, pc, type
-  using WorkListEntry = std::tuple<int, int, Type>;
+  void EmitLoadRelocation(int constant, int pc, Type type, int rmode);
+  // constant pc, pc, type, rmode
+  using WorkListEntry = std::tuple<int, int, Type, int>;
   std::vector<WorkListEntry> work_list_;
   using ConstantLocationSet = std::unordered_set<int>;
   ConstantLocationSet constant_location_set_;
@@ -46,8 +47,7 @@ class RelocationProcessor {
 
 class CodeAssemblerLLVM {
  public:
-  CodeAssemblerLLVM(Isolate*, TurboAssembler*, SafepointTableBuilder*, int*,
-                    Zone*);
+  CodeAssemblerLLVM(TurboAssembler*, SafepointTableBuilder*, int*, Zone*);
   ~CodeAssemblerLLVM() = default;
   bool Assemble(const CompilerState& state);
 
@@ -60,7 +60,7 @@ class CodeAssemblerLLVM {
   void ProcessRecordMap(const StackMaps::RecordMap& rm,
                         const StackMapInfoMap& info_map);
   // Exception Handling
-  void EmitHandlerTable(const CompilerState& state, Isolate* isolate);
+  void EmitHandlerTable(const CompilerState& state);
   // Adjust for LLVM's callseq_end, which will emit a SDNode
   // Copy r0. And it will becomes a defined instruction if register allocator
   // allocates result other than r0.
@@ -76,7 +76,6 @@ class CodeAssemblerLLVM {
   };
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
-  Isolate* isolate_;
   Zone* zone_;
   TurboAssembler& tasm_;
   SafepointTableBuilder& safepoint_table_builder_;
@@ -88,11 +87,9 @@ class CodeAssemblerLLVM {
 };
 
 CodeAssemblerLLVM::CodeAssemblerLLVM(
-    Isolate* isolate, TurboAssembler* tasm,
-    SafepointTableBuilder* safepoint_table_builder, int* handler_table_offset,
-    Zone* zone)
-    : isolate_(isolate),
-      zone_(zone),
+    TurboAssembler* tasm, SafepointTableBuilder* safepoint_table_builder,
+    int* handler_table_offset, Zone* zone)
+    : zone_(zone),
       tasm_(*tasm),
       safepoint_table_builder_(*safepoint_table_builder),
       handler_table_offset_(*handler_table_offset) {}
@@ -167,7 +164,7 @@ int CodeAssemblerLLVM::HandleReturn(const ReturnInfo* info,
     else
       instruction_count = 1;
   } else {
-    tasm_.add(sp, sp, Operand(r1, LSL, 2));
+    tasm_.add(sp, sp, Operand(r2, LSL, 2));
   }
   tasm_.bx(lr);
   return instruction_count;
@@ -227,7 +224,7 @@ bool CodeAssemblerLLVM::Assemble(const CompilerState& state) {
       tasm_.dd(instruction);
     }
   }
-  EmitHandlerTable(state, isolate_);
+  EmitHandlerTable(state);
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
   relocation_processor_.ProcessRelocationWorkList(&tasm_);
   record_reference_map_.clear();
@@ -262,8 +259,7 @@ void CodeAssemblerLLVM::ProcessRecordMap(const StackMaps::RecordMap& rm,
   }
 }
 
-void CodeAssemblerLLVM::EmitHandlerTable(const CompilerState& state,
-                                         Isolate* isolate) {
+void CodeAssemblerLLVM::EmitHandlerTable(const CompilerState& state) {
   if (!state.exception_table_) return;
   ExceptionTableARM exception_table(state.exception_table_->data(),
                                     state.exception_table_->size());
@@ -332,14 +328,15 @@ void RelocationProcessor::ProcessConstantLoad(
     constant_location_set_.insert(constant_pc_offset);
     int pc_offset = std::distance(code_start, instruction_pointer);
 
-    LoadConstantRecorder::Type type =
-        load_constant_recorder.Query(static_cast<int64_t>(address));
-    EmitLoadRelocation(constant_pc_offset, pc_offset, static_cast<Type>(type));
+    auto info = load_constant_recorder.Query(static_cast<int64_t>(address));
+    EmitLoadRelocation(constant_pc_offset, pc_offset,
+                       static_cast<Type>(std::get<0>(info)), std::get<1>(info));
   }
 }
 
-void RelocationProcessor::EmitLoadRelocation(int constant, int pc, Type type) {
-  work_list_.emplace_back(constant, pc, type);
+void RelocationProcessor::EmitLoadRelocation(int constant, int pc, Type type,
+                                             int rmode) {
+  work_list_.emplace_back(constant, pc, type, rmode);
 }
 
 void RelocationProcessor::EmitRelativeCall(int pc) {
@@ -371,6 +368,10 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
         break;
+      case kRelocatableInt32Constant:
+        tasm->reset_pc(std::get<1>(entry));
+        tasm->RecordRelocInfo(static_cast<RelocInfo::Mode>(std::get<3>(entry)));
+        break;
       default:
         UNREACHABLE();
     }
@@ -379,12 +380,10 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
 }
 }  // namespace
 
-bool AssembleCode(Isolate* isolate, const CompilerState& state,
-                  TurboAssembler* tasm,
+bool AssembleCode(const CompilerState& state, TurboAssembler* tasm,
                   SafepointTableBuilder* safepoint_builder,
                   int* handler_table_offset, Zone* zone) {
-  HandleScope handle_scope(isolate);
-  CodeAssemblerLLVM code_assembler(isolate, tasm, safepoint_builder,
+  CodeAssemblerLLVM code_assembler(tasm, safepoint_builder,
                                    handler_table_offset, zone);
   return code_assembler.Assemble(state);
 }
