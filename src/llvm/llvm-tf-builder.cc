@@ -1193,7 +1193,7 @@ void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
   LValue value = output().buildLoadMagic(output().repo().int32, magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
   load_constant_recorder_->Register(
-      magic, LoadConstantRecorder::kRelocatableInt32Constant);
+      magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode);
 }
 
 void LLVMTFBuilder::VisitFloat64SilenceNaN(int id, int value) {

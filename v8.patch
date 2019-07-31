@@ -296,10 +296,41 @@ index 2e71ce59e6..361406c435 100644
                              intptr_t value);
    void ConstantPoolAddEntry(int position, Double value);
 diff --git a/src/arm/disasm-arm.cc b/src/arm/disasm-arm.cc
-index 5dab458889..bbf0f691dd 100644
+index 5dab458889..369933a85c 100644
 --- a/src/arm/disasm-arm.cc
 +++ b/src/arm/disasm-arm.cc
-@@ -1343,7 +1343,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+@@ -993,7 +993,11 @@ void Decoder::DecodeType01(Instruction* instr) {
+         } else {
+           // Other instructions matching this pattern are handled in the
+           // miscellaneous instructions part above.
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++          Unknown(instr);
++#else
+           UNREACHABLE();
++#endif
+         }
+         break;
+       }
+@@ -1216,10 +1220,18 @@ void Decoder::DecodeType3(Instruction* instr) {
+                       break;
+                   }
+                 } else {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++                  Unknown(instr);
++#else
+                   UNREACHABLE();
++#endif
+                 }
+               } else {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++                Unknown(instr);
++#else
+                 UNREACHABLE();
++#endif
+               }
+               break;
+             case 3:
+@@ -1343,7 +1355,11 @@ void Decoder::DecodeType3(Instruction* instr) {
              Format(instr, "sbfx'cond 'rd, 'rm, 'f");
            }
          } else {
@@ -311,6 +342,39 @@ index 5dab458889..bbf0f691dd 100644
          }
        } else if (!instr->HasW() && (instr->Bits(6, 4) == 0x1)) {
          uint32_t lsbit = static_cast<uint32_t>(instr->Bits(11, 7));
+@@ -2581,12 +2597,16 @@ bool Decoder::IsConstantPoolAt(byte* instr_ptr) {
+ 
+ 
+ int Decoder::ConstantPoolSizeAt(byte* instr_ptr) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  return -1;
++#else
+   if (IsConstantPoolAt(instr_ptr)) {
+     int instruction_bits = *(reinterpret_cast<int*>(instr_ptr));
+     return DecodeConstantPoolLength(instruction_bits);
+   } else {
+     return -1;
+   }
++#endif
+ }
+ 
+ 
+@@ -2602,12 +2622,15 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
+     return Instruction::kInstrSize;
+   }
+   int instruction_bits = *(reinterpret_cast<int*>(instr_ptr));
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++#else
+   if ((instruction_bits & kConstantPoolMarkerMask) == kConstantPoolMarker) {
+     out_buffer_pos_ += SNPrintF(out_buffer_ + out_buffer_pos_,
+                                 "constant pool begin (length %d)",
+                                 DecodeConstantPoolLength(instruction_bits));
+     return Instruction::kInstrSize;
+   }
++#endif
+   switch (instr->TypeValue()) {
+     case 0:
+     case 1: {
 diff --git a/src/builtins/builtins-math-gen.cc b/src/builtins/builtins-math-gen.cc
 index 952bdda5de..b18bb30909 100644
 --- a/src/builtins/builtins-math-gen.cc
@@ -1038,7 +1102,7 @@ index 95d13f3169..42d87d4722 100644
    // ---------------------------------------------------------------------------
    // The following methods are for testing purposes only. Avoid production use.
 diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
-index 73dc70a768..1a893ab741 100644
+index 73dc70a768..87c2240c34 100644
 --- a/src/compiler/wasm-compiler.cc
 +++ b/src/compiler/wasm-compiler.cc
 @@ -2561,6 +2561,10 @@ Node* WasmGraphBuilder::BuildWasmCall(wasm::FunctionSig* sig, Node** args,
@@ -1052,28 +1116,23 @@ index 73dc70a768..1a893ab741 100644
    size_t ret_count = sig->return_count();
    if (ret_count == 0) return call;  // No return value.
  
-@@ -3425,11 +3429,15 @@ Signature<MachineRepresentation>* CreateMachineSignature(
+@@ -3425,6 +3429,10 @@ Signature<MachineRepresentation>* CreateMachineSignature(
  }  // namespace
  
  void WasmGraphBuilder::LowerInt64() {
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+  return;
-+#else
++  // LLVM does not need lowing 64.
++  if (FLAG_mkwasmllvm) return;
++#endif
    if (mcgraph()->machine()->Is64()) return;
    Int64Lowering r(mcgraph()->graph(), mcgraph()->machine(), mcgraph()->common(),
                    mcgraph()->zone(),
-                   CreateMachineSignature(mcgraph()->zone(), sig_));
-   r.LowerGraph();
-+#endif
- }
- 
- void WasmGraphBuilder::SimdScalarLoweringForTesting() {
 @@ -5178,6 +5186,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
          GetDebugName(&compilation_zone, wasm_unit_->func_name_,
                       wasm_unit_->func_index_),
          &compilation_zone, Code::WASM_FUNCTION);
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+    info.set_llvm_enabled(true);
++    if (FLAG_mkwasmllvm) info.set_llvm_enabled(true);
 +#endif
  
      NodeOriginTable* node_origins = info.trace_turbo_json_enabled()
