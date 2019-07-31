@@ -97,6 +97,7 @@ class Output {
   LValue buildBitCast(LValue val, LType type);
   LValue buildPointerCast(LValue val, LType type);
   LValue getStatePointFunction(LType callee_type);
+  LValue getGCResultFunction(LType return_type);
 
   LValue buildInlineAsm(LType, char*, size_t, char*, size_t, bool);
   LValue buildLoadMagic(LType, int64_t magic);
@@ -106,6 +107,7 @@ class Output {
   void setLineNumber(int linenum);
   void finalizeDebugInfo();
   LValue addFunction(const char* name, LType type);
+  LType getLLVMTypeFromMachineType(const MachineType& mt);
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }
@@ -131,7 +133,7 @@ class Output {
   LLVMMetadataRef subprogram_;
   size_t stack_parameter_count_;
   std::vector<LValue> parameters_;
-  std::unordered_map<LType, LValue> statepoint_function_map_;
+  std::unordered_map<LType, LValue> gc_function_map_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

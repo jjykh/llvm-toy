@@ -938,7 +938,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
 --- lib/Target/ARM/ARMCallingConv.td	(revision 359070)
 +++ lib/Target/ARM/ARMCallingConv.td	(working copy)
-@@ -239,6 +239,60 @@
+@@ -239,6 +239,61 @@
  ]>;
  
  //===----------------------------------------------------------------------===//
@@ -957,17 +957,18 @@ Index: lib/Target/ARM/ARMCallingConv.td
 +
 +  CCIfType<[i32], CCIfAlign<"8", CCAssignToStackWithShadow<4, 8, [R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11]>>>,
 +  CCIfType<[i32], CCAssignToStackWithShadow<4, 4, [R0, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11]>>,
-+  CCIfType<[f32], CCAssignToStackWithShadow<4, 4, [Q0, Q1, Q2, Q3]>>,
-+  CCIfType<[f64], CCAssignToStackWithShadow<8, 8, [Q0, Q1, Q2, Q3]>>,
-+  CCIfType<[v2f64], CCIfAlign<"16",
-+           CCAssignToStackWithShadow<16, 16, [Q0, Q1, Q2, Q3]>>>,
-+  CCIfType<[v2f64], CCAssignToStackWithShadow<16, 8, [Q0, Q1, Q2, Q3]>>
++  CCIfType<[f32], CCAssignToReg<[S0, S1, S2, S3, S4, S5, S6, S7, S8,
++                                 S9, S10, S11, S12, S13, S14, S15]>>,
++  CCIfType<[f64], CCAssignToReg<[D0, D1, D2, D3, D4, D5, D6, D7]>>
 +]>;
 +
 +def RetCC_ARM_V8: CallingConv<[
 +  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 +  CCIfType<[i32], CCAssignToReg<[R0, R1, R2, R3]>>,
-+  CCIfType<[i64], CCAssignToRegWithShadow<[R0, R2], [R1, R3]>>
++  CCIfType<[i64], CCAssignToRegWithShadow<[R0, R2], [R1, R3]>>,
++  CCIfType<[f64], CCAssignToReg<[D0, D1, D2, D3, D4, D5, D6, D7]>>,
++  CCIfType<[f32], CCAssignToReg<[S0, S1, S2, S3, S4, S5, S6, S7, S8,
++                                 S9, S10, S11, S12, S13, S14, S15]>>
 +]>;
 +
 +def CC_ARM_V8SB: CallingConv<[
@@ -999,7 +1000,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
  
-@@ -248,6 +302,11 @@
+@@ -248,6 +303,11 @@
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  

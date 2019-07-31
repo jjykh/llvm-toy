@@ -210,6 +210,27 @@ void LivenessAnalysisVisitor::VisitStore(int id, MachineRepresentation rep,
   AddIfNotInDefines(offset);
   AddIfNotInDefines(value);
 }
+
+void LivenessAnalysisVisitor::VisitUnalignedLoad(int id,
+                                                 MachineRepresentation rep,
+                                                 int base, int offset) {
+  Define(id);
+  AddIfNotInDefines(base);
+  AddIfNotInDefines(offset);
+}
+
+void LivenessAnalysisVisitor::VisitUnalignedStore(int id,
+                                                  MachineRepresentation rep,
+                                                  int base, int offset,
+                                                  int value) {
+  Define(id);
+  AddIfNotInDefines(base);
+  AddIfNotInDefines(offset);
+  AddIfNotInDefines(value);
+}
+
+void LivenessAnalysisVisitor::VisitStackSlot(int id, int, int) { Define(id); }
+
 void LivenessAnalysisVisitor::VisitBitcastWordToTagged(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
@@ -260,6 +281,11 @@ void LivenessAnalysisVisitor::VisitBitcastInt32ToFloat32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitBitcastInt64ToFloat64(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitBitcastFloat64ToInt64(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
@@ -281,6 +307,11 @@ void LivenessAnalysisVisitor::VisitTruncateInt64ToWord32(int id, int e) {
 }
 
 void LivenessAnalysisVisitor::VisitTruncateFloat64ToFloat32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitTruncateFloat64ToUint32(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -426,6 +457,18 @@ void LivenessAnalysisVisitor::VisitInt32Div(int id, int e1, int e2) {
 }
 
 void LivenessAnalysisVisitor::VisitInt32Mod(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitUint32Div(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitUint32Mod(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
@@ -717,6 +760,39 @@ void LivenessAnalysisVisitor::VisitSmiConstant(int id, void*) { Define(id); }
 
 void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
   Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Constant(int id, double) {
+  Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Add(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Sub(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Mul(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Div(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Neg(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
 }
 
 void LivenessAnalysisVisitor::VisitReturn(int id, int pop_count,

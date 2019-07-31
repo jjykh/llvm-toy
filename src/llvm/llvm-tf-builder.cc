@@ -35,7 +35,7 @@ struct PredecessorCallInfo {
   std::vector<GCRelocateDesc> gc_relocates;
   LValue call_value = nullptr;
   int call_id = -1;
-  int return_count = 0;
+  LType return_type = nullptr;
   int target_patch_id = 0;
 };
 
@@ -178,8 +178,7 @@ class CallResolver {
   void ResolveOperands(bool code, const OperandsVector& operands,
                        const RegistersForOperands& registers_for_operands);
   void ResolveCallTarget(bool code, int target_id);
-  void UpdateAfterStatePoint(const CallDescriptor& call_desc,
-                             LValue statepoint_ret);
+  void UpdateAfterStatePoint(LValue statepoint_ret, LType return_type);
   void EmitToSuccessors(std::vector<LValue>&);
   void PopulateToStackMap();
   inline CallInfo::LocationVector&& release_location() {
@@ -411,13 +410,23 @@ void CallResolver::ResolveOperands(
 
 void CallResolver::BuildCall(const CallDescriptor& call_desc) {
   std::vector<LValue> statepoint_operands;
-  LType ret_type = output().repo().taggedType;
-  if (call_desc.return_count == 2) {
-    ret_type = structType(output().repo().context_, output().taggedType(),
-                          output().taggedType());
+
+  LType return_type;
+  if (call_desc.return_types.size() == 2) {
+    return_type = structType(
+        output().repo().context_,
+        output().getLLVMTypeFromMachineType(call_desc.return_types[0]),
+        output().getLLVMTypeFromMachineType(call_desc.return_types[1]));
+  } else if (call_desc.return_types.size() == 1) {
+    return_type =
+        output().getLLVMTypeFromMachineType(call_desc.return_types[0]);
+  } else if (call_desc.return_types.size() == 0) {
+    return_type = output().repo().voidType;
+  } else {
+    EMASSERT("return types should only be [0-2]" && false);
   }
   LType callee_function_type =
-      functionType(ret_type, operand_value_types().data(),
+      functionType(return_type, operand_value_types().data(),
                    operand_value_types().size(), NotVariadic);
   LType callee_type = pointerType(callee_function_type);
   statepoint_operands.push_back(output().constInt64(patchid()));
@@ -436,7 +445,7 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
       EmitCallInstr(output().getStatePointFunction(callee_type),
                     statepoint_operands.data(), statepoint_operands.size());
   LLVMSetInstructionCallConv(statepoint_ret, LLVMV8CallConv);
-  UpdateAfterStatePoint(call_desc, statepoint_ret);
+  UpdateAfterStatePoint(statepoint_ret, return_type);
 }
 
 void CallResolver::EmitToSuccessors(std::vector<LValue>& statepoint_operands) {
@@ -463,12 +472,12 @@ void CallResolver::EmitToSuccessors(std::vector<LValue>& statepoint_operands) {
   }
 }
 
-void CallResolver::UpdateAfterStatePoint(const CallDescriptor& call_desc,
-                                         LValue statepoint_ret) {
+void CallResolver::UpdateAfterStatePoint(LValue statepoint_ret,
+                                         LType return_type) {
   BasicBlock* successor = current_bb_->successors().front();
   GetBuilderImpl(successor)->call_info.call_id = id_;
   GetBuilderImpl(successor)->call_info.call_value = statepoint_ret;
-  GetBuilderImpl(successor)->call_info.return_count = call_desc.return_count;
+  GetBuilderImpl(successor)->call_info.return_type = return_type;
   if (current_bb_->successors().size() == 2) {
     BasicBlock* exception = current_bb_->successors()[1];
     GetBuilderImpl(exception)->exception_block = true;
@@ -865,10 +874,7 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
       found->second.llvm_value = relocated;
     }
     if (callinfo.call_id != -1) {
-      LValue intrinsic = output().repo().gcResultIntrinsic();
-      if (callinfo.return_count == 2) {
-        intrinsic = output().repo().gcResult2Intrinsic();
-      }
+      LValue intrinsic = output().getGCResultFunction(callinfo.return_type);
       LValue ret = output().buildCall(intrinsic, callinfo.call_value);
       GetBuilderImpl(current_bb_)->SetLLVMValue(callinfo.call_id, ret);
     }
@@ -1000,6 +1006,17 @@ LValue LLVMTFBuilder::EnsureWord64(LValue v) {
   if (kind == LLVMIntegerTypeKind) {
     return output().buildCast(LLVMZExt, v, output().repo().int64);
   }
+  return v;
+}
+
+LValue LLVMTFBuilder::EnsureBoolean(LValue v) {
+  LType type = typeOf(v);
+  LLVMTypeKind kind = LLVMGetTypeKind(type);
+  if (kind == LLVMPointerTypeKind)
+    v = output().buildCast(LLVMPtrToInt, v, output().repo().intPtr);
+  type = typeOf(v);
+  if (LLVMGetIntTypeWidth(type) == 1) return v;
+  v = output().buildICmp(LLVMIntNE, v, output().repo().intPtrZero);
   return v;
 }
 
@@ -1304,19 +1321,24 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   LType value_type = typeOf(llvm_value);
   LType pointer_element_type = getElementType(typeOf(pointer));
   if (pointer_element_type != value_type) {
-    LLVMTypeKind element_kind = LLVMGetTypeKind(pointer_element_type);
-    if (value_type == output().repo().intPtr) {
-      if (element_kind == LLVMPointerTypeKind)
+    LLVMTypeKind pointer_element_kind = LLVMGetTypeKind(pointer_element_type);
+    LLVMTypeKind value_kind = LLVMGetTypeKind(value_type);
+    if (value_kind == LLVMIntegerTypeKind) {
+      if (pointer_element_kind == LLVMPointerTypeKind)
         llvm_value =
             output().buildCast(LLVMIntToPtr, llvm_value, pointer_element_type);
-      else if ((pointer_element_type == output().repo().int8) ||
-               (pointer_element_type == output().repo().int16))
+      else if ((pointer_element_kind == LLVMIntegerTypeKind) &&
+               (LLVMGetIntTypeWidth(value_type) >
+                LLVMGetIntTypeWidth(pointer_element_type)))
         llvm_value =
             output().buildCast(LLVMTrunc, llvm_value, pointer_element_type);
       else
-        LLVM_BUILTIN_TRAP;
+        // FIXME: this cast does not follow the sematic hint of llvm_value.
+        // Need somewhere to store the sematic of llvm_value for query.
+        llvm_value =
+            output().buildCast(LLVMSExt, llvm_value, pointer_element_type);
     } else if ((value_type == output().taggedType()) &&
-               (element_kind == LLVMIntegerTypeKind)) {
+               (pointer_element_kind == LLVMIntegerTypeKind)) {
       LValue val =
           output().buildCast(LLVMPtrToInt, llvm_value, output().repo().intPtr);
       if (LLVMGetIntTypeWidth(output().repo().intPtr) >
@@ -1344,6 +1366,57 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
   }
 }
 
+void LLVMTFBuilder::VisitUnalignedLoad(int id, MachineRepresentation rep,
+                                       int base, int offset) {
+  output().setLineNumber(id);
+  LValue pointer = buildAccessPointer(
+      output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
+      GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
+  LValue value = output().buildLoad(pointer);
+  LType pointer_type = typeOf(pointer);
+  LLVMSetAlignment(value, 1);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
+void LLVMTFBuilder::VisitUnalignedStore(int id, MachineRepresentation rep,
+                                        int base, int offset, int value) {
+  output().setLineNumber(id);
+  LValue pointer = buildAccessPointer(
+      output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
+      GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
+  LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(value);
+  LType value_type = typeOf(llvm_value);
+  LType pointer_element_type = getElementType(typeOf(pointer));
+  if (pointer_element_type != value_type) {
+    LLVMTypeKind element_kind = LLVMGetTypeKind(pointer_element_type);
+    if (value_type == output().repo().intPtr) {
+      if (element_kind == LLVMPointerTypeKind)
+        llvm_value =
+            output().buildCast(LLVMIntToPtr, llvm_value, pointer_element_type);
+      else if ((pointer_element_type == output().repo().int8) ||
+               (pointer_element_type == output().repo().int16))
+        llvm_value =
+            output().buildCast(LLVMTrunc, llvm_value, pointer_element_type);
+      else
+        LLVM_BUILTIN_TRAP;
+    } else if ((value_type == output().taggedType()) &&
+               (element_kind == LLVMIntegerTypeKind)) {
+      LValue val =
+          output().buildCast(LLVMPtrToInt, llvm_value, output().repo().intPtr);
+      if (LLVMGetIntTypeWidth(output().repo().intPtr) >
+          LLVMGetIntTypeWidth(pointer_element_type))
+        val = output().buildCast(LLVMTrunc, val, pointer_element_type);
+      llvm_value = val;
+    } else {
+      LLVM_BUILTIN_TRAP;
+    }
+  }
+  LValue val = output().buildStore(llvm_value, pointer);
+  LLVMSetAlignment(val, 1);
+  // store should not be recorded, whatever.
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, val);
+}
+
 void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
   output().setLineNumber(id);
   GetBuilderImpl(current_bb_)
@@ -1357,9 +1430,10 @@ void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
   output().setLineNumber(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
-          id, output().buildCast(LLVMSIToFP,
-                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
-                                 output().repo().doubleType));
+          id, output().buildCast(
+                  LLVMSIToFP,
+                  EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e)),
+                  output().repo().doubleType));
 }
 
 void LLVMTFBuilder::VisitChangeFloat32ToFloat64(int id, int e) {
@@ -1437,6 +1511,18 @@ void LLVMTFBuilder::VisitBitcastInt32ToFloat32(int id, int e) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
+void LLVMTFBuilder::VisitBitcastInt64ToFloat64(int id, int e) {
+  output().setLineNumber(id);
+  LValue value_storage =
+      output().buildBitCast(output().bitcast_space(), output().repo().ref64);
+  output().buildStore(GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                      value_storage);
+  LValue double_ref = output().buildBitCast(output().bitcast_space(),
+                                            output().repo().refDouble);
+  LValue result = output().buildLoad(double_ref);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
 void LLVMTFBuilder::VisitBitcastFloat64ToInt64(int id, int e) {
   output().setLineNumber(id);
   LValue double_storage = output().buildBitCast(output().bitcast_space(),
@@ -1485,6 +1571,16 @@ void LLVMTFBuilder::VisitTruncateFloat64ToFloat32(int id, int e) {
           id, output().buildCast(LLVMFPTrunc,
                                  GetBuilderImpl(current_bb_)->GetLLVMValue(e),
                                  output().repo().floatType));
+}
+
+void LLVMTFBuilder::VisitTruncateFloat64ToUint32(int id, int e) {
+  output().setLineNumber(id);
+  TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(
+          id, output().buildCast(LLVMFPToUI,
+                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                                 output().repo().int32));
 }
 
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
@@ -1610,6 +1706,44 @@ void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
   LValue result_double = output().buildFDiv(e1_double, e2_double);
   LValue result =
       output().buildCast(LLVMFPToSI, result_double, output().repo().int32);
+#endif
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitUint32Mod(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
+  LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
+#if 0
+  LValue result = output().buildSRem(e1_value, e2_value);
+#else
+  LValue e1_double =
+      output().buildCast(LLVMUIToFP, e1_value, output().repo().doubleType);
+  LValue e2_double =
+      output().buildCast(LLVMUIToFP, e2_value, output().repo().doubleType);
+  LValue div_double = output().buildFDiv(e1_double, e2_double);
+  LValue div =
+      output().buildCast(LLVMFPToUI, div_double, output().repo().int32);
+  LValue mul = output().buildMul(div, e2_value);
+  LValue result = output().buildSub(e1_value, mul);
+#endif
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitUint32Div(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
+  LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
+#if 0
+  LValue result = output().buildSDiv(e1_value, e2_value);
+#else
+  LValue e1_double =
+      output().buildCast(LLVMUIToFP, e1_value, output().repo().doubleType);
+  LValue e2_double =
+      output().buildCast(LLVMUIToFP, e2_value, output().repo().doubleType);
+  LValue result_double = output().buildFDiv(e1_double, e2_double);
+  LValue result =
+      output().buildCast(LLVMFPToUI, result_double, output().repo().int32);
 #endif
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
@@ -1869,11 +2003,7 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   }
 #endif  // FEATURE_SAMPLE_PGO
   LValue cmp_val = GetBuilderImpl(current_bb_)->GetLLVMValue(cmp);
-  if (typeOf(cmp_val) == output().repo().intPtr) {
-    // need to trunc before continue
-    cmp_val =
-        output().buildICmp(LLVMIntNE, cmp_val, output().repo().intPtrZero);
-  }
+  cmp_val = EnsureBoolean(cmp_val);
 #if !defined(FEATURE_SAMPLE_PGO)
   if (expected_value != -1) {
     cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
@@ -2110,6 +2240,12 @@ void LLVMTFBuilder::VisitFloat64Constant(int id, double float_value) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
+void LLVMTFBuilder::VisitFloat32Constant(int id, double float_value) {
+  output().setLineNumber(id);
+  LValue value = constReal(output().repo().floatType, float_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
 void LLVMTFBuilder::VisitProjection(int id, int e, int index) {
   output().setLineNumber(id);
   LValue projection = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
@@ -2197,6 +2333,45 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value =
       output().buildCall(output().repo().doubleAbsIntrinsic(), e_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
+void LLVMTFBuilder::VisitFloat32Add(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFAdd(e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32Sub(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFSub(e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32Mul(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFMul(e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32Div(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFDiv(e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32Neg(int id, int e) {
+  output().setLineNumber(id);
+  LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
+  LValue value = output().buildFNeg(e_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2293,6 +2468,14 @@ void LLVMTFBuilder::BuildGetModTwoDoubleFunction(
                       builtin_function_client->BuildGetModTwoDoubleFunction(
                           output(), root);
                     });
+}
+
+void LLVMTFBuilder::VisitStackSlot(int id, int size, int alignment) {
+  LType array_type = arrayType(output().repo().int8, size);
+  output().positionToBBEnd(output().prologue());
+  LValue value = output().buildAlloca(array_type);
+  output().positionToBBEnd(GetNativeBBContinuation(current_bb_));
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 }  // namespace tf_llvm
 }  // namespace internal

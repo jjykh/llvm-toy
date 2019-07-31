@@ -28,25 +28,6 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 
-static tf_llvm::LType GetLLVMType(CommonValues& cv, MachineType mt) {
-  switch (mt.representation()) {
-    case MachineRepresentation::kWord8:
-      return cv.int8;
-    case MachineRepresentation::kWord16:
-      return cv.int16;
-    case MachineRepresentation::kWord32:
-      return cv.int32;
-    case MachineRepresentation::kTaggedSigned:
-    case MachineRepresentation::kTaggedPointer:
-    case MachineRepresentation::kTagged:
-      return cv.taggedType;
-    case MachineRepresentation::kFloat64:
-      return cv.doubleType;
-    default:
-      UNREACHABLE();
-  }
-}
-
 static const char* symbolLookupCallback(void* DisInfo, uint64_t ReferenceValue,
                                         uint64_t* ReferenceType,
                                         uint64_t ReferencePC,
@@ -227,8 +208,9 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
       CHECK(!location.IsAnyRegister() || (i == 0));
       uint32_t linkage_location = location.GetLocation();
       if (location.IsAnyRegister()) linkage_location = 0;
-      input_desc.emplace_back(linkage_location,
-                              GetLLVMType(output.repo(), location.GetType()));
+      input_desc.emplace_back(
+          linkage_location,
+          output.getLLVMTypeFromMachineType(location.GetType()));
     }
     output.initializeBuild(
         input_desc, !call_descriptor->HasRestrictedAllocatableRegisters());

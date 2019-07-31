@@ -48,6 +48,7 @@ class LLVMTFBuilder final : public TFVisitor {
   void DoTailCall(int id, bool code, const CallDescriptor&,
                   const OperandsVector& operands);
   void EndCurrentBlock();
+  LValue EnsureBoolean(LValue);
   LValue EnsureWord32(LValue);
   LValue EnsureWord64(LValue);
   LValue EnsurePhiInput(BasicBlock*, int, LType);

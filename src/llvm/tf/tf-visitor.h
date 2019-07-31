@@ -11,9 +11,10 @@ namespace internal {
 namespace tf_llvm {
 using OperandsVector = std::vector<int>;
 using RegistersForOperands = std::vector<int>;
+using ReturnTypes = std::vector<MachineType>;
 struct CallDescriptor {
   RegistersForOperands registers_for_operands;
-  size_t return_count;
+  ReturnTypes return_types;
 };
 
 #define INSTRUCTIONS(V)                                                       \
@@ -34,6 +35,10 @@ struct CallDescriptor {
            int base, int offset))                                             \
   V(Store, (int id, MachineRepresentation rep, WriteBarrierKind barrier,      \
             int base, int offset, int value))                                 \
+  V(UnalignedLoad, (int id, MachineRepresentation rep, int base, int offset)) \
+  V(UnalignedStore,                                                           \
+    (int id, MachineRepresentation rep, int base, int offset, int value))     \
+  V(StackSlot, (int id, int size, int alignment))                             \
   V(BitcastWordToTagged, (int id, int e))                                     \
   V(ChangeInt32ToFloat64, (int id, int e))                                    \
   V(ChangeFloat32ToFloat64, (int id, int e))                                  \
@@ -44,11 +49,13 @@ struct CallDescriptor {
   V(ChangeUint32ToUint64, (int id, int e))                                    \
   V(ChangeInt32ToInt64, (int id, int e))                                      \
   V(BitcastInt32ToFloat32, (int id, int e))                                   \
+  V(BitcastInt64ToFloat64, (int id, int e))                                   \
   V(BitcastFloat32ToInt32, (int id, int e))                                   \
   V(BitcastFloat64ToInt64, (int id, int e))                                   \
   V(TruncateFloat64ToWord32, (int id, int e))                                 \
   V(TruncateInt64ToWord32, (int id, int e))                                   \
   V(TruncateFloat64ToFloat32, (int id, int e))                                \
+  V(TruncateFloat64ToUint32, (int id, int e))                                 \
   V(RoundFloat64ToInt32, (int id, int e))                                     \
   V(Float64ExtractHighWord32, (int id, int e))                                \
   V(Float64ExtractLowWord32, (int id, int e))                                 \
@@ -64,6 +71,8 @@ struct CallDescriptor {
   V(Int32MulWithOverflow, (int id, int e1, int e2))                           \
   V(Int32Div, (int id, int e1, int e2))                                       \
   V(Int32Mod, (int id, int e1, int e2))                                       \
+  V(Uint32Div, (int id, int e1, int e2))                                      \
+  V(Uint32Mod, (int id, int e1, int e2))                                      \
   V(Float64InsertLowWord32, (int id, int e1, int e2))                         \
   V(Float64InsertHighWord32, (int id, int e1, int e2))                        \
   V(Int32LessThanOrEqual, (int id, int e1, int e2))                           \
@@ -103,6 +112,11 @@ struct CallDescriptor {
   V(Float64Equal, (int id, int e1, int e2))                                   \
   V(Float64Neg, (int id, int e))                                              \
   V(Float64Abs, (int id, int e))                                              \
+  V(Float32Add, (int id, int e1, int e2))                                     \
+  V(Float32Sub, (int id, int e1, int e2))                                     \
+  V(Float32Mul, (int id, int e1, int e2))                                     \
+  V(Float32Div, (int id, int e1, int e2))                                     \
+  V(Float32Neg, (int id, int e))                                              \
   V(Branch, (int id, int cmp, int btrue, int bfalse))                         \
   V(Switch, (int id, int val, const OperandsVector& blocks))                  \
   V(IfValue, (int id, int val))                                               \
@@ -111,6 +125,7 @@ struct CallDescriptor {
   V(HeapConstant, (int id, int64_t magic))                                    \
   V(SmiConstant, (int id, void* smi_value))                                   \
   V(Float64Constant, (int id, double value))                                  \
+  V(Float32Constant, (int id, double value))                                  \
   V(Root, (int id, int index))                                                \
   V(RootRelative, (int id, int offset, bool tagged))                          \
   V(RootOffset, (int id, int offset))                                         \

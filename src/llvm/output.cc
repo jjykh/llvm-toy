@@ -48,7 +48,7 @@ Output::~Output() {
   LLVMDisposeDIBuilder(di_builder_);
 }
 
-// parameter layout: register parameter, stack parameter, double parameter
+// parameter layout: register parameter, stack parameter, float point parameter
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc) {
   EMASSERT(!builder_);
@@ -70,12 +70,13 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     root_ = LLVMGetParam(state_.function_, 5);
     fp_ = LLVMGetParam(state_.function_, 6);
   }
-  enum class LateParameterType { Stack, Double };
+  enum class LateParameterType { Stack, FloatPoint };
   std::vector<LateParameterType> late_parameters;
   for (auto& registerParameter : registerParameters) {
-    if (registerParameter.type == repo().doubleType) {
+    if ((registerParameter.type == repo().doubleType) ||
+        (registerParameter.type == repo().floatType)) {
       parameters_.emplace_back(nullptr);
-      late_parameters.emplace_back(LateParameterType::Double);
+      late_parameters.emplace_back(LateParameterType::FloatPoint);
     } else if ((registerParameter.name >= 0)) {
       EMASSERT(registerParameter.name < 10);
       LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
@@ -99,7 +100,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       case LateParameterType::Stack:
         v = LLVMGetParam(state_.function_, stack_parameter_index--);
         break;
-      case LateParameterType::Double:
+      case LateParameterType::FloatPoint:
         v = LLVMGetParam(state_.function_, double_parameter_index++);
         break;
     }
@@ -125,10 +126,15 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
                                      pointerType(taggedType()),
                                      pointerType(repo().ref8)};
   EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
-  size_t double_parameters_count = 0;
+  std::vector<LType> float_point_parameter_types;
+  LType double_type = repo().doubleType;
+  LType float_type = repo().floatType;
   for (auto& registerParameter : registerParameters) {
-    if (registerParameter.type == repo().doubleType) {
-      double_parameters_count++;
+    if ((registerParameter.type == double_type) ||
+        (registerParameter.type == float_type)) {
+      EMASSERT(float_point_parameter_types.size() ==
+               static_cast<size_t>(registerParameter.name));
+      float_point_parameter_types.emplace_back(registerParameter.type);
     } else if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);
       params_types[registerParameter.name] = registerParameter.type;
@@ -136,9 +142,11 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       params_types.emplace_back(registerParameter.type);
     }
   }
-  if (double_parameters_count > 0)
-    params_types.resize(params_types.size() + double_parameters_count,
-                        repo().doubleType);
+  EMASSERT(float_point_parameter_types.size() <= 8);
+  params_types.insert(
+      params_types.end(),
+      std::make_move_iterator(float_point_parameter_types.begin()),
+      std::make_move_iterator(float_point_parameter_types.end()));
   state_.function_ = addFunction(
       state_.function_name_, functionType(taggedType(), params_types.data(),
                                           params_types.size(), NotVariadic));
@@ -417,9 +425,20 @@ void Output::buildUnreachable() {
   setInstrDebugLoc(v8::internal::tf_llvm::buildUnreachable(builder_));
 }
 
+static std::string GetMangledTypeStr(LType* types, size_t ntypes) {
+  size_t nlength_used;
+  // This shit use strdup.
+  char* name = const_cast<char*>(
+      LLVMIntrinsicCopyOverloadedName(1, types, ntypes, &nlength_used));
+  char* last_dot = strrchr(name, '.');
+  std::string r(last_dot);
+  free(name);
+  return r;
+}
+
 LValue Output::getStatePointFunction(LType callee_type) {
-  auto found = statepoint_function_map_.find(callee_type);
-  if (found != statepoint_function_map_.end()) return found->second;
+  auto found = gc_function_map_.find(callee_type);
+  if (found != gc_function_map_.end()) return found->second;
   std::vector<LType> wrapped_argument_types;
   wrapped_argument_types.emplace_back(repo().int64);
   wrapped_argument_types.emplace_back(repo().int32);
@@ -429,12 +448,23 @@ LValue Output::getStatePointFunction(LType callee_type) {
   LType function_type =
       functionType(repo().tokenType, wrapped_argument_types.data(),
                    wrapped_argument_types.size(), Variadic);
-  char name[256];
-  if (!LLVMGetStatepointName(function_type, name, 256)) {
-    __builtin_trap();
-  }
-  LValue function = addExternFunction(state_.module_, name, function_type);
-  statepoint_function_map_[callee_type] = function;
+  std::string name("llvm.experimental.gc.statepoint");
+  name.append(GetMangledTypeStr(&callee_type, 1));
+  LValue function =
+      addExternFunction(state_.module_, name.c_str(), function_type);
+  gc_function_map_[callee_type] = function;
+  return function;
+}
+
+LValue Output::getGCResultFunction(LType return_type) {
+  auto found = gc_function_map_.find(return_type);
+  if (found != gc_function_map_.end()) return found->second;
+  std::string name("llvm.experimental.gc.result");
+  name.append(GetMangledTypeStr(&return_type, 1));
+  LType function_type = functionType(return_type, repo().tokenType);
+  LValue function =
+      addExternFunction(state_.module_, name.c_str(), function_type);
+  gc_function_map_[return_type] = function;
   return function;
 }
 
@@ -499,6 +529,29 @@ void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 
 LValue Output::addFunction(const char* name, LType type) {
   return tf_llvm::addFunction(state_.module_, name, type);
+}
+
+LType Output::getLLVMTypeFromMachineType(const MachineType& mt) {
+  switch (mt.representation()) {
+    case MachineRepresentation::kWord8:
+      return repo().int8;
+    case MachineRepresentation::kWord16:
+      return repo().int16;
+    case MachineRepresentation::kWord32:
+      return repo().int32;
+    case MachineRepresentation::kWord64:
+      return repo().int64;
+    case MachineRepresentation::kTaggedSigned:
+    case MachineRepresentation::kTaggedPointer:
+    case MachineRepresentation::kTagged:
+      return repo().taggedType;
+    case MachineRepresentation::kFloat64:
+      return repo().doubleType;
+    case MachineRepresentation::kFloat32:
+      return repo().floatType;
+    default:
+      UNREACHABLE();
+  }
 }
 }  // namespace tf_llvm
 }  // namespace internal
