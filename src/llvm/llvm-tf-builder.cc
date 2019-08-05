@@ -2455,11 +2455,12 @@ void LLVMTFBuilder::VisitReturn(int id, int pop_count,
     if (pop_count_constant == 0) instructions_count = 1;
   }
   int patchid = state_point_id_next_++;
-  output().buildCall(output().repo().patchpointVoidIntrinsic(),
-                     output().constInt64(patchid),
-                     output().constInt32(instructions_count * 4),
-                     constNull(output().repo().ref8), output().constInt32(3),
-                     return_values[0], return_values[1], pop_count_value);
+  LValue call = output().buildCall(
+      output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
+      output().constInt32(instructions_count * 4),
+      constNull(output().repo().ref8), output().constInt32(3), return_values[0],
+      return_values[1], pop_count_value);
+  LLVMSetInstructionCallConv(call, LLVMV8CallConv);
   output().buildUnreachable();
   stack_map_info_map_->emplace(patchid, std::move(info));
 }
@@ -2550,8 +2551,8 @@ void LLVMTFBuilder::SetInt32PairFromInt64(int id, LValue n) {
   LValue e1_value = output().buildShr(n, output().constInt64(32));
   e1_value = output().buildCast(LLVMTrunc, e1_value, output().repo().int32);
   LValue ret = LLVMGetUndef(int32_pair_type_);
-  output().buildInsertValue(ret, 0, e0_value);
-  output().buildInsertValue(ret, 1, e1_value);
+  ret = output().buildInsertValue(ret, 0, e0_value);
+  ret = output().buildInsertValue(ret, 1, e1_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, ret);
 }
 }  // namespace tf_llvm
