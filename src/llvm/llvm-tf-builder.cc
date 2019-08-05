@@ -373,7 +373,10 @@ void CallResolver::ResolveOperands(
       continue;
     }
     if (reg < 0) {
-      stack_operands.emplace_back(operand_id);
+      int stack_index = -reg - 1;
+      if (stack_operands.size() <= static_cast<size_t>(stack_index))
+        stack_operands.resize(stack_index + 1);
+      stack_operands[stack_index] = operand_id;
       continue;
     }
     SetOperandValue(reg, llvm_value);
@@ -394,7 +397,7 @@ void CallResolver::ResolveOperands(
     allocated_regs.push_back(reg);
   }
 
-  auto reg_iterator = allocated_regs.rbegin();
+  auto reg_iterator = allocated_regs.begin();
 
   for (auto operand : stack_operands) {
     LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
@@ -827,7 +830,11 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       get_isolate_function_(nullptr),
       get_record_write_function_(nullptr),
       get_mod_two_double_function_(nullptr),
-      state_point_id_next_(0) {}
+      int32_pair_type_(nullptr),
+      state_point_id_next_(0) {
+  int32_pair_type_ = structType(output.repo().context_, output.repo().int32,
+                                output.repo().int32);
+}
 
 void LLVMTFBuilder::End(BuiltinFunctionClient* builtin_function_client) {
   EMASSERT(!!current_bb_);
@@ -1190,10 +1197,10 @@ void LLVMTFBuilder::VisitInt64Constant(int id, int64_t value) {
 void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
                                                   int rmode) {
   output().setLineNumber(id);
+  magic = static_cast<int32_t>(load_constant_recorder_->Register(
+      magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode));
   LValue value = output().buildLoadMagic(output().repo().int32, magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
-  load_constant_recorder_->Register(
-      magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode);
 }
 
 void LLVMTFBuilder::VisitFloat64SilenceNaN(int id, int value) {
@@ -2375,6 +2382,57 @@ void LLVMTFBuilder::VisitFloat32Neg(int id, int e) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
+void LLVMTFBuilder::VisitInt32PairAdd(int id, int e0, int e1, int e2, int e3) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = BuildInt64FromPair(e2, e3);
+  LValue result = output().buildNSWAdd(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
+void LLVMTFBuilder::VisitInt32PairSub(int id, int e0, int e1, int e2, int e3) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = BuildInt64FromPair(e2, e3);
+  LValue result = output().buildNSWSub(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
+void LLVMTFBuilder::VisitInt32PairMul(int id, int e0, int e1, int e2, int e3) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = BuildInt64FromPair(e2, e3);
+  LValue result = output().buildNSWMul(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
+void LLVMTFBuilder::VisitWord32PairShl(int id, int e0, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
+  LValue result = output().buildShl(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
+void LLVMTFBuilder::VisitWord32PairShr(int id, int e0, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
+  LValue result = output().buildShr(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
+void LLVMTFBuilder::VisitWord32PairSar(int id, int e0, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue n0 = BuildInt64FromPair(e0, e1);
+  LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
+  LValue result = output().buildSar(n0, n1);
+  SetInt32PairFromInt64(id, result);
+}
+
 void LLVMTFBuilder::VisitReturn(int id, int pop_count,
                                 const OperandsVector& operands) {
   output().setLineNumber(id);
@@ -2476,6 +2534,25 @@ void LLVMTFBuilder::VisitStackSlot(int id, int size, int alignment) {
   LValue value = output().buildAlloca(array_type);
   output().positionToBBEnd(GetNativeBBContinuation(current_bb_));
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
+LValue LLVMTFBuilder::BuildInt64FromPair(int e0, int e1) {
+  LValue e0_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e0);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  e0_value = output().buildCast(LLVMZExt, e0_value, output().repo().int64);
+  e1_value = output().buildCast(LLVMZExt, e1_value, output().repo().int64);
+  e1_value = output().buildShl(e1_value, output().constInt64(32));
+  return output().buildOr(e0_value, e1_value);
+}
+
+void LLVMTFBuilder::SetInt32PairFromInt64(int id, LValue n) {
+  LValue e0_value = output().buildCast(LLVMTrunc, n, output().repo().int32);
+  LValue e1_value = output().buildShr(n, output().constInt64(32));
+  e1_value = output().buildCast(LLVMTrunc, e1_value, output().repo().int32);
+  LValue ret = LLVMGetUndef(int32_pair_type_);
+  output().buildInsertValue(ret, 0, e0_value);
+  output().buildInsertValue(ret, 1, e1_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, ret);
 }
 }  // namespace tf_llvm
 }  // namespace internal

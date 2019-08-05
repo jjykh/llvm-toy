@@ -1102,7 +1102,7 @@ index 95d13f3169..42d87d4722 100644
    // ---------------------------------------------------------------------------
    // The following methods are for testing purposes only. Avoid production use.
 diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
-index 73dc70a768..87c2240c34 100644
+index 73dc70a768..2763affa67 100644
 --- a/src/compiler/wasm-compiler.cc
 +++ b/src/compiler/wasm-compiler.cc
 @@ -2561,6 +2561,10 @@ Node* WasmGraphBuilder::BuildWasmCall(wasm::FunctionSig* sig, Node** args,
@@ -1116,18 +1116,7 @@ index 73dc70a768..87c2240c34 100644
    size_t ret_count = sig->return_count();
    if (ret_count == 0) return call;  // No return value.
  
-@@ -3425,6 +3429,10 @@ Signature<MachineRepresentation>* CreateMachineSignature(
- }  // namespace
- 
- void WasmGraphBuilder::LowerInt64() {
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+  // LLVM does not need lowing 64.
-+  if (FLAG_mkwasmllvm) return;
-+#endif
-   if (mcgraph()->machine()->Is64()) return;
-   Int64Lowering r(mcgraph()->graph(), mcgraph()->machine(), mcgraph()->common(),
-                   mcgraph()->zone(),
-@@ -5178,6 +5186,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
+@@ -5178,6 +5182,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
          GetDebugName(&compilation_zone, wasm_unit_->func_name_,
                       wasm_unit_->func_index_),
          &compilation_zone, Code::WASM_FUNCTION);
@@ -1208,10 +1197,10 @@ index 052869f308..1cc40c595a 100644
  // Regexp
  DEFINE_BOOL(regexp_optimization, true, "generate optimized regexp code")
 diff --git a/src/globals.h b/src/globals.h
-index ddb222438f..a05d4471f5 100644
+index ddb222438f..a4453c0616 100644
 --- a/src/globals.h
 +++ b/src/globals.h
-@@ -1617,4 +1617,10 @@ namespace i = v8::internal;
+@@ -1617,4 +1617,11 @@ namespace i = v8::internal;
  # define UC_BUILD_ENABLE_DISK_CACHE_PREDICATION 0
  #endif  // UC_BUILD_ENABLE_V8_CACHE
  
@@ -1220,6 +1209,7 @@ index ddb222438f..a05d4471f5 100644
 +// #define FEATURE_SAMPLE_PGO
 +// #endif
 +#define UC_BUILD_WASM_SERIALIZING 1
++#define V8_ANDROID_LOG_STDOUT 1
 +
  #endif  // V8_GLOBALS_H_
 diff --git a/src/inspector/BUILD.gn b/src/inspector/BUILD.gn
@@ -1565,3 +1555,17 @@ index 3e301a4082..3cde437e46 100644
  
    DISALLOW_COPY_AND_ASSIGN(ProfileGenerator);
  };
+diff --git a/src/wasm/wasm-serialization.cc b/src/wasm/wasm-serialization.cc
+index 3c21a5d223..04989e61f3 100644
+--- a/src/wasm/wasm-serialization.cc
++++ b/src/wasm/wasm-serialization.cc
+@@ -129,6 +129,9 @@ void WriteVersion(Isolate* isolate, Writer* writer) {
+ 
+ bool IsSupportedVersion(Isolate* isolate, const Vector<const byte> version) {
+   if (version.size() < kVersionSize) return false;
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  return true;
++#endif
+   byte current_version[kVersionSize];
+   Writer writer({current_version, kVersionSize});
+   WriteVersion(isolate, &writer);

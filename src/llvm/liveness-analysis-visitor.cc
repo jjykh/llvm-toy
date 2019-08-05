@@ -795,6 +795,57 @@ void LivenessAnalysisVisitor::VisitFloat32Neg(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitInt32PairAdd(int id, int e0, int e1, int e2,
+                                                int e3) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+  AddIfNotInDefines(e3);
+}
+
+void LivenessAnalysisVisitor::VisitInt32PairSub(int id, int e0, int e1, int e2,
+                                                int e3) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+  AddIfNotInDefines(e3);
+}
+
+void LivenessAnalysisVisitor::VisitInt32PairMul(int id, int e0, int e1, int e2,
+                                                int e3) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+  AddIfNotInDefines(e3);
+}
+
+void LivenessAnalysisVisitor::VisitWord32PairShl(int id, int e0, int e1,
+                                                 int e2) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord32PairShr(int id, int e0, int e1,
+                                                 int e2) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitWord32PairSar(int id, int e0, int e1,
+                                                 int e2) {
+  Define(id);
+  AddIfNotInDefines(e0);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
 void LivenessAnalysisVisitor::VisitReturn(int id, int pop_count,
                                           const OperandsVector& operands) {
   Define(id);

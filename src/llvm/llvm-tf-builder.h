@@ -56,6 +56,8 @@ class LLVMTFBuilder final : public TFVisitor {
   LValue CallGetIsolateFunction();
   LValue CallGetRecordWriteBuiltin();
   LValue CallGetModTwoDoubleFunction();
+  LValue BuildInt64FromPair(int e0, int e1);
+  void SetInt32PairFromInt64(int id, LValue n);
   void BuildGetIsolateFunction(BuiltinFunctionClient* builtin_function_client);
   void BuildGetRecordWriteBuiltin(
       BuiltinFunctionClient* builtin_function_client);
@@ -72,6 +74,7 @@ class LLVMTFBuilder final : public TFVisitor {
   LValue get_isolate_function_;
   LValue get_record_write_function_;
   LValue get_mod_two_double_function_;
+  LType int32_pair_type_;
 
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;

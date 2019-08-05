@@ -21,14 +21,6 @@ namespace tf_llvm {
 namespace {
 class RelocationProcessor {
  public:
-  enum Type {
-    // must sync with LoadConstantRecorder's Type
-    kExternalReference,
-    kHeapConstant,
-    kCodeConstant,
-    kRelativeCall,
-    kRelocatableInt32Constant,
-  };
   void ProcessConstantLoad(const uint8_t* code_start, const uint8_t* pc,
                            const LoadConstantRecorder&);
   void EmitRelativeCall(int pc);
@@ -37,9 +29,10 @@ class RelocationProcessor {
   ~RelocationProcessor() = default;
 
  private:
-  void EmitLoadRelocation(int constant, int pc, Type type, int rmode);
+  void EmitLoadRelocation(int constant, int pc,
+                          const LoadConstantRecorder::MagicInfo&);
   // constant pc, pc, type, rmode
-  using WorkListEntry = std::tuple<int, int, Type, int>;
+  using WorkListEntry = std::tuple<int, int, LoadConstantRecorder::MagicInfo>;
   std::vector<WorkListEntry> work_list_;
   using ConstantLocationSet = std::unordered_set<int>;
   ConstantLocationSet constant_location_set_;
@@ -329,18 +322,19 @@ void RelocationProcessor::ProcessConstantLoad(
     int pc_offset = std::distance(code_start, instruction_pointer);
 
     auto info = load_constant_recorder.Query(static_cast<int64_t>(address));
-    EmitLoadRelocation(constant_pc_offset, pc_offset,
-                       static_cast<Type>(std::get<0>(info)), std::get<1>(info));
+    EmitLoadRelocation(constant_pc_offset, pc_offset, info);
   }
 }
 
-void RelocationProcessor::EmitLoadRelocation(int constant, int pc, Type type,
-                                             int rmode) {
-  work_list_.emplace_back(constant, pc, type, rmode);
+void RelocationProcessor::EmitLoadRelocation(
+    int constant, int pc, const LoadConstantRecorder::MagicInfo& info) {
+  work_list_.emplace_back(constant, pc, info);
 }
 
 void RelocationProcessor::EmitRelativeCall(int pc) {
-  work_list_.emplace_back(0, pc, kRelativeCall);
+  work_list_.emplace_back(
+      0, pc,
+      LoadConstantRecorder::MagicInfo(LoadConstantRecorder::kRelativeCall));
 }
 
 void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
@@ -351,26 +345,29 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
                      return std::get<0>(lhs) < std::get<0>(rhs);
                    });
   for (auto& entry : work_list_) {
-    switch (std::get<2>(entry)) {
-      case kHeapConstant:
+    auto magic_info = std::get<2>(entry);
+    switch (magic_info.type) {
+      case LoadConstantRecorder::kHeapConstant:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
         break;
-      case kCodeConstant:
+      case LoadConstantRecorder::kCodeConstant:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::CODE_TARGET);
         break;
-      case kExternalReference:
+      case LoadConstantRecorder::kExternalReference:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::EXTERNAL_REFERENCE);
         break;
-      case kRelativeCall:
+      case LoadConstantRecorder::kRelativeCall:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
         break;
-      case kRelocatableInt32Constant:
+      case LoadConstantRecorder::kRelocatableInt32Constant:
         tasm->reset_pc(std::get<1>(entry));
-        tasm->RecordRelocInfo(static_cast<RelocInfo::Mode>(std::get<3>(entry)));
+        tasm->RecordRelocInfo(static_cast<RelocInfo::Mode>(magic_info.rmode));
+        tasm->reset_pc(std::get<0>(entry));
+        tasm->dd(magic_info.real_magic);
         break;
       default:
         UNREACHABLE();

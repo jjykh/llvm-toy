@@ -719,17 +719,35 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     }
       return;
     case compiler::IrOpcode::kInt32PairAdd:
-      UNREACHABLE();
+      visitor->VisitInt32PairAdd(node->id(), node->InputAt(0)->id(),
+                                 node->InputAt(1)->id(), node->InputAt(2)->id(),
+                                 node->InputAt(3)->id());
+      return;
     case compiler::IrOpcode::kInt32PairSub:
-      UNREACHABLE();
+      visitor->VisitInt32PairSub(node->id(), node->InputAt(0)->id(),
+                                 node->InputAt(1)->id(), node->InputAt(2)->id(),
+                                 node->InputAt(3)->id());
+      return;
     case compiler::IrOpcode::kInt32PairMul:
-      UNREACHABLE();
+      visitor->VisitInt32PairMul(node->id(), node->InputAt(0)->id(),
+                                 node->InputAt(1)->id(), node->InputAt(2)->id(),
+                                 node->InputAt(3)->id());
+      return;
     case compiler::IrOpcode::kWord32PairShl:
-      UNREACHABLE();
+      visitor->VisitWord32PairShl(node->id(), node->InputAt(0)->id(),
+                                  node->InputAt(1)->id(),
+                                  node->InputAt(2)->id());
+      return;
     case compiler::IrOpcode::kWord32PairShr:
-      UNREACHABLE();
+      visitor->VisitWord32PairShr(node->id(), node->InputAt(0)->id(),
+                                  node->InputAt(1)->id(),
+                                  node->InputAt(2)->id());
+      return;
     case compiler::IrOpcode::kWord32PairSar:
-      UNREACHABLE();
+      visitor->VisitWord32PairSar(node->id(), node->InputAt(0)->id(),
+                                  node->InputAt(1)->id(),
+                                  node->InputAt(2)->id());
+      return;
     case compiler::IrOpcode::kWord32AtomicLoad:
       UNREACHABLE();
     case compiler::IrOpcode::kWord32AtomicStore:
@@ -1118,7 +1136,7 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
       CHECK(!location.IsAnyRegister());
       call_desc.registers_for_operands.push_back(location.AsRegister());
     } else if (location.IsCallerFrameSlot()) {
-      call_desc.registers_for_operands.push_back(-1);
+      call_desc.registers_for_operands.push_back(location.AsCallerFrameSlot());
     } else {
       UNREACHABLE();
     }
@@ -1206,8 +1224,8 @@ bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
 }
 
 bool ScheduleEmitter::ShouldUseRelativeBranchOrLoadFromConstant() {
-  return FLAG_embedded_builtins && !FLAG_mkwasmllvm &&
-         isolate()->ShouldLoadConstantsFromRootList() && (builtin_index_ != -1);
+  return (builtin_index_ != -1) && FLAG_embedded_builtins && !FLAG_mkwasmllvm &&
+         isolate()->ShouldLoadConstantsFromRootList();
 }
 }  // namespace tf_llvm
 }  // namespace internal

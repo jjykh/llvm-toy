@@ -50,12 +50,12 @@ Output::~Output() {
 
 // parameter layout: register parameter, stack parameter, float point parameter
 void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
-                             bool v8cc) {
+                             bool v8cc, bool is_wasm) {
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
   builder_ = LLVMCreateBuilderInContext(state_.context_);
   di_builder_ = LLVMCreateDIBuilderDisallowUnresolved(state_.module_);
-  initializeFunction(registerParameters, v8cc);
+  initializeFunction(registerParameters, v8cc, is_wasm);
   // FIXME: Add V8 to LLVM.
   LLVMSetGC(state_.function_, "coreclr");
 
@@ -71,12 +71,15 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     fp_ = LLVMGetParam(state_.function_, 6);
   }
   enum class LateParameterType { Stack, FloatPoint };
-  std::vector<LateParameterType> late_parameters;
+  // type, position in stack/double registers, position in parameters;
+  std::vector<std::tuple<LateParameterType, int, int>> late_parameters;
   for (auto& registerParameter : registerParameters) {
     if ((registerParameter.type == repo().doubleType) ||
         (registerParameter.type == repo().floatType)) {
       parameters_.emplace_back(nullptr);
-      late_parameters.emplace_back(LateParameterType::FloatPoint);
+      late_parameters.emplace_back(LateParameterType::FloatPoint,
+                                   registerParameter.name,
+                                   parameters_.size() - 1);
     } else if ((registerParameter.name >= 0)) {
       EMASSERT(registerParameter.name < 10);
       LValue rvalue = LLVMGetParam(state_.function_, registerParameter.name);
@@ -85,45 +88,49 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
       // callee frame
       stack_parameter_count_++;
       parameters_.emplace_back(nullptr);
-      late_parameters.emplace_back(LateParameterType::Stack);
+      late_parameters.emplace_back(LateParameterType::Stack,
+                                   -registerParameter.name - 1,
+                                   parameters_.size() - 1);
     }
   }
-  auto j = late_parameters.begin();
-  int stack_parameter_index =
-      kV8CCRegisterParameterCount + stack_parameter_count_ - 1;
-  int double_parameter_index =
-      kV8CCRegisterParameterCount + stack_parameter_count_;
-  for (auto i = parameters_.begin(); i != parameters_.end(); ++i) {
-    if (*i != nullptr) continue;
+  for (auto i = late_parameters.begin(); i != late_parameters.end(); ++i) {
     LValue v;
-    switch (*j) {
+    auto& tuple = *i;
+    switch (std::get<0>(tuple)) {
       case LateParameterType::Stack:
-        v = LLVMGetParam(state_.function_, stack_parameter_index--);
+        v = LLVMGetParam(state_.function_,
+                         kV8CCRegisterParameterCount + std::get<1>(tuple));
         break;
       case LateParameterType::FloatPoint:
-        v = LLVMGetParam(state_.function_, double_parameter_index++);
+        v = LLVMGetParam(state_.function_, kV8CCRegisterParameterCount +
+                                               stack_parameter_count_ +
+                                               std::get<1>(tuple));
         break;
     }
-    *i = v;
-    ++j;
+    parameters_[std::get<2>(tuple)] = v;
   }
-  EMASSERT(j == late_parameters.end());
+  int v_null_index = 0;
+  for (LValue v : parameters_) {
+    EMASSERT(v != nullptr);
+    v_null_index++;
+  }
   bitcast_space_ = buildAlloca(arrayType(repo().int8, 16));
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
-                                bool v8cc) {
-  std::vector<LType> params_types = {taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
-                                     taggedType(),
+                                bool v8cc, bool is_wasm) {
+  LType tagged_type = taggedType();
+  std::vector<LType> params_types = {tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
+                                     tagged_type,
                                      repo().ref8,
-                                     pointerType(taggedType()),
+                                     pointerType(tagged_type),
                                      pointerType(repo().ref8)};
   EMASSERT(params_types.size() == kV8CCRegisterParameterCount);
   std::vector<LType> float_point_parameter_types;
@@ -139,7 +146,12 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       EMASSERT(registerParameter.name < 10);
       params_types[registerParameter.name] = registerParameter.type;
     } else {
-      params_types.emplace_back(registerParameter.type);
+      int slot = -registerParameter.name;
+      if (params_types.size() <
+          static_cast<size_t>(slot + kV8CCRegisterParameterCount))
+        params_types.resize(slot + kV8CCRegisterParameterCount, tagged_type);
+      params_types[slot - 1 + kV8CCRegisterParameterCount] =
+          registerParameter.type;
     }
   }
   EMASSERT(float_point_parameter_types.size() <= 8);
@@ -158,6 +170,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   if (state_.needs_frame_) {
     static const char kJSFunctionCall[] = "js-function-call";
     static const char kJSStubCall[] = "js-stub-call";
+    static const char kJSWASMCall[] = "js-wasm-call";
     switch (state_.prologue_kind_) {
       case PrologueKind::JSFunctionCall:
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSFunctionCall,
@@ -170,6 +183,10 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
                      static_cast<Code::Kind>(state_.code_kind_))));
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSStubCall,
                                            stub_marker);
+        if (is_wasm) {
+          LLVMAddTargetDependentFunctionAttr(state_.function_, kJSWASMCall,
+                                             nullptr);
+        }
       } break;
       default:
         __builtin_trap();
@@ -187,10 +204,12 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       di_builder_, LLVMDWARFSourceLanguageC, file_name_meta, nullptr, 0, true,
       nullptr, 0, 1, nullptr, 0, LLVMDWARFEmissionLineTablesOnly, 0, false,
       false);
+  LLVMMetadataRef subroutine_type = LLVMDIBuilderCreateSubroutineType(
+      di_builder_, file_name_meta, nullptr, 0, LLVMDIFlagZero);
   subprogram_ = LLVMDIBuilderCreateFunction(
       di_builder_, cu, state_.function_name_, strlen(state_.function_name_),
-      nullptr, 0, file_name_meta, 1, nullptr, false, true, 1, LLVMDIFlagZero,
-      true);
+      nullptr, 0, file_name_meta, 1, subroutine_type, false, true, 1,
+      LLVMDIFlagZero, true);
   LLVMSetSubprogram(state_.function_, subprogram_);
 }
 
@@ -469,7 +488,11 @@ LValue Output::getGCResultFunction(LType return_type) {
 }
 
 LValue Output::buildExtractValue(LValue aggVal, unsigned index) {
-  return setInstrDebugLoc(tf_llvm::buildExtractValue(builder_, aggVal, index));
+  return tf_llvm::buildExtractValue(builder_, aggVal, index);
+}
+
+LValue Output::buildInsertValue(LValue aggVal, unsigned index, LValue value) {
+  return LLVMBuildInsertValue(builder_, aggVal, value, index, "");
 }
 
 LValue Output::buildCall(LValue function, const LValue* args,

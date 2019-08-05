@@ -26,8 +26,9 @@ class Output {
  public:
   Output(CompilerState& state);
   ~Output();
-  void initializeBuild(const RegisterParameterDesc&, bool v8cc);
-  void initializeFunction(const RegisterParameterDesc&, bool v8cc);
+  void initializeBuild(const RegisterParameterDesc&, bool v8cc, bool is_wasm);
+  void initializeFunction(const RegisterParameterDesc&, bool v8cc,
+                          bool is_wasm);
   LBasicBlock appendBasicBlock(const char* name = "");
   LBasicBlock appendBasicBlock(LValue function, const char* name = "");
   void positionToBBEnd(LBasicBlock);
@@ -103,6 +104,7 @@ class Output {
   LValue buildLoadMagic(LType, int64_t magic);
   void buildUnreachable();
   LValue buildExtractValue(LValue aggVal, unsigned index);
+  LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
   void setLineNumber(int linenum);
   void finalizeDebugInfo();

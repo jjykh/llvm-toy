@@ -206,14 +206,19 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
       compiler::LinkageLocation location = call_descriptor->GetInputLocation(i);
       CHECK((location.IsRegister()) || location.IsCallerFrameSlot());
       CHECK(!location.IsAnyRegister() || (i == 0));
-      uint32_t linkage_location = location.GetLocation();
+      int linkage_location;
       if (location.IsAnyRegister()) linkage_location = 0;
+      else if (location.IsRegister())
+        linkage_location = location.AsRegister();
+      else
+        linkage_location = location.AsCallerFrameSlot();
       input_desc.emplace_back(
           linkage_location,
           output.getLLVMTypeFromMachineType(location.GetType()));
     }
     output.initializeBuild(
-        input_desc, !call_descriptor->HasRestrictedAllocatableRegisters());
+        input_desc, !call_descriptor->HasRestrictedAllocatableRegisters(),
+        call_descriptor->IsWasmFunctionCall());
     tf_llvm::LLVMTFBuilder builder(output, BBM,
                                    compiler_state.stack_map_info_map_,
                                    compiler_state.load_constant_recorder_);
