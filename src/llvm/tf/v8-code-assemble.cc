@@ -345,7 +345,8 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
                      return std::get<0>(lhs) < std::get<0>(rhs);
                    });
   for (auto& entry : work_list_) {
-    auto magic_info = std::get<2>(entry);
+    const auto& magic_info = std::get<2>(entry);
+    bool should_tune_constant = true;
     switch (magic_info.type) {
       case LoadConstantRecorder::kHeapConstant:
         tasm->reset_pc(std::get<1>(entry));
@@ -362,15 +363,18 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
       case LoadConstantRecorder::kRelativeCall:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(RelocInfo::RELATIVE_CODE_TARGET);
+        should_tune_constant = false;
         break;
       case LoadConstantRecorder::kRelocatableInt32Constant:
         tasm->reset_pc(std::get<1>(entry));
         tasm->RecordRelocInfo(static_cast<RelocInfo::Mode>(magic_info.rmode));
-        tasm->reset_pc(std::get<0>(entry));
-        tasm->dd(magic_info.real_magic);
         break;
       default:
         UNREACHABLE();
+    }
+    if (should_tune_constant) {
+      tasm->reset_pc(std::get<0>(entry));
+      tasm->dd(magic_info.real_magic);
     }
   }
   tasm->reset_pc(pc_offset);

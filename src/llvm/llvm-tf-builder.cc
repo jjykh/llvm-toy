@@ -1199,7 +1199,7 @@ void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
   output().setLineNumber(id);
   magic = static_cast<int32_t>(load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode));
-  LValue value = output().buildLoadMagic(output().repo().int32, magic);
+  LValue value = output().constInt32(magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2077,17 +2077,20 @@ void LLVMTFBuilder::VisitIfException(int id) {
 
 void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   output().setLineNumber(id);
-  LValue value = output().buildLoadMagic(output().taggedType(), magic);
+  magic = load_constant_recorder_->Register(
+      magic, LoadConstantRecorder::kHeapConstant);
+  LValue value = output().constIntPtr(magic);
+  value = LLVMConstIntToPtr(value, output().taggedType());
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
-  load_constant_recorder_->Register(magic, LoadConstantRecorder::kHeapConstant);
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   output().setLineNumber(id);
-  LValue value = output().buildLoadMagic(output().repo().ref8, magic);
+  magic = load_constant_recorder_->Register(
+      magic, LoadConstantRecorder::kExternalReference);
+  LValue value = output().constIntPtr(magic);
+  value = LLVMConstIntToPtr(value, output().repo().ref8);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
-  load_constant_recorder_->Register(magic,
-                                    LoadConstantRecorder::kExternalReference);
 }
 
 void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
@@ -2226,9 +2229,10 @@ void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic, bool relative) {
     value.type = ValueType::RelativeCallTarget;
     value.relative_call_target = magic;
   } else {
-    LValue llvm_value = output().buildLoadMagic(output().repo().ref8, magic);
-    load_constant_recorder_->Register(magic,
-                                      LoadConstantRecorder::kCodeConstant);
+    magic = load_constant_recorder_->Register(
+        magic, LoadConstantRecorder::kCodeConstant);
+    LValue llvm_value = output().constIntPtr(magic);
+    llvm_value = LLVMConstIntToPtr(llvm_value, output().repo().ref8);
     value.type = ValueType::LLVMValue;
     value.llvm_value = llvm_value;
   }
