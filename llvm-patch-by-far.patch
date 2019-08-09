@@ -1,3 +1,21 @@
+Index: include/llvm/CodeGen/TargetRegisterInfo.h
+===================================================================
+--- include/llvm/CodeGen/TargetRegisterInfo.h	(revision 359070)
++++ include/llvm/CodeGen/TargetRegisterInfo.h	(working copy)
+@@ -968,6 +968,13 @@
+     return StringRef(getName(Reg));
+   }
+ 
++  using VirtRegToFixSlotMap = std::vector<std::pair<unsigned, int>>;
++
++  virtual VirtRegToFixSlotMap
++  getHoistToFixStackSlotMap(MachineFunction &) const {
++    return VirtRegToFixSlotMap();
++  }
++
+   //===--------------------------------------------------------------------===//
+   /// Subtarget Hooks
+ 
 Index: include/llvm/IR/CallingConv.h
 ===================================================================
 --- include/llvm/IR/CallingConv.h	(revision 359070)
@@ -272,6 +290,70 @@ Index: lib/CodeGen/MachineVerifier.cpp
  
    // The first MCID.NumDefs operands must be explicit register defines
    if (MONum < NumDefs) {
+Index: lib/CodeGen/RegAllocBase.cpp
+===================================================================
+--- lib/CodeGen/RegAllocBase.cpp	(revision 359070)
++++ lib/CodeGen/RegAllocBase.cpp	(working copy)
+@@ -30,6 +30,7 @@
+ #include "llvm/Support/Timer.h"
+ #include "llvm/Support/raw_ostream.h"
+ #include <cassert>
++#include <unordered_map>
+ 
+ using namespace llvm;
+ 
+@@ -166,4 +167,39 @@
+     DeadInst->eraseFromParent();
+   }
+   DeadRemats.clear();
++  tryHoistToStackSlot();
+ }
++
++void RegAllocBase::tryHoistToStackSlot() {
++  MachineFunction &MF = VRM->getMachineFunction();
++  auto RegMapping = TRI->getHoistToFixStackSlotMap(MF);
++  if (RegMapping.empty())
++    return;
++  std::unordered_map<int, int> SlotMapping;
++  for (auto& Entry : RegMapping) {
++    int Slot = VRM->getStackSlot(Entry.first);
++    if (Slot == VirtRegMap::NO_STACK_SLOT)
++      continue;
++    SlotMapping.emplace(Slot, Entry.second);
++  }
++  if (SlotMapping.empty())
++    return;
++  for (MachineBasicBlock &MBB : MF) {
++    for (MachineInstr &MI : MBB)
++      for (unsigned i = 0, ee = MI.getNumOperands(); i != ee; ++i) {
++        MachineOperand &MO = MI.getOperand(i);
++        if (!MO.isFI())
++          continue;
++        int OldFI = MO.getIndex();
++        if (OldFI < 0)
++          continue;
++        auto FoundFI = SlotMapping.find(OldFI);
++        if (FoundFI == SlotMapping.end())
++          continue;
++        int NewFI = FoundFI->second;
++        if (NewFI == OldFI)
++          continue;
++        MO.setIndex(NewFI);
++      }
++  }
++}
+Index: lib/CodeGen/RegAllocBase.h
+===================================================================
+--- lib/CodeGen/RegAllocBase.h	(revision 359070)
++++ lib/CodeGen/RegAllocBase.h	(working copy)
+@@ -118,6 +118,7 @@
+ 
+ private:
+   void seedLiveRegs();
++  void tryHoistToStackSlot();
+ };
+ 
+ } // end namespace llvm
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 359070)
@@ -934,6 +1016,38 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
  }
+@@ -862,3 +883,18 @@
+   }
+   return false;
+ }
++
++TargetRegisterInfo::VirtRegToFixSlotMap
++ARMBaseRegisterInfo::getHoistToFixStackSlotMap(MachineFunction &MF) const {
++  const MachineRegisterInfo &MRI = MF.getRegInfo();
++  const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++  MachineFrameInfo &MFI = MF.getFrameInfo();
++  VirtRegToFixSlotMap result;
++  for (auto &livein : MRI.liveins()) {
++    if (AFI->isWASM() && (livein.first == ARM::R3)) {
++      result.emplace_back(livein.second,
++                          MFI.CreateFixedSpillStackObject(4, -16));
++    }
++  }
++  return result;
++}
+Index: lib/Target/ARM/ARMBaseRegisterInfo.h
+===================================================================
+--- lib/Target/ARM/ARMBaseRegisterInfo.h	(revision 359070)
++++ lib/Target/ARM/ARMBaseRegisterInfo.h	(working copy)
+@@ -210,6 +210,8 @@
+                       unsigned DstSubReg,
+                       const TargetRegisterClass *NewRC,
+                       LiveIntervals &LIS) const override;
++
++  VirtRegToFixSlotMap getHoistToFixStackSlotMap(MachineFunction &) const final;
+ };
+ 
+ } // end namespace llvm
 Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
 --- lib/Target/ARM/ARMCallingConv.td	(revision 359070)
@@ -1188,22 +1302,12 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned PopOpc = AFI->isThumbFunction() ? ARM::t2LDMIA_UPD : ARM::LDMIA_UPD;
    unsigned LdrOpc = AFI->isThumbFunction() ? ARM::t2LDR_POST :ARM::LDR_POST_IMM;
    unsigned FltOpc = ARM::VLDMDIA_UPD;
-@@ -1611,6 +1672,23 @@
+@@ -1611,6 +1672,13 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
 +
-+  const Function &F = MF.getFunction();
-+  if (F.hasFnAttribute("js-function-call"))
-+    AFI->setJSFunction(true);
-+  else if (F.hasFnAttribute("js-stub-call"))
-+    AFI->setJSStub(true);
-+  if (F.hasFnAttribute("js-wasm-call"))
-+    AFI->setWASM(true);
-+
 +  if (AFI->isJSFunction() || AFI->isJSStub()) {
-+    assert((F.getCallingConv() == CallingConv::V8CC) ||
-+           (F.getCallingConv() == CallingConv::V8SBCC));
 +    SavedRegs.set(ARM::R11);
 +    SavedRegs.set(ARM::LR);
 +    CanEliminateFrame = false;
@@ -1212,7 +1316,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1861,10 @@
+@@ -1783,7 +1851,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1224,7 +1328,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1878,6 @@
+@@ -1797,7 +1868,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1232,7 +1336,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2591,28 @@
+@@ -2511,3 +2581,28 @@
    MF.verify();
  #endif
  }
@@ -1281,7 +1385,31 @@ Index: lib/Target/ARM/ARMISelDAGToDAG.cpp
 ===================================================================
 --- lib/Target/ARM/ARMISelDAGToDAG.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMISelDAGToDAG.cpp	(working copy)
-@@ -463,6 +463,9 @@
+@@ -13,6 +13,7 @@
+ 
+ #include "ARM.h"
+ #include "ARMBaseInstrInfo.h"
++#include "ARMMachineFunctionInfo.h"
+ #include "ARMTargetMachine.h"
+ #include "MCTargetDesc/ARMAddressingModes.h"
+ #include "Utils/ARMBaseInfo.h"
+@@ -60,6 +61,15 @@
+       : SelectionDAGISel(tm, OptLevel) {}
+ 
+   bool runOnMachineFunction(MachineFunction &MF) override {
++    const Function &F = MF.getFunction();
++    ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++    if (F.hasFnAttribute("js-function-call"))
++      AFI->setJSFunction(true);
++    else if (F.hasFnAttribute("js-stub-call"))
++      AFI->setJSStub(true);
++    if (F.hasFnAttribute("js-wasm-call"))
++      AFI->setWASM(true);
++
+     // Reset the subtarget each time through.
+     Subtarget = &MF.getSubtarget<ARMSubtarget>();
+     SelectionDAGISel::runOnMachineFunction(MF);
+@@ -463,6 +473,9 @@
      if (Subtarget->hasV6T2Ops() && Val <= 0xffff) return 1; // MOVW
      if (ARM_AM::isSOImmTwoPartVal(Val)) return 2;           // two instrs
    }
