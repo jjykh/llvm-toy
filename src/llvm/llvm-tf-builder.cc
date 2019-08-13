@@ -1199,7 +1199,7 @@ void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
   output().setLineNumber(id);
   magic = static_cast<int32_t>(load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode));
-  LValue value = output().constInt32(magic);
+  LValue value = output().buildLoadMagic(output().repo().int32, magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2079,8 +2079,7 @@ void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   output().setLineNumber(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kHeapConstant);
-  LValue value = output().constIntPtr(magic);
-  value = LLVMConstIntToPtr(value, output().taggedType());
+  LValue value = output().buildLoadMagic(output().taggedType(), magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2088,8 +2087,7 @@ void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
   output().setLineNumber(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kExternalReference);
-  LValue value = output().constIntPtr(magic);
-  value = LLVMConstIntToPtr(value, output().repo().ref8);
+  LValue value = output().buildLoadMagic(output().repo().ref8, magic);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2231,8 +2229,7 @@ void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic, bool relative) {
   } else {
     magic = load_constant_recorder_->Register(
         magic, LoadConstantRecorder::kCodeConstant);
-    LValue llvm_value = output().constIntPtr(magic);
-    llvm_value = LLVMConstIntToPtr(llvm_value, output().repo().ref8);
+    LValue llvm_value = output().buildLoadMagic(output().repo().ref8, magic);
     value.type = ValueType::LLVMValue;
     value.llvm_value = llvm_value;
   }

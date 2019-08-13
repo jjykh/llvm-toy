@@ -32,7 +32,6 @@ class LoadConstantRecorder {
 
  private:
   std::unordered_map<int64_t, MagicInfo> map_;
-  int64_t next_magic_ = 0xefecdade;
 };
 }  // namespace tf_llvm
 }  // namespace internal

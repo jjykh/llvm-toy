@@ -9,7 +9,14 @@ namespace tf_llvm {
 int64_t LoadConstantRecorder::Register(int64_t magic,
                                        LoadConstantRecorder::Type type,
                                        int rmode) {
-  int64_t result_magic = next_magic_++;
+  int result_magic = magic;
+  switch (type) {
+    case kRelocatableInt32Constant:
+      result_magic = magic | (static_cast<int64_t>(type) << 16) | (rmode << 24);
+      break;
+    default:
+      break;
+  }
   map_.emplace(result_magic, MagicInfo(type, rmode, magic));
   return result_magic;
 }
