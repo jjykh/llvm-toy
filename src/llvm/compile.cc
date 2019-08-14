@@ -128,6 +128,9 @@ void compile(State& state) {
   functionPasses = LLVMCreateFunctionPassManagerForModule(module);
   modulePasses = LLVMCreatePassManager();
 
+  LLVMTargetLibraryInfoRef TLI = LLVMCreateEmptyTargetLibraryInfo();
+  LLVMAddTargetLibraryInfo(TLI, functionPasses);
+  LLVMAddTargetLibraryInfo(TLI, modulePasses);
   LLVMPassManagerBuilderPopulateFunctionPassManager(passBuilder,
                                                     functionPasses);
   LLVMPassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);
