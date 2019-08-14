@@ -320,7 +320,7 @@ Index: lib/CodeGen/RegAllocBase.cpp
 +  if (RegMapping.empty())
 +    return;
 +  std::unordered_map<int, int> SlotMapping;
-+  for (auto& Entry : RegMapping) {
++  for (auto &Entry : RegMapping) {
 +    int Slot = VRM->getStackSlot(Entry.first);
 +    if (Slot == VirtRegMap::NO_STACK_SLOT)
 +      continue;
@@ -1286,10 +1286,10 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +static inline bool isV8Area3Register(unsigned Reg, bool isIOS) {
 +  using namespace ARM;
 +  switch (Reg) {
-+    case R5:
-+    case R6:
-+    case R8:
-+    case R9:
++  case R5:
++  case R6:
++  case R8:
++  case R9:
 +    return true;
 +  default:
 +    return false;
@@ -1396,7 +1396,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2600,430 @@
+@@ -2511,3 +2600,431 @@
    MF.verify();
  #endif
  }
@@ -1534,7 +1534,8 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  }
 +
 +  // Move past area 1.
-+  MachineBasicBlock::iterator LastPush = MBB.end(), GPRCS1Push, GPRCS2Push, GPRCS3Push;
++  MachineBasicBlock::iterator LastPush = MBB.end(), GPRCS1Push, GPRCS2Push,
++                              GPRCS3Push;
 +  if (GPRCS1Size > 0) {
 +    GPRCS1Push = LastPush = MBBI++;
 +    DefCFAOffsetCandidates.addInst(LastPush, GPRCS1Size, true);
@@ -1779,8 +1780,8 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    // Move SP to start of FP callee save spill area.
 +    NumBytes -=
 +        (AFI->getGPRCalleeSavedArea1Size() + AFI->getGPRCalleeSavedArea2Size() +
-+        AFI->getGPRCalleeSavedArea3Size() +
-+         AFI->getDPRCalleeSavedGapSize() + AFI->getDPRCalleeSavedAreaSize());
++         AFI->getGPRCalleeSavedArea3Size() + AFI->getDPRCalleeSavedGapSize() +
++         AFI->getDPRCalleeSavedAreaSize());
 +
 +    if (AFI->getDPRCalleeSavedAreaSize() + AFI->getGPRCalleeSavedArea3Size()) {
 +      // Reset SP based on frame pointer only if the stack frame extends beyond
@@ -1811,7 +1812,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    }
 +    // Skip one more MI when area 3 exists.
 +    if (AFI->getGPRCalleeSavedArea3Size()) {
-+        MBBI++;
++      MBBI++;
 +    }
 +
 +    BuildMI(MBB, MBBI, dl, TII.get(ARM::MOVr), ARM::SP)
@@ -2049,7 +2050,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
  
        // Vector load N-element structure to all lanes:
        VLD1DUP = ISD::FIRST_TARGET_MEMORY_OPCODE,
-@@ -501,6 +503,12 @@
+@@ -501,6 +503,11 @@
      bool functionArgumentNeedsConsecutiveRegisters(
          Type *Ty, CallingConv::ID CallConv, bool isVarArg) const override;
  
@@ -2057,7 +2058,6 @@ Index: lib/Target/ARM/ARMISelLowering.h
 +
 +    MachineBasicBlock *emitPatchPoint(MachineInstr &MI,
 +                                      MachineBasicBlock *MBB) const;
-+
 +
      /// If a physical register, this returns the register that receives the
      /// exception address on entry to an EH pad.
