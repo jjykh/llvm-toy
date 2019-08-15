@@ -1376,7 +1376,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    return true;
  }
-@@ -1611,6 +1681,23 @@
+@@ -1611,6 +1681,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1391,16 +1391,14 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    SavedRegs.set(ARM::R0);
 +    SavedRegs.set(ARM::R1);
 +    SavedRegs.set(ARM::R7);
-+  } else if (AFI->isJSStub()) {
-+    SavedRegs.set(ARM::R12);
-+    if (AFI->isWASM())
-+      SavedRegs.set(ARM::R3);
++  } else if (AFI->isWASM()) {
++    SavedRegs.set(ARM::R3);
 +  }
 +
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1870,10 @@
+@@ -1783,7 +1868,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1412,7 +1410,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1887,6 @@
+@@ -1797,7 +1885,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1420,7 +1418,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2600,431 @@
+@@ -2511,3 +2598,438 @@
    MF.verify();
  #endif
  }
@@ -1435,8 +1433,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  MachineFrameInfo &MFI = MF.getFrameInfo();
 +  int FixedOffset;
 +  if (AFI->isJSStub()) {
-+    CSI.emplace_back(ARM::R12);
-+    CSI.back().setFrameIdx(MFI.CreateFixedSpillStackObject(4, -12));
++    MFI.CreateFixedSpillStackObject(4, -12);
 +    FixedOffset = -16;
 +    if (AFI->isWASM()) {
 +      // wasm instance for v8.
@@ -1495,17 +1492,13 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  DebugLoc dl;
 +
 +  unsigned FramePtr = ARM::R11;
++  // Determine the sizes of each callee-save spill areas and record which frame
++  // belongs to which callee-save spill areas.
++  unsigned GPRCS1Size = 0, GPRCS2Size = 0, GPRCS3Size = 0, DPRCSSize = 0;
++  int FramePtrSpillFI = 0;
++  int D8SpillFI = 0;
 +
 +  if (AFI->isJSStub()) {
-+    int Marker;
-+    MF.getFunction()
-+        .getFnAttribute("js-stub-call")
-+        .getValueAsString()
-+        .getAsInteger(10, Marker);
-+    BuildMI(MBB, MBBI, dl, TII.get(ARM::MOVi), ARM::R12)
-+        .addImm(Marker)
-+        .add(predOps(ARMCC::AL))
-+        .add(condCodeOp());
 +    if (MF.getRegInfo().isLiveIn(ARM::R9)) {
 +      MachineBasicBlock &MBB = MF.front();
 +      BuildMI(MBB, MBB.instr_begin(), dl, TII.get(ARM::MOVr), ARM::R9)
@@ -1513,13 +1506,9 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +          .add(predOps(ARMCC::AL))
 +          .add(condCodeOp());
 +    }
++    // Push LR as marker.
++    GPRCS1Size = 4;
 +  }
-+
-+  // Determine the sizes of each callee-save spill areas and record which frame
-+  // belongs to which callee-save spill areas.
-+  unsigned GPRCS1Size = 0, GPRCS2Size = 0, GPRCS3Size = 0, DPRCSSize = 0;
-+  int FramePtrSpillFI = 0;
-+  int D8SpillFI = 0;
 +
 +  StackAdjustingInsts DefCFAOffsetCandidates;
 +  bool HasFP = hasFP(MF);
@@ -1530,7 +1519,6 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    int FI = CSI[i].getFrameIdx();
 +    switch (Reg) {
 +    case ARM::R3:
-+    case ARM::R12:
 +      GPRCS2Size += 4;
 +      break;
 +    case ARM::R0:
@@ -1664,6 +1652,24 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +        .addCFIIndex(CFIIndex)
 +        .setMIFlags(MachineInstr::FrameSetup);
 +  }
++  // Push marker
++  if (AFI->isJSStub()) {
++    int Marker;
++    MF.getFunction()
++        .getFnAttribute("js-stub-call")
++        .getValueAsString()
++        .getAsInteger(10, Marker);
++    BuildMI(MBB, AfterPush, dl, TII.get(ARM::MOVi), ARM::LR)
++        .addImm(Marker)
++        .add(predOps(ARMCC::AL))
++        .add(condCodeOp());
++    BuildMI(MBB, AfterPush, dl, TII.get(ARM::STR_PRE_IMM), ARM::SP)
++        .addReg(ARM::LR, RegState::Kill)
++        .addReg(ARM::SP)
++        .setMIFlags(MachineInstr::NoFlags)
++        .addImm(-4)
++        .add(predOps(ARMCC::AL));
++  }
 +
 +  // Now that the prologue's actual instructions are finalised, we can insert
 +  // the necessary DWARF cf instructions to describe the situation. Start by
@@ -1696,7 +1702,6 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +      int FI = Entry.getFrameIdx();
 +      switch (Reg) {
 +      case ARM::R3:
-+      case ARM::R12:
 +        unsigned DwarfReg = MRI->getDwarfRegNum(Reg, true);
 +        unsigned Offset = MFI.getObjectOffset(FI);
 +        unsigned CFIIndex = MF.addFrameInst(
