@@ -538,6 +538,21 @@ Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
      if (Value->getOpcode() != ISD::CopyFromReg)
        return false;
      unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
+Index: lib/CodeGen/ShrinkWrap.cpp
+===================================================================
+--- lib/CodeGen/ShrinkWrap.cpp	(revision 359070)
++++ lib/CodeGen/ShrinkWrap.cpp	(working copy)
+@@ -280,8 +280,8 @@
+       // separately. An SP mentioned by a call instruction, we can ignore,
+       // though, as it's harmless and we do not want to effectively disable tail
+       // calls by forcing the restore point to post-dominate them.
+-      UseOrDefCSR = (!MI.isCall() && PhysReg == SP) ||
+-                    RCI.getLastCalleeSavedAlias(PhysReg);
++      UseOrDefCSR =
++          (!MI.isCall() && PhysReg == SP) || getCurrentCSRs(RS).count(PhysReg);
+     } else if (MO.isRegMask()) {
+       // Check if this regmask clobbers any of the CSRs.
+       for (unsigned Reg : getCurrentCSRs(RS)) {
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
 --- lib/CodeGen/StackMaps.cpp	(revision 359070)
