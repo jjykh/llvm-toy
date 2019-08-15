@@ -542,7 +542,16 @@ Index: lib/CodeGen/ShrinkWrap.cpp
 ===================================================================
 --- lib/CodeGen/ShrinkWrap.cpp	(revision 359070)
 +++ lib/CodeGen/ShrinkWrap.cpp	(working copy)
-@@ -280,8 +280,8 @@
+@@ -264,6 +264,8 @@
+     LLVM_DEBUG(dbgs() << "Frame instruction: " << MI << '\n');
+     return true;
+   }
++  if (MI.isTerminator())
++    return false;
+   for (const MachineOperand &MO : MI.operands()) {
+     bool UseOrDefCSR = false;
+     if (MO.isReg()) {
+@@ -280,8 +282,8 @@
        // separately. An SP mentioned by a call instruction, we can ignore,
        // though, as it's harmless and we do not want to effectively disable tail
        // calls by forcing the restore point to post-dominate them.
