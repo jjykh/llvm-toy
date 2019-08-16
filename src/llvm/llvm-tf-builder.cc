@@ -895,7 +895,12 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
   }
   // Use phi.
   for (int live : bb->liveins()) {
-    LValue ref_value = GetBuilderImpl(ref_pred)->GetLLVMValue(live);
+    auto& value = GetBuilderImpl(ref_pred)->GetValue(live);
+    if (value.type != ValueType::LLVMValue) {
+      GetBuilderImpl(bb)->SetValue(live, value);
+      continue;
+    }
+    LValue ref_value = value.llvm_value;
     LType ref_type = typeOf(ref_value);
     if (ref_type != output().taggedType()) {
       // FIXME: Should add EMASSERT that all values are the same.

@@ -193,6 +193,9 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
         new tf_llvm::CompilerState(name));
     tf_llvm::CompilerState& compiler_state = *compiler_state_storage.get();
     compiler_state.code_kind_ = static_cast<int>(kind);
+#ifdef DEBUG
+    BBM.set_needs_frame(true);
+#endif
     compiler_state.needs_frame_ = BBM.needs_frame();
     if (call_descriptor->IsJSFunctionCall()) {
       compiler_state.prologue_kind_ = PrologueKind::JSFunctionCall;

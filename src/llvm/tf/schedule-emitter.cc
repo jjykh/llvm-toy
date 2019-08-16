@@ -1061,7 +1061,7 @@ void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
       VisitCall(input, visitor, true);
       return;
     case compiler::BasicBlock::kBranch: {
-      DCHECK_EQ(IrOpcode::kBranch, input->opcode());
+      DCHECK_EQ(compiler::IrOpcode::kBranch, input->opcode());
       compiler::BasicBlock* tbranch = block->SuccessorAt(0);
       compiler::BasicBlock* fbranch = block->SuccessorAt(1);
       if (tbranch == fbranch) {
