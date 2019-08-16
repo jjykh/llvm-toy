@@ -46,9 +46,11 @@ static uint8_t* mmAllocateDataSection(void* opaqueState, uintptr_t size,
   tf_llvm::ByteBuffer& bb(state.dataSectionList_.back());
   bb.resize(size);
   EMASSERT((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
+  static const char kExceptionTablePrefix[] = SECTION_NAME("ARM.extab");
   if (!strcmp(sectionName, SECTION_NAME("llvm_stackmaps"))) {
     state.stackMapsSection_ = &bb;
-  } else if (!strcmp(sectionName, SECTION_NAME("ARM.extab"))) {
+  } else if (!memcmp(sectionName, kExceptionTablePrefix,
+                     sizeof(kExceptionTablePrefix) - 1)) {
     state.exception_table_ = &bb;
   }
 
