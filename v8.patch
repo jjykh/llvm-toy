@@ -800,7 +800,7 @@ index 9984330980..e81b1515c1 100644
  }  // namespace internal
  }  // namespace v8
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
-index 0b77d10072..547860a370 100644
+index 0b77d10072..f6016773a6 100644
 --- a/src/compiler/code-assembler.cc
 +++ b/src/compiler/code-assembler.cc
 @@ -82,7 +82,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
@@ -816,10 +816,10 @@ index 0b77d10072..547860a370 100644
  
  CodeAssemblerState::~CodeAssemblerState() {}
  
-@@ -156,6 +160,14 @@ void CodeAssembler::CallEpilogue() {
-   if (state_->call_epilogue_) {
-     state_->call_epilogue_();
-   }
+@@ -153,6 +157,14 @@ void CodeAssembler::CallPrologue() {
+ }
+ 
+ void CodeAssembler::CallEpilogue() {
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +  // Need to split the block, to make my liveness analysis pass able to work.
 +  if (state_->is_llvm_enabled()) {
@@ -828,9 +828,9 @@ index 0b77d10072..547860a370 100644
 +    Bind(&force_break);
 +  }
 +#endif
- }
- 
- bool CodeAssembler::Word32ShiftIsSafe() const {
+   if (state_->call_epilogue_) {
+     state_->call_epilogue_();
+   }
 @@ -174,6 +186,16 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
    RawMachineAssembler* rasm = state->raw_assembler_.get();
    Schedule* schedule = rasm->Export();
@@ -1102,10 +1102,23 @@ index 95d13f3169..42d87d4722 100644
    // ---------------------------------------------------------------------------
    // The following methods are for testing purposes only. Avoid production use.
 diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
-index 73dc70a768..2763affa67 100644
+index 73dc70a768..6fb4e6e47c 100644
 --- a/src/compiler/wasm-compiler.cc
 +++ b/src/compiler/wasm-compiler.cc
-@@ -2561,6 +2561,10 @@ Node* WasmGraphBuilder::BuildWasmCall(wasm::FunctionSig* sig, Node** args,
+@@ -2032,7 +2032,12 @@ Node* WasmGraphBuilder::GrowMemory(Node* input) {
+                                 call_target, input, *effect_, *control_);
+ 
+   *effect_ = call;
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++  CommonOperatorBuilder* common = mcgraph()->common();
++  *control_ = graph()->NewNode(common->Merge(1), call);
++#else
+   *control_ = call;
++#endif
+   return call;
+ }
+ 
+@@ -2561,6 +2566,10 @@ Node* WasmGraphBuilder::BuildWasmCall(wasm::FunctionSig* sig, Node** args,
    if (position > 0) SetSourcePosition(call, position);
  
    *effect_ = call;
@@ -1116,7 +1129,7 @@ index 73dc70a768..2763affa67 100644
    size_t ret_count = sig->return_count();
    if (ret_count == 0) return call;  // No return value.
  
-@@ -5178,6 +5182,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
+@@ -5178,6 +5187,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
          GetDebugName(&compilation_zone, wasm_unit_->func_name_,
                       wasm_unit_->func_index_),
          &compilation_zone, Code::WASM_FUNCTION);
