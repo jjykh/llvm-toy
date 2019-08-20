@@ -476,7 +476,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitTruncateFloat64ToUint32(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kTruncateFloat32ToInt32:
-      UNREACHABLE();
+      visitor->VisitTruncateFloat32ToInt32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kTruncateFloat32ToUint32:
       UNREACHABLE();
     case compiler::IrOpcode::kTryTruncateFloat32ToInt64:
@@ -555,7 +556,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kFloat32Sqrt:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat32Equal:
-      UNREACHABLE();
+      visitor->VisitFloat32Equal(node->id(), node->InputAt(0)->id(),
+                                 node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat32LessThan:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat32LessThanOrEqual:
@@ -633,7 +636,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kFloat64Sinh:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64Sqrt:
-      UNREACHABLE();
+      visitor->VisitFloat64Sqrt(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat64Tan:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat64Tanh:

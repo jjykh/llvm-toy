@@ -1225,7 +1225,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMFrameLowering.cpp	(revision 359070)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
-@@ -351,9 +351,13 @@
+@@ -122,6 +122,9 @@
+ /// included as part of the stack frame.
+ bool ARMFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
+   const MachineFrameInfo &MFI = MF.getFrameInfo();
++  const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++  if (AFI->isJSStub() || AFI->isJSFunction())
++    return false;
+   unsigned CFSize = MFI.getMaxCallFrameSize();
+   // It's not always a good idea to include the call frame as part of the
+   // stack frame. ARM (especially Thumb) has small immediate offset to
+@@ -351,9 +354,13 @@
  
  void ARMFrameLowering::emitPrologue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
@@ -1240,7 +1250,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    MachineModuleInfo &MMI = MF.getMMI();
    MCContext &Context = MMI.getContext();
    const TargetMachine &TM = MF.getTarget();
-@@ -765,8 +769,12 @@
+@@ -765,8 +772,12 @@
  
  void ARMFrameLowering::emitEpilogue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
@@ -1254,7 +1264,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
    const ARMBaseInstrInfo &TII =
        *static_cast<const ARMBaseInstrInfo *>(MF.getSubtarget().getInstrInfo());
-@@ -951,6 +959,9 @@
+@@ -951,6 +962,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1264,7 +1274,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1066,9 @@
+@@ -1055,7 +1069,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1275,7 +1285,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1414,6 +1427,47 @@
+@@ -1414,6 +1430,47 @@
    std::prev(MI)->addRegisterKilled(ARM::R4, TRI);
  }
  
@@ -1323,7 +1333,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MI,
                                          const std::vector<CalleeSavedInfo> &CSI,
-@@ -1429,10 +1483,19 @@
+@@ -1429,10 +1486,19 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1347,7 +1357,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
                 NumAlignedDPRCS2Regs, MachineInstr::FrameSetup);
  
-@@ -1461,16 +1524,23 @@
+@@ -1461,16 +1527,23 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1376,7 +1386,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    return true;
  }
-@@ -1611,6 +1681,21 @@
+@@ -1611,6 +1684,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1398,7 +1408,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1868,10 @@
+@@ -1783,7 +1871,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1410,7 +1420,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1885,6 @@
+@@ -1797,7 +1888,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1418,7 +1428,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2511,3 +2598,438 @@
+@@ -2063,7 +2153,8 @@
+       if (Opc == ARM::ADJCALLSTACKDOWN || Opc == ARM::tADJCALLSTACKDOWN) {
+         emitSPUpdate(isARM, MBB, I, dl, TII, -Amount, MachineInstr::NoFlags,
+                      Pred, PredReg);
+-      } else {
++      } else if (!AFI->isJSFunction() && !AFI->isJSStub()) {
++        // JS is callee restore stack.
+         assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
+         emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
+                      Pred, PredReg);
+@@ -2511,3 +2602,438 @@
    MF.verify();
  #endif
  }
@@ -1948,7 +1968,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    bool isStructRet    = (Outs.empty()) ? false : Outs[0].Flags.isSRet();
    bool isThisReturn   = false;
    bool isSibCall      = false;
-+  bool hasJSCCall = false;
++  bool hasJSCCall     = false;
 +  CallingConv::ID CallerCC = MF.getFunction().getCallingConv();
 +  bool CallerIsJS =
 +      ((CallerCC == CallingConv::V8CC) || (CallerCC == CallingConv::V8SBCC));

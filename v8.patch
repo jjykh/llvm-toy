@@ -296,7 +296,7 @@ index 2e71ce59e6..361406c435 100644
                              intptr_t value);
    void ConstantPoolAddEntry(int position, Double value);
 diff --git a/src/arm/disasm-arm.cc b/src/arm/disasm-arm.cc
-index 5dab458889..369933a85c 100644
+index 5dab458889..6ede66e16e 100644
 --- a/src/arm/disasm-arm.cc
 +++ b/src/arm/disasm-arm.cc
 @@ -993,7 +993,11 @@ void Decoder::DecodeType01(Instruction* instr) {
@@ -311,7 +311,50 @@ index 5dab458889..369933a85c 100644
          }
          break;
        }
-@@ -1216,10 +1220,18 @@ void Decoder::DecodeType3(Instruction* instr) {
+@@ -1011,7 +1015,11 @@ void Decoder::DecodeType01(Instruction* instr) {
+         } else {
+           // Other instructions matching this pattern are handled in the
+           // miscellaneous instructions part above.
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++          Unknown(instr);
++#else
+           UNREACHABLE();
++#endif
+         }
+         break;
+       }
+@@ -1113,10 +1121,18 @@ void Decoder::DecodeType3(Instruction* instr) {
+               }
+               break;
+             case 1:
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++              Unknown(instr);
++#else
+               UNREACHABLE();
++#endif
+               break;
+             case 2:
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++              Unknown(instr);
++#else
+               UNREACHABLE();
++#endif
+               break;
+             case 3:
+               Format(instr, "usat 'rd, #'imm05@16, 'rm'shift_sat");
+@@ -1195,7 +1211,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+                   }
+                 }
+               } else {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++                Unknown(instr);
++#else
+                 UNREACHABLE();
++#endif
+               }
+               break;
+             case 2:
+@@ -1216,10 +1236,18 @@ void Decoder::DecodeType3(Instruction* instr) {
                        break;
                    }
                  } else {
@@ -330,7 +373,19 @@ index 5dab458889..369933a85c 100644
                }
                break;
              case 3:
-@@ -1343,7 +1355,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+@@ -1295,7 +1323,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+                     (instr->Bits(11, 4) == 0xF3)) {
+                   Format(instr, "rbit'cond 'rd, 'rm");
+                 } else {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++                  Unknown(instr);
++#else
+                   UNREACHABLE();
++#endif
+                 }
+               }
+               break;
+@@ -1343,7 +1375,11 @@ void Decoder::DecodeType3(Instruction* instr) {
              Format(instr, "sbfx'cond 'rd, 'rm, 'f");
            }
          } else {
@@ -342,7 +397,7 @@ index 5dab458889..369933a85c 100644
          }
        } else if (!instr->HasW() && (instr->Bits(6, 4) == 0x1)) {
          uint32_t lsbit = static_cast<uint32_t>(instr->Bits(11, 7));
-@@ -2581,12 +2597,16 @@ bool Decoder::IsConstantPoolAt(byte* instr_ptr) {
+@@ -2581,12 +2617,16 @@ bool Decoder::IsConstantPoolAt(byte* instr_ptr) {
  
  
  int Decoder::ConstantPoolSizeAt(byte* instr_ptr) {
@@ -359,7 +414,7 @@ index 5dab458889..369933a85c 100644
  }
  
  
-@@ -2602,12 +2622,15 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
+@@ -2602,12 +2642,15 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
      return Instruction::kInstrSize;
    }
    int instruction_bits = *(reinterpret_cast<int*>(instr_ptr));

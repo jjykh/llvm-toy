@@ -389,22 +389,33 @@ void CallResolver::ResolveOperands(
   }
   locations_.push_back(target_reg);
 
-  std::vector<int> allocated_regs;
+  if (stack_operands.size() <= kV8CCMaxStackParameterToReg) {
+    std::vector<int> allocated_regs;
+    for (size_t i = 0; i != stack_operands.size(); ++i) {
+      int reg = FindNextReg();
+      EMASSERT(reg >= 0);
+      allocated_regs.push_back(reg);
+    }
+    auto reg_iterator = allocated_regs.begin();
 
-  for (size_t i = 0; i != stack_operands.size(); ++i) {
-    int reg = FindNextReg();
-    EMASSERT(reg >= 0);
-    allocated_regs.push_back(reg);
+    for (auto operand : stack_operands) {
+      LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+      int reg = *(reg_iterator++);
+      SetOperandValue(reg, llvm_value);
+      locations_.push_back(reg);
+    }
+  } else {
+    // FIXME: CHECK if this is tail calling. Not support tail calling.
+
+    for (auto operand : stack_operands) {
+      LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+      LType type = typeOf(llvm_value);
+      EMASSERT(type != output().repo().floatType &&
+               type != output().repo().doubleType);
+      SetOperandValue(-1, llvm_value);
+    }
   }
 
-  auto reg_iterator = allocated_regs.begin();
-
-  for (auto operand : stack_operands) {
-    LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
-    int reg = *(reg_iterator++);
-    SetOperandValue(reg, llvm_value);
-    locations_.push_back(reg);
-  }
   for (auto operand : double_operands) {
     LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
     SetOperandValue(-1, llvm_value);
@@ -1595,6 +1606,15 @@ void LLVMTFBuilder::VisitTruncateFloat64ToUint32(int id, int e) {
                                  output().repo().int32));
 }
 
+void LLVMTFBuilder::VisitTruncateFloat32ToInt32(int id, int e) {
+  output().setLineNumber(id);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(
+          id, output().buildCast(LLVMFPToSI,
+                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                                 output().repo().int32));
+}
+
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
   output().setLineNumber(id);
   GetBuilderImpl(current_bb_)
@@ -2247,6 +2267,15 @@ void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
+void LLVMTFBuilder::VisitFloat64Sqrt(int id, int e) {
+  output().setLineNumber(id);
+  LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
+  LValue result =
+      output().buildCall(output().repo().doubleSqrtIntrinsic(), e_value);
+
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
 void LLVMTFBuilder::VisitFloat64Constant(int id, double float_value) {
   output().setLineNumber(id);
   LValue value = constReal(output().repo().doubleType, float_value);
@@ -2347,6 +2376,14 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
   LValue value =
       output().buildCall(output().repo().doubleAbsIntrinsic(), e_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
+void LLVMTFBuilder::VisitFloat32Equal(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFCmp(LLVMRealOEQ, e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
 void LLVMTFBuilder::VisitFloat32Add(int id, int e1, int e2) {

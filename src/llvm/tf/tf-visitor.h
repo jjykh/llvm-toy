@@ -52,6 +52,7 @@ struct CallDescriptor {
   V(BitcastInt64ToFloat64, (int id, int e))                                   \
   V(BitcastFloat32ToInt32, (int id, int e))                                   \
   V(BitcastFloat64ToInt64, (int id, int e))                                   \
+  V(TruncateFloat32ToInt32, (int id, int e))                                  \
   V(TruncateFloat64ToWord32, (int id, int e))                                 \
   V(TruncateInt64ToWord32, (int id, int e))                                   \
   V(TruncateFloat64ToFloat32, (int id, int e))                                \
@@ -107,11 +108,13 @@ struct CallDescriptor {
   V(Float64Mul, (int id, int e1, int e2))                                     \
   V(Float64Div, (int id, int e1, int e2))                                     \
   V(Float64Mod, (int id, int e1, int e2))                                     \
+  V(Float64Sqrt, (int id, int e))                                             \
   V(Float64LessThan, (int id, int e1, int e2))                                \
   V(Float64LessThanOrEqual, (int id, int e1, int e2))                         \
   V(Float64Equal, (int id, int e1, int e2))                                   \
   V(Float64Neg, (int id, int e))                                              \
   V(Float64Abs, (int id, int e))                                              \
+  V(Float32Equal, (int id, int e1, int e2))                                   \
   V(Float32Add, (int id, int e1, int e2))                                     \
   V(Float32Sub, (int id, int e1, int e2))                                     \
   V(Float32Mul, (int id, int e1, int e2))                                     \

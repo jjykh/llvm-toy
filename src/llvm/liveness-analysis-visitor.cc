@@ -316,7 +316,17 @@ void LivenessAnalysisVisitor::VisitTruncateFloat64ToUint32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitTruncateFloat32ToInt32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitRoundFloat64ToInt32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitFloat64Sqrt(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -764,6 +774,12 @@ void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
 
 void LivenessAnalysisVisitor::VisitFloat32Constant(int id, double) {
   Define(id);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Equal(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
 }
 
 void LivenessAnalysisVisitor::VisitFloat32Add(int id, int e1, int e2) {

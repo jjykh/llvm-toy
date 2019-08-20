@@ -19,6 +19,7 @@ struct RegisterParameter {
 using RegisterParameterDesc = std::vector<RegisterParameter>;
 
 static const int kV8CCRegisterParameterCount = 12;
+static const int kV8CCMaxStackParameterToReg = 5;
 static const int kRootReg = 10;
 static const int kFPReg = 11;
 
