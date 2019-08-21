@@ -546,7 +546,7 @@ Index: lib/CodeGen/ShrinkWrap.cpp
      LLVM_DEBUG(dbgs() << "Frame instruction: " << MI << '\n');
      return true;
    }
-+  if (MI.isTerminator())
++  if (MI.isReturn())
 +    return false;
    for (const MachineOperand &MO : MI.operands()) {
      bool UseOrDefCSR = false;
