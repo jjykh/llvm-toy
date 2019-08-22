@@ -23,7 +23,7 @@ CompilerState::CompilerState(const char* function_name)
 #if 0
     LLVMSetTarget(module_, "x86_64-unknown-linux-gnu");
 #else
-  LLVMSetTarget(module_, "armv7-linux-android");
+  LLVMSetTarget(module_, "armv7-unknown-unknown-v8");
 #endif
 }
 

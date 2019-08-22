@@ -1623,6 +1623,79 @@ index 3e301a4082..3cde437e46 100644
  
    DISALLOW_COPY_AND_ASSIGN(ProfileGenerator);
  };
+diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
+index 7ff27dc769..bb300a0612 100644
+--- a/src/wasm/wasm-js.cc
++++ b/src/wasm/wasm-js.cc
+@@ -657,6 +657,57 @@ void WebAssemblyInstantiateStreaming(
+   args.GetReturnValue().Set(result);
+ }
+ 
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++void DeserializeFromSnapshot(const v8::FunctionCallbackInfo<v8::Value>& args) {
++  v8::Isolate* isolate = args.GetIsolate();
++  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
++  HandleScope scope(isolate);
++  ScheduledErrorThrower thrower(i_isolate,
++                                "WebAssembly.DeserializeFromSnapshot()");
++  if (!args[0]->IsArrayBuffer()) {
++    thrower.TypeError("Argument 0 must be an array buffer object");
++    return;
++  }
++  if (!args[1]->IsArrayBuffer()) {
++    thrower.TypeError("Argument 1 must be an array buffer object");
++    return;
++  }
++  i::Handle<i::JSArrayBuffer> buffer =
++      i::Handle<i::JSArrayBuffer>::cast(v8::Utils::OpenHandle(*args[0]));
++
++  i::Handle<i::JSArrayBuffer> wire_bytes =
++      i::Handle<i::JSArrayBuffer>::cast(v8::Utils::OpenHandle(*args[1]));
++
++  uint8_t* mem_start = reinterpret_cast<uint8_t*>(buffer->backing_store());
++  size_t mem_size = static_cast<size_t>(buffer->byte_length()->Number());
++
++  // Note that {wasm::DeserializeNativeModule} will allocate. We assume the
++  // JSArrayBuffer doesn't get relocated.
++  bool already_external = wire_bytes->is_external();
++  if (!already_external) {
++    wire_bytes->set_is_external(true);
++    i_isolate->heap()->UnregisterArrayBuffer(*wire_bytes);
++  }
++  i::MaybeHandle<i::WasmModuleObject> maybe_module_object =
++      i::wasm::DeserializeNativeModule(
++          i_isolate, {mem_start, mem_size},
++          i::Vector<const uint8_t>(
++              reinterpret_cast<uint8_t*>(wire_bytes->backing_store()),
++              static_cast<int>(wire_bytes->byte_length()->Number())));
++  if (!already_external) {
++    wire_bytes->set_is_external(false);
++    i_isolate->heap()->RegisterNewArrayBuffer(*wire_bytes);
++  }
++  i::Handle<i::WasmModuleObject> module_object;
++  i::Handle<i::Object> i_result;
++  if (!maybe_module_object.ToHandle(&i_result)) {
++    i_result = i::ReadOnlyRoots(i_isolate).undefined_value_handle();
++  }
++  Local<Object> result = Local<Object>::Cast(Utils::ToLocal(i_result));
++  args.GetReturnValue().Set(result);
++}
++#endif
++
+ // WebAssembly.instantiate(module, imports) -> WebAssembly.Instance
+ // WebAssembly.instantiate(bytes, imports) ->
+ //     {module: WebAssembly.Module, instance: WebAssembly.Instance}
+@@ -1400,6 +1451,10 @@ void WasmJs::Install(Isolate* isolate, bool exposed_on_global_object) {
+     InstallFunc(isolate, webassembly, "instantiateStreaming",
+                 WebAssemblyInstantiateStreaming, 1);
+   }
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  InstallFunc(isolate, webassembly, "deserializeFromSnapshot",
++              DeserializeFromSnapshot, 2);
++#endif
+ 
+   // Expose the API on the global object if configured to do so.
+   if (exposed_on_global_object) {
 diff --git a/src/wasm/wasm-serialization.cc b/src/wasm/wasm-serialization.cc
 index 3c21a5d223..04989e61f3 100644
 --- a/src/wasm/wasm-serialization.cc

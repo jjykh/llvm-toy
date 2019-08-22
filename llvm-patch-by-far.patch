@@ -1,3 +1,18 @@
+Index: include/llvm/CodeGen/MachineRegisterInfo.h
+===================================================================
+--- include/llvm/CodeGen/MachineRegisterInfo.h	(revision 359070)
++++ include/llvm/CodeGen/MachineRegisterInfo.h	(working copy)
+@@ -933,6 +933,10 @@
+   /// corresponding live-in physical register.
+   unsigned getLiveInVirtReg(unsigned PReg) const;
+ 
++  /// updateVirtRegIfLivein - If a VReg is a live-in virtual register, update
++  /// it to VNewReg.
++  void updateVirtRegIfLivein(unsigned VReg, unsigned VNewReg);
++
+   /// EmitLiveInCopies - Emit copies to initialize livein virtual registers
+   /// into the given entry block.
+   void EmitLiveInCopies(MachineBasicBlock *EntryMBB,
 Index: include/llvm/CodeGen/TargetRegisterInfo.h
 ===================================================================
 --- include/llvm/CodeGen/TargetRegisterInfo.h	(revision 359070)
@@ -282,6 +297,25 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
            MI.getOpcode() == TargetOpcode::PATCHPOINT)
          continue;
  
+Index: lib/CodeGen/MachineRegisterInfo.cpp
+===================================================================
+--- lib/CodeGen/MachineRegisterInfo.cpp	(revision 359070)
++++ lib/CodeGen/MachineRegisterInfo.cpp	(working copy)
+@@ -458,6 +458,14 @@
+   return 0;
+ }
+ 
++void MachineRegisterInfo::updateVirtRegIfLivein(unsigned VReg,
++                                                unsigned VNewReg) {
++  for (auto I = LiveIns.begin(), E = LiveIns.end(); I != E; ++I)
++    if (I->second == VReg) {
++      I->second = VNewReg;
++    }
++}
++
+ /// EmitLiveInCopies - Emit copies to initialize livein virtual registers
+ /// into the given entry block.
+ void
 Index: lib/CodeGen/MachineVerifier.cpp
 ===================================================================
 --- lib/CodeGen/MachineVerifier.cpp	(revision 359070)
@@ -359,6 +393,19 @@ Index: lib/CodeGen/RegAllocBase.h
  };
  
  } // end namespace llvm
+Index: lib/CodeGen/RegisterCoalescer.cpp
+===================================================================
+--- lib/CodeGen/RegisterCoalescer.cpp	(revision 359070)
++++ lib/CodeGen/RegisterCoalescer.cpp	(working copy)
+@@ -1929,6 +1929,8 @@
+   // Update regalloc hint.
+   TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
+ 
++  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
++
+   LLVM_DEBUG({
+     dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
+            << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 359070)
@@ -905,7 +952,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    case ARM::MOVi16_ga_pcrel:
    case ARM::MOVTi16_ga_pcrel:
    case ARM::t2MOVi16_ga_pcrel:
-@@ -1462,6 +1466,49 @@
+@@ -1462,6 +1466,68 @@
    BB->erase(MI);
  }
  
@@ -952,10 +999,29 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +  BB->erase(MI);
 +}
 +
++int ARMBaseInstrInfo::getSPAdjust(const MachineInstr &MI) const {
++
++  const MachineFunction *MF = MI.getParent()->getParent();
++  const ARMFunctionInfo *AFI = MF->getInfo<ARMFunctionInfo>();
++  if (!AFI->isJSFunction() && !AFI->isJSStub())
++    return ARMGenInstrInfo::getSPAdjust(MI);
++  if (MI.isCall()) {
++    if (AFI->isJSStub() || AFI->isJSFunction())
++      return -AFI->popLastSPAdjust();
++  }
++  unsigned FrameSetupOpcode = getCallFrameSetupOpcode();
++  if (MI.getOpcode() == FrameSetupOpcode) {
++    int SPAdj = getFrameSize(MI);
++    AFI->pushLastSPAdjust(SPAdj);
++    return SPAdj;
++  }
++  return 0;
++}
++
  bool ARMBaseInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
    if (MI.getOpcode() == TargetOpcode::LOAD_STACK_GUARD) {
      assert(getSubtarget().getTargetTriple().isOSBinFormatMachO() &&
-@@ -1476,6 +1523,11 @@
+@@ -1476,6 +1542,11 @@
      return true;
    }
  
@@ -971,11 +1037,12 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 359070)
 +++ lib/Target/ARM/ARMBaseInstrInfo.h	(working copy)
-@@ -398,6 +398,7 @@
+@@ -398,6 +398,8 @@
    virtual void expandLoadStackGuard(MachineBasicBlock::iterator MI) const = 0;
  
    void expandMEMCPY(MachineBasicBlock::iterator) const;
 +  void expandRESTORESP(MachineBasicBlock::iterator) const;
++  int getSPAdjust(const MachineInstr &MI) const final override;
  
  private:
    /// Modeling special VFP / NEON fp MLA / MLS hazards.
@@ -1428,13 +1495,28 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2063,7 +2153,8 @@
+@@ -2043,12 +2133,13 @@
+     DebugLoc dl = Old.getDebugLoc();
+     unsigned Amount = TII.getFrameSize(Old);
+     if (Amount != 0) {
++      ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
+       // We need to keep the stack aligned properly.  To do this, we round the
+       // amount of space needed for the outgoing arguments up to the next
+       // alignment boundary.
+-      Amount = alignSPAdjust(Amount);
++      if (!AFI->isJSFunction() && !AFI->isJSStub())
++        Amount = alignSPAdjust(Amount);
+ 
+-      ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
+       assert(!AFI->isThumb1OnlyFunction() &&
+              "This eliminateCallFramePseudoInstr does not support Thumb1!");
+       bool isARM = !AFI->isThumbFunction();
+@@ -2063,7 +2154,7 @@
        if (Opc == ARM::ADJCALLSTACKDOWN || Opc == ARM::tADJCALLSTACKDOWN) {
          emitSPUpdate(isARM, MBB, I, dl, TII, -Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
 -      } else {
 +      } else if (!AFI->isJSFunction() && !AFI->isJSStub()) {
-+        // JS is callee restore stack.
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
@@ -2161,10 +2243,11 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    unsigned DPRCSAlignGapSize = 0;
    unsigned DPRCSSize = 0;
  
-@@ -127,6 +128,10 @@
+@@ -127,6 +128,11 @@
    /// The amount the literal pool has been increasedby due to promoted globals.
    int PromotedGlobalsIncrease = 0;
  
++  mutable int LastSPAdjust = 0;
 +  bool IsJSFunction = false;
 +  bool IsJSStub = false;
 +  bool IsWASM = false;
@@ -2172,7 +2255,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  public:
    ARMFunctionInfo() = default;
  
-@@ -170,11 +175,13 @@
+@@ -170,11 +176,13 @@
  
    unsigned getGPRCalleeSavedArea1Size() const { return GPRCS1Size; }
    unsigned getGPRCalleeSavedArea2Size() const { return GPRCS2Size; }
@@ -2186,7 +2269,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    void setDPRCalleeSavedGapSize(unsigned s)   { DPRCSAlignGapSize = s; }
    void setDPRCalleeSavedAreaSize(unsigned s)  { DPRCSSize = s; }
  
-@@ -239,6 +246,13 @@
+@@ -239,6 +247,20 @@
    void setPromotedConstpoolIncrease(int Sz) {
      PromotedGlobalsIncrease = Sz;
    }
@@ -2197,6 +2280,13 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 +  void setJSFunction(bool s) { IsJSFunction = s; }
 +  void setJSStub(bool s) { IsJSStub = s; }
 +  void setWASM(bool s) { IsWASM = s; }
++
++  void pushLastSPAdjust(int n) const { LastSPAdjust = n; }
++  int popLastSPAdjust() const {
++    int r = LastSPAdjust;
++    LastSPAdjust = 0;
++    return r;
++  }
  };
  
  } // end namespace llvm
