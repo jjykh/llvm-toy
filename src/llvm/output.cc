@@ -581,6 +581,12 @@ void Output::AddFunctionCommonAttr(LValue function) {
   static const char kNoJumpTables[] = "no-jump-tables";
   static const char kTrue[] = "true";
   LLVMAddTargetDependentFunctionAttr(function, kNoJumpTables, kTrue);
+
+  static const char kFS[] = "target-features";
+  static const char kFSValue[] =
+      "+armv7-a,+dsp,+neon,+vfp3,-crypto,-d16,-fp-armv8,-fp-only-sp,-fp16,"
+      "-thumb-mode,-vfp4";
+  LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
 }
 }  // namespace tf_llvm
 }  // namespace internal

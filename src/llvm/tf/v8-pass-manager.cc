@@ -37,8 +37,8 @@ static const char* symbolLookupCallback(void* DisInfo, uint64_t ReferenceValue,
 }
 
 static void disassemble(ByteBuffer& code) {
-  LLVMDisasmContextRef DCR = LLVMCreateDisasm("armv7-linux-android", nullptr, 0,
-                                              nullptr, symbolLookupCallback);
+  LLVMDisasmContextRef DCR = LLVMCreateDisasm(
+      "armv8-unknown-unknown-v8", nullptr, 0, nullptr, symbolLookupCallback);
 
   uint8_t* BytesP = code.data();
 
