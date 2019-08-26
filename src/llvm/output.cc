@@ -192,10 +192,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
         __builtin_trap();
     }
   }
-  // arm jump tables are slow.
-  static const char kNoJumpTables[] = "no-jump-tables";
-  static const char kTrue[] = "true";
-  LLVMAddTargetDependentFunctionAttr(state_.function_, kNoJumpTables, kTrue);
+
   char file_name[256];
   int file_name_count = snprintf(file_name, 256, "%s.c", state_.function_name_);
   LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
@@ -551,7 +548,9 @@ LValue Output::setInstrDebugLoc(LValue v) {
 void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 
 LValue Output::addFunction(const char* name, LType type) {
-  return tf_llvm::addFunction(state_.module_, name, type);
+  LValue function = tf_llvm::addFunction(state_.module_, name, type);
+  AddFunctionCommonAttr(function);
+  return function;
 }
 
 LType Output::getLLVMTypeFromMachineType(const MachineType& mt) {
@@ -575,6 +574,13 @@ LType Output::getLLVMTypeFromMachineType(const MachineType& mt) {
     default:
       UNREACHABLE();
   }
+}
+
+void Output::AddFunctionCommonAttr(LValue function) {
+  // arm jump tables are slow.
+  static const char kNoJumpTables[] = "no-jump-tables";
+  static const char kTrue[] = "true";
+  LLVMAddTargetDependentFunctionAttr(function, kNoJumpTables, kTrue);
 }
 }  // namespace tf_llvm
 }  // namespace internal

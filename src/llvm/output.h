@@ -125,6 +125,7 @@ class Output {
 
  private:
   LValue setInstrDebugLoc(LValue);
+  void AddFunctionCommonAttr(LValue function);
   CompilerState& state_;
   IntrinsicRepository repo_;
   LBuilder builder_;
