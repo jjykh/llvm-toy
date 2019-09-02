@@ -439,24 +439,25 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -1221,6 +1221,16 @@
+@@ -1221,6 +1221,17 @@
    SDValue &N = NodeMap[V];
    if (N.getNode()) return N;
  
 +  // Special handling BitCastInst with a constant.
 +  if (const BitCastInst *I = dyn_cast<BitCastInst>(V)) {
 +    if (const Constant *C = dyn_cast<Constant>(I->getOperand(0))) {
-+      SDValue Val = getValueImpl(C);
-+      NodeMap[V] = Val;
-+      resolveDanglingDebugInfo(V, Val);
-+      return Val;
++      visitBitCast(*I);
++      SDValue &N = NodeMap[V];
++      assert(N.getNode());
++      resolveDanglingDebugInfo(V, N);
++      return N;
 +    }
 +  }
 +
    // If there's a virtual register allocated and initialized for this
    // value, use it.
    if (SDValue copyFromReg = getCopyFromRegs(V, V->getType()))
-@@ -8187,6 +8197,32 @@
+@@ -8187,6 +8198,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
@@ -489,7 +490,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8230,17 +8266,24 @@
+@@ -8230,17 +8267,24 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
@@ -523,7 +524,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8311,8 +8354,9 @@
+@@ -8311,8 +8355,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
