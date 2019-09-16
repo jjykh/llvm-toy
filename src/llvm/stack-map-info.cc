@@ -13,6 +13,7 @@ CallInfo::CallInfo(LocationVector&& locations)
       locations_(std::move(locations)),
       relative_target_(0),
       tailcall_return_count_(0),
+      sp_adjust_(0),
       is_tailcall_(false) {}
 
 ReturnInfo::ReturnInfo()

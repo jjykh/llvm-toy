@@ -37,11 +37,14 @@ class CallInfo final : public StackMapInfo {
   void set_relative_target(int64_t relative_target) {
     relative_target_ = relative_target;
   }
+  int sp_adjust() const { return sp_adjust_; }
+  void set_sp_adjust(int _sp_adjust) { sp_adjust_ = _sp_adjust; }
 
  private:
   LocationVector locations_;
   int64_t relative_target_;
   unsigned tailcall_return_count_;
+  int sp_adjust_;
   bool is_tailcall_;
 };
 

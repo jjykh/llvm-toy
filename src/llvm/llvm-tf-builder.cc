@@ -200,6 +200,7 @@ class CallResolver {
   int id_;
   int next_reg_;
   int patchid_;
+  int sp_adjust_;
 };
 
 class TCCallResolver final : public CallResolver {
@@ -297,7 +298,8 @@ CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
       relative_target_(0),
       id_(id),
       next_reg_(0),
-      patchid_(patchid) {}
+      patchid_(patchid),
+      sp_adjust_(0) {}
 
 int CallResolver::FindNextReg() {
   if (next_reg_ < 0) return -1;
@@ -414,6 +416,7 @@ void CallResolver::ResolveOperands(
                type != output().repo().doubleType);
       SetOperandValue(-1, llvm_value);
     }
+    sp_adjust_ = stack_operands.size() * kPointerSize;
   }
 
   for (auto operand : double_operands) {
@@ -508,6 +511,7 @@ void CallResolver::PopulateToStackMap() {
 }
 
 void CallResolver::PopulateCallInfo(CallInfo* callinfo) {
+  callinfo->set_sp_adjust(sp_adjust_);
   if (relative_target_) callinfo->set_relative_target(relative_target_);
 }
 

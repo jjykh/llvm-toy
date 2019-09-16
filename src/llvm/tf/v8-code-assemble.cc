@@ -130,7 +130,9 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
       if (location.dwarfReg == 13) {
         // Remove the effect from safepoint-table.cc
         safepoint.DefinePointerSlot(
-            slot_count_ - 1 - location.offset / kPointerSize, zone_);
+            slot_count_ - 1 -
+                (location.offset - call_info->sp_adjust()) / kPointerSize,
+            zone_);
       } else {
         CHECK(location.dwarfReg == 11);
         safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1, zone_);
