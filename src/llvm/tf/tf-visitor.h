@@ -61,6 +61,7 @@ struct CallDescriptor {
   V(Float64ExtractHighWord32, (int id, int e))                                \
   V(Float64ExtractLowWord32, (int id, int e))                                 \
   V(RoundInt32ToFloat32, (int id, int e))                                     \
+  V(RoundUint32ToFloat32, (int id, int e))                                    \
   V(Projection, (int id, int e, int index))                                   \
   V(Int32Add, (int id, int e1, int e2))                                       \
   V(Int64Add, (int id, int e1, int e2))                                       \

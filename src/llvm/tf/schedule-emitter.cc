@@ -518,7 +518,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitBitcastFloat32ToInt32(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kRoundUint32ToFloat32:
-      UNREACHABLE();
+      visitor->VisitRoundUint32ToFloat32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kRoundUint64ToFloat32:
       UNREACHABLE();
     case compiler::IrOpcode::kRoundUint64ToFloat64:

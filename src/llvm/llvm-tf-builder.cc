@@ -1662,6 +1662,15 @@ void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
                                  output().repo().floatType));
 }
 
+void LLVMTFBuilder::VisitRoundUint32ToFloat32(int id, int e) {
+  output().setLineNumber(id);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(
+          id, output().buildCast(LLVMUIToFP,
+                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                                 output().repo().floatType));
+}
+
 void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));

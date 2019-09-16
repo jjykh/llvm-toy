@@ -346,6 +346,11 @@ void LivenessAnalysisVisitor::VisitRoundInt32ToFloat32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitRoundUint32ToFloat32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitInt32Add(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
