@@ -553,17 +553,23 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
                                node->InputAt(1)->id());
       return;
     case compiler::IrOpcode::kFloat32Abs:
-      UNREACHABLE();
+      visitor->VisitFloat32Abs(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat32Sqrt:
-      UNREACHABLE();
+      visitor->VisitFloat32Sqrt(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kFloat32Equal:
       visitor->VisitFloat32Equal(node->id(), node->InputAt(0)->id(),
                                  node->InputAt(1)->id());
       return;
     case compiler::IrOpcode::kFloat32LessThan:
-      UNREACHABLE();
+      visitor->VisitFloat32LessThan(node->id(), node->InputAt(0)->id(),
+                                    node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat32LessThanOrEqual:
-      UNREACHABLE();
+      visitor->VisitFloat32LessThanOrEqual(node->id(), node->InputAt(0)->id(),
+                                           node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat32Max:
       UNREACHABLE();
     case compiler::IrOpcode::kFloat32Min:

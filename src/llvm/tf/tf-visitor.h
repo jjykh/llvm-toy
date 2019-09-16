@@ -109,13 +109,17 @@ struct CallDescriptor {
   V(Float64Mul, (int id, int e1, int e2))                                     \
   V(Float64Div, (int id, int e1, int e2))                                     \
   V(Float64Mod, (int id, int e1, int e2))                                     \
+  V(Float32Sqrt, (int id, int e))                                             \
   V(Float64Sqrt, (int id, int e))                                             \
   V(Float64LessThan, (int id, int e1, int e2))                                \
   V(Float64LessThanOrEqual, (int id, int e1, int e2))                         \
   V(Float64Equal, (int id, int e1, int e2))                                   \
   V(Float64Neg, (int id, int e))                                              \
   V(Float64Abs, (int id, int e))                                              \
+  V(Float32Abs, (int id, int e))                                              \
   V(Float32Equal, (int id, int e1, int e2))                                   \
+  V(Float32LessThan, (int id, int e1, int e2))                                \
+  V(Float32LessThanOrEqual, (int id, int e1, int e2))                         \
   V(Float32Add, (int id, int e1, int e2))                                     \
   V(Float32Sub, (int id, int e1, int e2))                                     \
   V(Float32Mul, (int id, int e1, int e2))                                     \

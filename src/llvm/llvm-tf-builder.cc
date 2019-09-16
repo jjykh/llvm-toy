@@ -2289,6 +2289,15 @@ void LLVMTFBuilder::VisitFloat64Sqrt(int id, int e) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
+void LLVMTFBuilder::VisitFloat32Sqrt(int id, int e) {
+  output().setLineNumber(id);
+  LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
+  LValue result =
+      output().buildCall(output().repo().floatSqrtIntrinsic(), e_value);
+
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
 void LLVMTFBuilder::VisitFloat64Constant(int id, double float_value) {
   output().setLineNumber(id);
   LValue value = constReal(output().repo().doubleType, float_value);
@@ -2391,11 +2400,35 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
+void LLVMTFBuilder::VisitFloat32Abs(int id, int e) {
+  output().setLineNumber(id);
+  LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
+  LValue value =
+      output().buildCall(output().repo().floatAbsIntrinsic(), e_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
+}
+
 void LLVMTFBuilder::VisitFloat32Equal(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOEQ, e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32LessThan(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFCmp(LLVMRealOLT, e1_value, e2_value);
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32LessThanOrEqual(int id, int e1, int e2) {
+  output().setLineNumber(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  LValue result = output().buildFCmp(LLVMRealOLE, e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 

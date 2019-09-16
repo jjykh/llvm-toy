@@ -12,11 +12,13 @@
     macro(addWithOverflow32, "llvm.sadd.with.overflow.i32", functionType(structType(context_, int32, boolean), int32, int32)) \
     macro(addWithOverflow64, "llvm.sadd.with.overflow.i64", functionType(structType(context_, int64, boolean), int64, int64)) \
     macro(doubleAbs, "llvm.fabs.f64", functionType(doubleType, doubleType)) \
+    macro(floatAbs, "llvm.fabs.f32", functionType(floatType, floatType)) \
     macro(doubleSin, "llvm.sin.f64", functionType(doubleType, doubleType)) \
     macro(doubleCos, "llvm.cos.f64", functionType(doubleType, doubleType)) \
     macro(doublePow, "llvm.pow.f64", functionType(doubleType, doubleType, doubleType)) \
     macro(doublePowi, "llvm.powi.f64", functionType(doubleType, doubleType, int32)) \
     macro(doubleSqrt, "llvm.sqrt.f64", functionType(doubleType, doubleType)) \
+    macro(floatSqrt, "llvm.sqrt.f32", functionType(floatType, floatType)) \
     macro(doubleLog, "llvm.log.f64", functionType(doubleType, doubleType)) \
     macro(frameAddress, "llvm.frameaddress", functionType(pointerType(int8), int32)) \
     macro(mulWithOverflow32, "llvm.smul.with.overflow.i32", functionType(structType(context_, int32, boolean), int32, int32)) \

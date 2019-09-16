@@ -139,8 +139,14 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   for (auto& registerParameter : registerParameters) {
     if ((registerParameter.type == double_type) ||
         (registerParameter.type == float_type)) {
-      EMASSERT(float_point_parameter_types.size() ==
+      EMASSERT(float_point_parameter_types.size() <=
                static_cast<size_t>(registerParameter.name));
+      // FIXME: could be architecture dependent.
+      if (float_point_parameter_types.size() <
+          static_cast<size_t>(registerParameter.name)) {
+        float_point_parameter_types.resize(
+            static_cast<size_t>(registerParameter.name), float_type);
+      }
       float_point_parameter_types.emplace_back(registerParameter.type);
     } else if (registerParameter.name >= 0) {
       EMASSERT(registerParameter.name < 10);
