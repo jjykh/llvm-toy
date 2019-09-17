@@ -365,7 +365,7 @@ void CallResolver::ResolveOperands(
   ResolveCallTarget(code, target_id);
   // setup register operands
   OperandsVector stack_operands;
-  OperandsVector floatpoint_operands;
+  std::vector<std::tuple<int, int>> floatpoint_operands;
   for (int reg : registers_for_operands) {
     EMASSERT(reg < kV8CCRegisterParameterCount);
     int operand_id = *(operands_iterator++);
@@ -373,7 +373,7 @@ void CallResolver::ResolveOperands(
     LType llvm_value_type = typeOf(llvm_value);
     if (llvm_value_type == output().repo().doubleType ||
         llvm_value_type == output().repo().floatType) {
-      floatpoint_operands.emplace_back(operand_id);
+      floatpoint_operands.emplace_back(operand_id, reg);
       continue;
     }
     if (reg < 0) {
@@ -421,9 +421,17 @@ void CallResolver::ResolveOperands(
     sp_adjust_ = stack_operands.size() * kPointerSize;
   }
 
-  for (auto operand : floatpoint_operands) {
+  int current_floatpoint_reg = 0;
+  for (auto tuple : floatpoint_operands) {
+    int operand, reg;
+    std::tie(operand, reg) = tuple;
     LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+    while (current_floatpoint_reg != reg) {
+      SetOperandValue(-1, LLVMGetUndef(output().repo().floatType));
+      current_floatpoint_reg++;
+    }
     SetOperandValue(-1, llvm_value);
+    current_floatpoint_reg++;
   }
 }
 
