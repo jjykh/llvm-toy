@@ -365,13 +365,15 @@ void CallResolver::ResolveOperands(
   ResolveCallTarget(code, target_id);
   // setup register operands
   OperandsVector stack_operands;
-  OperandsVector double_operands;
+  OperandsVector floatpoint_operands;
   for (int reg : registers_for_operands) {
     EMASSERT(reg < kV8CCRegisterParameterCount);
     int operand_id = *(operands_iterator++);
     LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand_id);
-    if (typeOf(llvm_value) == output().repo().doubleType) {
-      double_operands.emplace_back(operand_id);
+    LType llvm_value_type = typeOf(llvm_value);
+    if (llvm_value_type == output().repo().doubleType ||
+        llvm_value_type == output().repo().floatType) {
+      floatpoint_operands.emplace_back(operand_id);
       continue;
     }
     if (reg < 0) {
@@ -419,7 +421,7 @@ void CallResolver::ResolveOperands(
     sp_adjust_ = stack_operands.size() * kPointerSize;
   }
 
-  for (auto operand : double_operands) {
+  for (auto operand : floatpoint_operands) {
     LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
     SetOperandValue(-1, llvm_value);
   }
