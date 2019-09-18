@@ -293,10 +293,6 @@ LValue Output::buildNSWSub(LValue lhs, LValue rhs) {
   return setInstrDebugLoc(LLVMBuildNSWSub(builder_, lhs, rhs, ""));
 }
 
-LValue Output::buildMul(LValue lhs, LValue rhs) {
-  return setInstrDebugLoc(v8::internal::tf_llvm::buildMul(builder_, lhs, rhs));
-}
-
 LValue Output::buildSRem(LValue lhs, LValue rhs) {
   return setInstrDebugLoc(LLVMBuildSRem(builder_, lhs, rhs, ""));
 }
@@ -324,6 +320,10 @@ LValue Output::buildFNeg(LValue value) {
 
 LValue Output::buildNSWMul(LValue lhs, LValue rhs) {
   return setInstrDebugLoc(LLVMBuildNSWMul(builder_, lhs, rhs, ""));
+}
+
+LValue Output::buildMul(LValue lhs, LValue rhs) {
+  return setInstrDebugLoc(LLVMBuildMul(builder_, lhs, rhs, ""));
 }
 
 LValue Output::buildShl(LValue lhs, LValue rhs) {

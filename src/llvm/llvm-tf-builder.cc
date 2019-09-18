@@ -1369,7 +1369,10 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
                 LLVMGetIntTypeWidth(pointer_element_type)))
         llvm_value =
             output().buildCast(LLVMTrunc, llvm_value, pointer_element_type);
-      else
+      else if (value_type == output().repo().boolean) {
+        llvm_value =
+            output().buildCast(LLVMZExt, llvm_value, pointer_element_type);
+      } else
         // FIXME: this cast does not follow the sematic hint of llvm_value.
         // Need somewhere to store the sematic of llvm_value for query.
         llvm_value =
@@ -1735,7 +1738,7 @@ void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
-  LValue result = output().buildNSWMul(e1_value, e2_value);
+  LValue result = output().buildMul(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
@@ -1743,7 +1746,7 @@ void LLVMTFBuilder::VisitInt64Mul(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
-  LValue result = output().buildNSWMul(e1_value, e2_value);
+  LValue result = output().buildMul(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
@@ -2501,7 +2504,7 @@ void LLVMTFBuilder::VisitInt32PairMul(int id, int e0, int e1, int e2, int e3) {
   output().setLineNumber(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = BuildInt64FromPair(e2, e3);
-  LValue result = output().buildNSWMul(n0, n1);
+  LValue result = output().buildMul(n0, n1);
   SetInt32PairFromInt64(id, result);
 }
 
