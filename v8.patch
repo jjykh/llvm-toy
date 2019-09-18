@@ -1429,14 +1429,14 @@ index a8cb8d220b..c1f9b9782e 100644
    Handle<SharedFunctionInfo> shared_info_;
  
 diff --git a/src/profiler/cpu-profiler.cc b/src/profiler/cpu-profiler.cc
-index 1c74dca124..155f6a65d9 100644
+index 1c74dca124..fd6d49c730 100644
 --- a/src/profiler/cpu-profiler.cc
 +++ b/src/profiler/cpu-profiler.cc
 @@ -17,6 +17,9 @@
  #include "src/log-inl.h"
  #include "src/profiler/cpu-profiler-inl.h"
  #include "src/vm-state-inl.h"
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +#include <fstream>
 +#endif
  
@@ -1446,7 +1446,7 @@ index 1c74dca124..155f6a65d9 100644
    // Disable logging when using the new implementation.
    saved_is_logging_ = logger->is_logging_;
    logger->is_logging_ = false;
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +  char name[256];
 +  snprintf(name, 256, "/sdcard/v8_profile_details_%08x.log",
 +           static_cast<int>(time(nullptr)));
@@ -1457,14 +1457,14 @@ index 1c74dca124..155f6a65d9 100644
      generator_.reset(new ProfileGenerator(profiles_.get()));
      CreateEntriesForRuntimeCallStats();
 diff --git a/src/profiler/cpu-profiler.h b/src/profiler/cpu-profiler.h
-index febc154802..cd17b344b1 100644
+index febc154802..1e3023cd93 100644
 --- a/src/profiler/cpu-profiler.h
 +++ b/src/profiler/cpu-profiler.h
 @@ -220,6 +220,9 @@ class CpuProfiler : public CodeEventObserver {
    ProfileGenerator* generator() const { return generator_.get(); }
    ProfilerEventsProcessor* processor() const { return processor_.get(); }
    Isolate* isolate() const { return isolate_; }
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +  std::ostream& os() { return *profile_detail_; }
 +#endif
  
@@ -1474,21 +1474,21 @@ index febc154802..cd17b344b1 100644
    std::unique_ptr<ProfileGenerator> generator_;
    std::unique_ptr<ProfilerEventsProcessor> processor_;
    std::unique_ptr<ProfilerListener> profiler_listener_;
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +  std::unique_ptr<std::ostream> profile_detail_;
 +#endif
    bool saved_is_logging_;
    bool is_profiling_;
  
 diff --git a/src/profiler/profile-generator.cc b/src/profiler/profile-generator.cc
-index 48f017bd3b..938c9ce223 100644
+index 48f017bd3b..8729b2ea19 100644
 --- a/src/profiler/profile-generator.cc
 +++ b/src/profiler/profile-generator.cc
 @@ -16,6 +16,10 @@
  #include "src/tracing/traced-value.h"
  #endif
  #include "src/unicode.h"
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +#include "src/code-stubs.h"
 +#include "src/interpreter/interpreter.h"
 +#endif
@@ -1499,7 +1499,7 @@ index 48f017bd3b..938c9ce223 100644
    current_profiles_semaphore_.Signal();
  }
  
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +Isolate* CpuProfilesCollection::isolate() { return profiler_->isolate(); }
 +
 +std::ostream& CpuProfilesCollection::os() { return profiler_->os(); }
@@ -1520,7 +1520,7 @@ index 48f017bd3b..938c9ce223 100644
        }
        stack_trace.push_back({entry, line_number});
      }
-+#if 0 && defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +    bool handled = false;
 +    do {
 +      const char* name = nullptr;
@@ -1589,7 +1589,7 @@ index 48f017bd3b..938c9ce223 100644
  
    if (FLAG_prof_browser_mode) {
 diff --git a/src/profiler/profile-generator.h b/src/profiler/profile-generator.h
-index 3e301a4082..3cde437e46 100644
+index 3e301a4082..d5e8aa3261 100644
 --- a/src/profiler/profile-generator.h
 +++ b/src/profiler/profile-generator.h
 @@ -413,6 +413,10 @@ class CpuProfilesCollection {
@@ -1607,7 +1607,7 @@ index 3e301a4082..3cde437e46 100644
  class ProfileGenerator {
   public:
    explicit ProfileGenerator(CpuProfilesCollection* profiles);
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +  ~ProfileGenerator();
 +#endif
  
@@ -1617,7 +1617,7 @@ index 3e301a4082..3cde437e46 100644
  
    CpuProfilesCollection* profiles_;
    CodeMap code_map_;
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && !defined(FEATURE_USE_SAMPLE_PGO)
++#if defined(FEATURE_PROFILER_COLLECT_RAW_INFO)
 +  std::unordered_set<Code*> code_set_;
 +#endif
  
