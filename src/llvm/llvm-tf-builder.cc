@@ -1688,7 +1688,7 @@ void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
-  LValue result = output().buildAdd(e1_value, e2_value);
+  LValue result = output().buildNSWAdd(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
@@ -1713,7 +1713,7 @@ void LLVMTFBuilder::VisitInt32Sub(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
-  LValue result = output().buildSub(e1_value, e2_value);
+  LValue result = output().buildNSWSub(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
@@ -1721,7 +1721,7 @@ void LLVMTFBuilder::VisitInt64Sub(int id, int e1, int e2) {
   output().setLineNumber(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
-  LValue result = output().buildSub(e1_value, e2_value);
+  LValue result = output().buildNSWSub(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
@@ -2496,7 +2496,7 @@ void LLVMTFBuilder::VisitInt32PairSub(int id, int e0, int e1, int e2, int e3) {
   output().setLineNumber(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = BuildInt64FromPair(e2, e3);
-  LValue result = output().buildSub(n0, n1);
+  LValue result = output().buildNSWSub(n0, n1);
   SetInt32PairFromInt64(id, result);
 }
 
