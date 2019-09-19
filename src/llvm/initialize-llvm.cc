@@ -28,6 +28,7 @@ static void initializeAndGetLLVMAPI(void) {
     "-sample-profile-file=../../v8/src/llvm/sample.prof",
 #endif
     "-vectorize-loops",
+    "-runtime-memory-check-threshold=16",
   };
   LLVMParseCommandLineOptions(sizeof(options) / sizeof(const char*), options,
                               nullptr);

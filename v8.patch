@@ -1623,6 +1623,25 @@ index 3e301a4082..d5e8aa3261 100644
  
    DISALLOW_COPY_AND_ASSIGN(ProfileGenerator);
  };
+diff --git a/src/wasm/wasm-code-manager.cc b/src/wasm/wasm-code-manager.cc
+index 6d663a6264..de3f4de726 100644
+--- a/src/wasm/wasm-code-manager.cc
++++ b/src/wasm/wasm-code-manager.cc
+@@ -146,7 +146,14 @@ void WasmCode::LogCode(Isolate* isolate) const {
+   ModuleEnv* module_env = GetModuleEnv(native_module()->compilation_state());
+   WireBytesRef name_ref =
+       module_env->module->LookupFunctionName(wire_bytes, index());
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
+   WasmName name_vec = wire_bytes.GetName(name_ref);
++  char buf[256];
++  if (name_vec.start() == "<?>") {
++    int s = snprintf(buf, 256, "wasm-function[%u]", index());
++    name_vec = WasmName(buf, s);
++  }
++#endif
+   MaybeHandle<String> maybe_name =
+       isolate->factory()->NewStringFromUtf8(Vector<const char>::cast(name_vec));
+   Handle<String> name;
 diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
 index 7ff27dc769..bb300a0612 100644
 --- a/src/wasm/wasm-js.cc
