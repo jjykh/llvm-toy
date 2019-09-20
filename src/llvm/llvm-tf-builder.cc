@@ -856,7 +856,8 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       get_record_write_function_(nullptr),
       get_mod_two_double_function_(nullptr),
       int32_pair_type_(nullptr),
-      state_point_id_next_(0) {
+      state_point_id_next_(0),
+      has_loop_(false) {
   int32_pair_type_ = structType(output.repo().context_, output.repo().int32,
                                 output.repo().int32);
 }
@@ -868,7 +869,7 @@ void LLVMTFBuilder::End(BuiltinFunctionClient* builtin_function_client) {
   output().positionToBBEnd(output().prologue());
   output().buildBr(GetNativeBB(
       basic_block_manager().findBB(*basic_block_manager().rpo().begin())));
-  output().finalizeDebugInfo();
+  output().finalize(has_loop_);
   v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
       basic_block_manager());
 
@@ -1125,6 +1126,7 @@ void LLVMTFBuilder::VisitGoto(int bid) {
   BasicBlock* succ = basic_block_manager().ensureBB(bid);
   EnsureNativeBB(succ, output());
   output().buildBr(GetNativeBB(succ));
+  if (current_bb_->id() > bid) has_loop_ = true;
   EndCurrentBlock();
 }
 
@@ -2070,6 +2072,7 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   }
 #endif  // FEATURE_SAMPLE_PGO
   output().buildCondBr(cmp_val, GetNativeBB(bbTrue), GetNativeBB(bbFalse));
+  if (current_bb_->id() > btrue || current_bb_->id() > bfalse) has_loop_ = true;
   EndCurrentBlock();
 }
 

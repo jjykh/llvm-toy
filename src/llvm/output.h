@@ -109,7 +109,7 @@ class Output {
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
   void setLineNumber(int linenum);
-  void finalizeDebugInfo();
+  void finalize(bool has_loop);
   LValue addFunction(const char* name, LType type);
   LType getLLVMTypeFromMachineType(const MachineType& mt);
 
@@ -126,6 +126,7 @@ class Output {
  private:
   LValue setInstrDebugLoc(LValue);
   void AddFunctionCommonAttr(LValue function);
+  void finalizeDebugInfo();
   CompilerState& state_;
   IntrinsicRepository repo_;
   LBuilder builder_;

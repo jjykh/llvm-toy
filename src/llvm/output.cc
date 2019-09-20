@@ -554,6 +554,19 @@ LValue Output::setInstrDebugLoc(LValue v) {
 
 void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 
+void Output::finalize(bool has_loop) {
+  finalizeDebugInfo();
+  if (state_.is_wasm_ && has_loop) {
+    static const char kAlignStack[] = "alignstack";
+    unsigned attr_kind =
+        LLVMGetEnumAttributeKindForName(kAlignStack, sizeof(kAlignStack) - 1);
+    EMASSERT(attr_kind != 0);
+    LLVMAttributeRef align_stack_attr =
+        LLVMCreateEnumAttribute(state_.context_, attr_kind, 4);
+    LLVMAddAttributeAtIndex(state_.function_, ~0, align_stack_attr);
+  }
+}
+
 LValue Output::addFunction(const char* name, LType type) {
   LValue function = tf_llvm::addFunction(state_.module_, name, type);
   AddFunctionCommonAttr(function);
@@ -594,16 +607,6 @@ void Output::AddFunctionCommonAttr(LValue function) {
       "+armv7-a,+dsp,+neon,+vfp3,-crypto,-d16,-fp-armv8,-fp-only-sp,-fp16,"
       "-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
-
-  if (state_.is_wasm_) {
-    static const char kAlignStack[] = "alignstack";
-    unsigned attr_kind =
-        LLVMGetEnumAttributeKindForName(kAlignStack, sizeof(kAlignStack) - 1);
-    EMASSERT(attr_kind != 0);
-    LLVMAttributeRef align_stack_attr =
-        LLVMCreateEnumAttribute(state_.context_, attr_kind, 4);
-    LLVMAddAttributeAtIndex(function, ~0, align_stack_attr);
-  }
 }
 }  // namespace tf_llvm
 }  // namespace internal
