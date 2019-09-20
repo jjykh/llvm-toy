@@ -133,6 +133,10 @@ void compile(State& state) {
   LLVMTargetLibraryInfoRef TLI = LLVMCreateEmptyTargetLibraryInfo();
   LLVMAddTargetLibraryInfo(TLI, functionPasses);
   LLVMAddTargetLibraryInfo(TLI, modulePasses);
+  LLVMTargetMachineRef target_machine =
+      LLVMGetExecutionEngineTargetMachine(engine);
+  LLVMAddAnalysisPasses(target_machine, functionPasses);
+  LLVMAddAnalysisPasses(target_machine, modulePasses);
   LLVMPassManagerBuilderPopulateFunctionPassManager(passBuilder,
                                                     functionPasses);
   LLVMPassManagerBuilderPopulateModulePassManager(passBuilder, modulePasses);

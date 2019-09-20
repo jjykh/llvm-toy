@@ -41,6 +41,7 @@ struct CompilerState {
   int code_kind_;
   PrologueKind prologue_kind_;
   bool needs_frame_;
+  bool is_wasm_;
   CompilerState(const char* FunctionName);
   ~CompilerState();
   CompilerState(const CompilerState&) = delete;

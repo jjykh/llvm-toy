@@ -1068,7 +1068,25 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
  }
-@@ -862,3 +883,18 @@
+@@ -369,6 +390,8 @@
+   const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
+   const ARMFrameLowering *TFI = getFrameLowering(MF);
+ 
++  if (MF.getFunction().getCallingConv() == CallingConv::V8CC)
++    return false;
+   // When outgoing call frames are so large that we adjust the stack pointer
+   // around the call, we can no longer use the stack pointer to reach the
+   // emergency spill slot.
+@@ -403,6 +426,8 @@
+   // 2. There are VLAs in the function and the base pointer is disabled.
+   if (!TargetRegisterInfo::canRealignStack(MF))
+     return false;
++  if (MF.getFunction().getCallingConv() == CallingConv::V8CC)
++    return true;
+   // Stack realignment requires a frame pointer.  If we already started
+   // register allocation with frame pointer elimination, it is too late now.
+   if (!MRI->canReserveReg(getFramePointerReg(MF.getSubtarget<ARMSubtarget>())))
+@@ -862,3 +887,18 @@
    }
    return false;
  }
@@ -1307,7 +1325,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
    const ARMBaseInstrInfo &TII =
        *static_cast<const ARMBaseInstrInfo *>(MF.getSubtarget().getInstrInfo());
-@@ -951,6 +962,9 @@
+@@ -906,6 +917,9 @@
+     if (isFixed) {
+       FrameReg = RegInfo->getFrameRegister(MF);
+       Offset = FPOffset;
++    } else if (hasMovingSP &&
++               MF.getFunction().getCallingConv() == CallingConv::V8CC) {
++      return Offset;
+     } else if (hasMovingSP) {
+       assert(RegInfo->hasBasePointer(MF) &&
+              "VLAs and dynamic stack alignment, but missing base pointer!");
+@@ -951,6 +965,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1317,7 +1345,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1069,9 @@
+@@ -1055,7 +1072,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1328,7 +1356,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1414,6 +1430,47 @@
+@@ -1414,6 +1433,47 @@
    std::prev(MI)->addRegisterKilled(ARM::R4, TRI);
  }
  
@@ -1376,7 +1404,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MI,
                                          const std::vector<CalleeSavedInfo> &CSI,
-@@ -1429,10 +1486,19 @@
+@@ -1429,10 +1489,19 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1400,7 +1428,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
                 NumAlignedDPRCS2Regs, MachineInstr::FrameSetup);
  
-@@ -1461,16 +1527,23 @@
+@@ -1461,16 +1530,23 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1429,7 +1457,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    return true;
  }
-@@ -1611,6 +1684,21 @@
+@@ -1611,6 +1687,21 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1451,7 +1479,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1783,7 +1871,10 @@
+@@ -1783,7 +1874,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1463,7 +1491,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1888,6 @@
+@@ -1797,7 +1891,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1471,7 +1499,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2043,12 +2133,13 @@
+@@ -2043,12 +2136,13 @@
      DebugLoc dl = Old.getDebugLoc();
      unsigned Amount = TII.getFrameSize(Old);
      if (Amount != 0) {
@@ -1487,7 +1515,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        assert(!AFI->isThumb1OnlyFunction() &&
               "This eliminateCallFramePseudoInstr does not support Thumb1!");
        bool isARM = !AFI->isThumbFunction();
-@@ -2063,7 +2154,7 @@
+@@ -2063,7 +2157,7 @@
        if (Opc == ARM::ADJCALLSTACKDOWN || Opc == ARM::tADJCALLSTACKDOWN) {
          emitSPUpdate(isARM, MBB, I, dl, TII, -Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
@@ -1496,7 +1524,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
-@@ -2511,3 +2602,438 @@
+@@ -2511,3 +2605,451 @@
    MF.verify();
  #endif
  }
@@ -1564,6 +1592,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  unsigned Align = STI.getFrameLowering()->getStackAlignment();
 +  unsigned NumBytes = MFI.getStackSize();
 +  const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
++  const ARMBaseRegisterInfo *RegInfo = STI.getRegisterInfo();
 +
 +  // Debug location must be unknown since the first debug location is used
 +  // to determine the end of the prologue.
@@ -1850,6 +1879,18 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  AFI->setDPRCalleeSavedGapSize(DPRGapSize);
 +  AFI->setDPRCalleeSavedAreaSize(DPRCSSize);
 +
++  // If we need dynamic stack realignment, do it here. Be paranoid and make
++  // sure if we also have VLAs, we have a base pointer for frame access.
++  // If aligned NEON registers were spilled, the stack has already been
++  // realigned.
++  if (RegInfo->needsStackRealignment(MF)) {
++    unsigned MaxAlign = MFI.getMaxAlignment();
++    assert(!AFI->isThumbFunction());
++    emitAligningInstructions(MF, AFI, TII, MBB, MBBI, dl, ARM::SP, MaxAlign,
++                             false);
++    AFI->setShouldRestoreSPFromFP(true);
++  }
++
 +  assert(!MFI.hasVarSizedObjects());
 +}
 +
@@ -2047,12 +2088,13 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      if (!isTailCall && CLI.CS && CLI.CS.isMustTailCall())
        report_fatal_error("failed to perform tail call elimination on a call "
                           "site marked musttail");
-@@ -1849,8 +1863,29 @@
+@@ -1849,8 +1863,30 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
 +  if (CLI.CS.isCall()) {
-+    if (CallerIsJS && (CLI.CallConv == CallingConv::C)) {
++    if (CallerIsJS && (CLI.CallConv == CallingConv::C) &&
++        !MF.getFunction().hasFnAttribute(Attribute::StackAlignment)) {
 +      hasJSCCall = true;
 +    }
 +  }
@@ -2078,7 +2120,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2191,6 +2226,12 @@
+@@ -2191,6 +2227,12 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
@@ -2091,7 +2133,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9254,6 +9295,17 @@
+@@ -9254,6 +9296,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -2109,7 +2151,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -10961,6 +11013,10 @@
+@@ -10961,6 +11014,10 @@
    unsigned Mask = MaskC->getZExtValue();
    if (Mask == 0xffff)
      return SDValue();
@@ -2120,7 +2162,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    SDValue Res;
    // Case (1): or (and A, mask), val => ARMbfi A, val, mask
    ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
-@@ -13136,6 +13192,23 @@
+@@ -13136,6 +13193,23 @@
    return -1;
  }
  

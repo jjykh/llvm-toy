@@ -17,7 +17,8 @@ CompilerState::CompilerState(const char* function_name)
       function_name_(function_name),
       code_kind_(0),
       prologue_kind_(PrologueKind::Unset),
-      needs_frame_(false) {
+      needs_frame_(false),
+      is_wasm_(false) {
   context_ = LLVMContextCreate();
   module_ = LLVMModuleCreateWithNameInContext("main", context_);
 #if 0
@@ -25,6 +26,7 @@ CompilerState::CompilerState(const char* function_name)
 #else
   LLVMSetTarget(module_, "armv7-unknown-unknown-v8");
 #endif
+  sm_.state_ = this;
 }
 
 CompilerState::~CompilerState() { LLVMContextDispose(context_); }

@@ -12,6 +12,7 @@ namespace v8 {
 namespace internal {
 namespace tf_llvm {
 typedef uint16_t DWARFRegister;
+struct CompilerState;
 
 class DataView {
  public:
@@ -101,6 +102,7 @@ struct StackMaps {
   std::vector<StackSize> stackSizes;
   std::vector<Constant> constants;
   std::vector<Record> records;
+  CompilerState* state_;
 
   bool parse(
       DataView*);  // Returns true on parse success, false on failure. Failure

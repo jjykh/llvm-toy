@@ -2,6 +2,7 @@
 
 #include "src/llvm/stack-maps.h"
 #include <sstream>
+#include "src/llvm/compiler-state.h"
 
 namespace v8 {
 namespace internal {
@@ -168,7 +169,13 @@ StackMaps::RecordMap StackMaps::computeRecordMap() const {
 unsigned StackMaps::stackSize() const {
   EMASSERT(stackSizes.size() == 1);
 
-  return stackSizes[0].size;
+  unsigned stack_size = stackSizes[0].size;
+  EMASSERT(stack_size != -1U || state_->is_wasm_);
+  // workaround wasm:
+  if (stack_size == -1U && state_->is_wasm_) {
+    return 64;
+  }
+  return stack_size;
 }
 
 static std::string LocationKind(const StackMaps::Location& location) {

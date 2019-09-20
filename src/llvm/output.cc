@@ -53,6 +53,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
                              bool v8cc, bool is_wasm) {
   EMASSERT(!builder_);
   EMASSERT(!prologue_);
+  state_.is_wasm_ = is_wasm;
   builder_ = LLVMCreateBuilderInContext(state_.context_);
   di_builder_ = LLVMCreateDIBuilderDisallowUnresolved(state_.module_);
   initializeFunction(registerParameters, v8cc, is_wasm);
@@ -593,6 +594,16 @@ void Output::AddFunctionCommonAttr(LValue function) {
       "+armv7-a,+dsp,+neon,+vfp3,-crypto,-d16,-fp-armv8,-fp-only-sp,-fp16,"
       "-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
+
+  if (state_.is_wasm_) {
+    static const char kAlignStack[] = "alignstack";
+    unsigned attr_kind =
+        LLVMGetEnumAttributeKindForName(kAlignStack, sizeof(kAlignStack) - 1);
+    EMASSERT(attr_kind != 0);
+    LLVMAttributeRef align_stack_attr =
+        LLVMCreateEnumAttribute(state_.context_, attr_kind, 4);
+    LLVMAddAttributeAtIndex(function, ~0, align_stack_attr);
+  }
 }
 }  // namespace tf_llvm
 }  // namespace internal
