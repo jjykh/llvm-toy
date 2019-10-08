@@ -2308,6 +2308,36 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
+Index: lib/Target/ARM/ARMTargetTransformInfo.h
+===================================================================
+--- lib/Target/ARM/ARMTargetTransformInfo.h	(revision 359070)
++++ lib/Target/ARM/ARMTargetTransformInfo.h	(working copy)
+@@ -47,6 +47,7 @@
+ 
+   const ARMSubtarget *ST;
+   const ARMTargetLowering *TLI;
++  const Function *Fn;
+ 
+   // Currently the following features are excluded from InlineFeatureWhitelist.
+   // ModeThumb, FeatureNoARM, ModeSoftFloat, FeatureVFPOnlySP, FeatureD16
+@@ -87,7 +88,7 @@
+ public:
+   explicit ARMTTIImpl(const ARMBaseTargetMachine *TM, const Function &F)
+       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
+-        TLI(ST->getTargetLowering()) {}
++        TLI(ST->getTargetLowering()), Fn(&F) {}
+ 
+   bool areInlineCompatible(const Function *Caller,
+                            const Function *Callee) const;
+@@ -177,6 +178,8 @@
+                                TTI::UnrollingPreferences &UP);
+ 
+   bool shouldBuildLookupTablesForConstant(Constant *C) const {
++    if (Fn->getCallingConv() == CallingConv::V8CC)
++      return false;
+     // In the ROPI and RWPI relocation models we can't have pointers to global
+     // variables or functions in constant data, so don't convert switches to
+     // lookup tables if any of the values would need relocation.
 Index: lib/Target/Target.cpp
 ===================================================================
 --- lib/Target/Target.cpp	(revision 359070)
