@@ -1652,15 +1652,16 @@ index 6d663a6264..11d5761455 100644
        isolate->factory()->NewStringFromUtf8(Vector<const char>::cast(name_vec));
    Handle<String> name;
 diff --git a/src/wasm/wasm-js.cc b/src/wasm/wasm-js.cc
-index 7ff27dc769..bb300a0612 100644
+index 7ff27dc769..7024ef735e 100644
 --- a/src/wasm/wasm-js.cc
 +++ b/src/wasm/wasm-js.cc
-@@ -657,6 +657,57 @@ void WebAssemblyInstantiateStreaming(
+@@ -657,6 +657,58 @@ void WebAssemblyInstantiateStreaming(
    args.GetReturnValue().Set(result);
  }
  
 +#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+void DeserializeFromSnapshot(const v8::FunctionCallbackInfo<v8::Value>& args) {
++void DeserializeFromSnapshotForTest(
++    const v8::FunctionCallbackInfo<v8::Value>& args) {
 +  v8::Isolate* isolate = args.GetIsolate();
 +  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
 +  HandleScope scope(isolate);
@@ -1713,28 +1714,38 @@ index 7ff27dc769..bb300a0612 100644
  // WebAssembly.instantiate(module, imports) -> WebAssembly.Instance
  // WebAssembly.instantiate(bytes, imports) ->
  //     {module: WebAssembly.Module, instance: WebAssembly.Instance}
-@@ -1400,6 +1451,10 @@ void WasmJs::Install(Isolate* isolate, bool exposed_on_global_object) {
+@@ -1400,6 +1452,10 @@ void WasmJs::Install(Isolate* isolate, bool exposed_on_global_object) {
      InstallFunc(isolate, webassembly, "instantiateStreaming",
                  WebAssemblyInstantiateStreaming, 1);
    }
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
++#if 0 && defined(UC_BUILD_TF_LLVM_BACKEND)
 +  InstallFunc(isolate, webassembly, "deserializeFromSnapshot",
-+              DeserializeFromSnapshot, 2);
++              DeserializeFromSnapshotForTest, 2);
 +#endif
  
    // Expose the API on the global object if configured to do so.
    if (exposed_on_global_object) {
 diff --git a/src/wasm/wasm-serialization.cc b/src/wasm/wasm-serialization.cc
-index 3c21a5d223..04989e61f3 100644
+index 3c21a5d223..7bd99b7464 100644
 --- a/src/wasm/wasm-serialization.cc
 +++ b/src/wasm/wasm-serialization.cc
-@@ -129,6 +129,9 @@ void WriteVersion(Isolate* isolate, Writer* writer) {
+@@ -120,11 +120,19 @@ class Reader {
+ constexpr size_t kVersionSize = 4 * sizeof(uint32_t);
+ 
+ void WriteVersion(Isolate* isolate, Writer* writer) {
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  writer->Write(SerializedData::ComputeMagicNumber(
++      isolate->heap()->external_reference_table()));
++  writer->Write(Version::Hash());
++  writer->Write(static_cast<uint32_t>(0xdeadbeef));
++  writer->Write(static_cast<uint32_t>(0xf3e5d98b));
++#else
+   writer->Write(SerializedData::ComputeMagicNumber(
+       isolate->heap()->external_reference_table()));
+   writer->Write(Version::Hash());
+   writer->Write(static_cast<uint32_t>(CpuFeatures::SupportedFeatures()));
+   writer->Write(FlagList::Hash());
++#endif
+ }
  
  bool IsSupportedVersion(Isolate* isolate, const Vector<const byte> version) {
-   if (version.size() < kVersionSize) return false;
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
-+  return true;
-+#endif
-   byte current_version[kVersionSize];
-   Writer writer({current_version, kVersionSize});
-   WriteVersion(isolate, &writer);
