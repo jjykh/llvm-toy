@@ -1157,7 +1157,7 @@ index 95d13f3169..42d87d4722 100644
    // ---------------------------------------------------------------------------
    // The following methods are for testing purposes only. Avoid production use.
 diff --git a/src/compiler/wasm-compiler.cc b/src/compiler/wasm-compiler.cc
-index 73dc70a768..6fb4e6e47c 100644
+index 73dc70a768..eac2ab5d13 100644
 --- a/src/compiler/wasm-compiler.cc
 +++ b/src/compiler/wasm-compiler.cc
 @@ -2032,7 +2032,12 @@ Node* WasmGraphBuilder::GrowMemory(Node* input) {
@@ -1184,6 +1184,15 @@ index 73dc70a768..6fb4e6e47c 100644
    size_t ret_count = sig->return_count();
    if (ret_count == 0) return call;  // No return value.
  
+@@ -5138,7 +5147,7 @@ Vector<const char> GetDebugName(Zone* zone, wasm::WasmName name, int index) {
+   if (!name.is_empty()) {
+     return name;
+   }
+-#ifdef DEBUG
++#if DEBUG || (defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR)
+   constexpr int kBufferLength = 15;
+ 
+   EmbeddedVector<char, kBufferLength> name_vector;
 @@ -5178,6 +5187,9 @@ void TurbofanWasmCompilationUnit::ExecuteCompilation() {
          GetDebugName(&compilation_zone, wasm_unit_->func_name_,
                       wasm_unit_->func_index_),

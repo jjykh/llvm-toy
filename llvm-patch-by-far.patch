@@ -2376,6 +2376,25 @@ Index: lib/Transforms/IPO/SampleProfile.cpp
 +std::string SampleProfileLoaderPass::SampleProfileFileFromOption() {
 +  return SampleProfileFile;
 +}
+Index: lib/Transforms/Vectorize/LoopVectorize.cpp
+===================================================================
+--- lib/Transforms/Vectorize/LoopVectorize.cpp	(revision 359070)
++++ lib/Transforms/Vectorize/LoopVectorize.cpp	(working copy)
+@@ -7512,6 +7512,14 @@
+   }
+ 
+   // Process each loop nest in the function.
++  if (Changed) {
++    // Add alignstack attribute to function.
++    if (F.hasFnAttribute("js-wasm-call")) {
++      F.addAttribute(
++          AttributeList::FunctionIndex,
++          Attribute::get(F.getContext(), Attribute::StackAlignment, 4));
++    }
++  }
+   return Changed;
+ }
+ 
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
