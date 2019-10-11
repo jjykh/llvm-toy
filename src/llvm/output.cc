@@ -177,7 +177,6 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   if (state_.needs_frame_) {
     static const char kJSFunctionCall[] = "js-function-call";
     static const char kJSStubCall[] = "js-stub-call";
-    static const char kJSWASMCall[] = "js-wasm-call";
     switch (state_.prologue_kind_) {
       case PrologueKind::JSFunctionCall:
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSFunctionCall,
@@ -190,14 +189,15 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
                      static_cast<Code::Kind>(state_.code_kind_))));
         LLVMAddTargetDependentFunctionAttr(state_.function_, kJSStubCall,
                                            stub_marker);
-        if (is_wasm) {
-          LLVMAddTargetDependentFunctionAttr(state_.function_, kJSWASMCall,
-                                             nullptr);
-        }
       } break;
       default:
         __builtin_trap();
     }
+  }
+  static const char kJSWASMCall[] = "js-wasm-call";
+  if (is_wasm) {
+    LLVMAddTargetDependentFunctionAttr(state_.function_, kJSWASMCall,
+                                       nullptr);
   }
 
   char file_name[256];
@@ -554,17 +554,8 @@ LValue Output::setInstrDebugLoc(LValue v) {
 
 void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 
-void Output::finalize(bool has_loop) {
+void Output::finalize() {
   finalizeDebugInfo();
-  if (state_.is_wasm_ && has_loop) {
-    static const char kAlignStack[] = "alignstack";
-    unsigned attr_kind =
-        LLVMGetEnumAttributeKindForName(kAlignStack, sizeof(kAlignStack) - 1);
-    EMASSERT(attr_kind != 0);
-    LLVMAttributeRef align_stack_attr =
-        LLVMCreateEnumAttribute(state_.context_, attr_kind, 4);
-    LLVMAddAttributeAtIndex(state_.function_, ~0, align_stack_attr);
-  }
 }
 
 LValue Output::addFunction(const char* name, LType type) {
@@ -598,9 +589,11 @@ LType Output::getLLVMTypeFromMachineType(const MachineType& mt) {
 
 void Output::AddFunctionCommonAttr(LValue function) {
   // arm jump tables are slow.
+#if 0
   static const char kNoJumpTables[] = "no-jump-tables";
   static const char kTrue[] = "true";
   LLVMAddTargetDependentFunctionAttr(function, kNoJumpTables, kTrue);
+#endif
 
   static const char kFS[] = "target-features";
   static const char kFSValue[] =

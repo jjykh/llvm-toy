@@ -160,6 +160,7 @@ class CallResolver {
                                size_t operands_count);
   virtual void BuildCall(const CallDescriptor& call_desc);
   virtual void PopulateCallInfo(CallInfo*);
+  virtual bool IsTailCall() const { return false; }
   inline Output& output() { return *output_; }
   inline int id() { return id_; }
   inline int patchid() { return patchid_; }
@@ -212,6 +213,7 @@ class TCCallResolver final : public CallResolver {
  private:
   void BuildCall(const CallDescriptor& call_desc) override;
   void PopulateCallInfo(CallInfo*) override;
+  bool IsTailCall() const final { return true; }
 };
 
 class InvokeResolver final : public CallResolver {
@@ -409,8 +411,7 @@ void CallResolver::ResolveOperands(
       locations_.push_back(reg);
     }
   } else {
-    // FIXME: CHECK if this is tail calling. Not support tail calling.
-
+    CHECK(!IsTailCall());
     for (auto operand : stack_operands) {
       LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
       LType type = typeOf(llvm_value);
@@ -856,8 +857,7 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       get_record_write_function_(nullptr),
       get_mod_two_double_function_(nullptr),
       int32_pair_type_(nullptr),
-      state_point_id_next_(0),
-      has_loop_(false) {
+      state_point_id_next_(0) {
   int32_pair_type_ = structType(output.repo().context_, output.repo().int32,
                                 output.repo().int32);
 }
@@ -869,7 +869,7 @@ void LLVMTFBuilder::End(BuiltinFunctionClient* builtin_function_client) {
   output().positionToBBEnd(output().prologue());
   output().buildBr(GetNativeBB(
       basic_block_manager().findBB(*basic_block_manager().rpo().begin())));
-  output().finalize(has_loop_);
+  output().finalize();
   v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
       basic_block_manager());
 
@@ -1126,7 +1126,6 @@ void LLVMTFBuilder::VisitGoto(int bid) {
   BasicBlock* succ = basic_block_manager().ensureBB(bid);
   EnsureNativeBB(succ, output());
   output().buildBr(GetNativeBB(succ));
-  if (current_bb_->id() > bid) has_loop_ = true;
   EndCurrentBlock();
 }
 
@@ -2072,7 +2071,6 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   }
 #endif  // FEATURE_SAMPLE_PGO
   output().buildCondBr(cmp_val, GetNativeBB(bbTrue), GetNativeBB(bbFalse));
-  if (current_bb_->id() > btrue || current_bb_->id() > bfalse) has_loop_ = true;
   EndCurrentBlock();
 }
 

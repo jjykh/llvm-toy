@@ -79,7 +79,6 @@ class LLVMTFBuilder final : public TFVisitor {
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
   int64_t state_point_id_next_;
-  bool has_loop_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

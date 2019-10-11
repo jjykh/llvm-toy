@@ -109,7 +109,7 @@ class Output {
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
   void setLineNumber(int linenum);
-  void finalize(bool has_loop);
+  void finalize();
   LValue addFunction(const char* name, LType type);
   LType getLLVMTypeFromMachineType(const MachineType& mt);
 
