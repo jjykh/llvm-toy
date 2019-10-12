@@ -122,6 +122,7 @@ class Output {
   inline LValue parent_fp() { return parent_fp_; }
   inline LValue bitcast_space() { return bitcast_space_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
+  bool is_wasm() const;
 
  private:
   LValue setInstrDebugLoc(LValue);

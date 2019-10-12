@@ -601,6 +601,8 @@ void Output::AddFunctionCommonAttr(LValue function) {
       "-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
 }
+
+bool Output::is_wasm() const { return state_.is_wasm_; }
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

@@ -395,7 +395,8 @@ void CallResolver::ResolveOperands(
   }
   locations_.push_back(target_reg);
 
-  if (stack_operands.size() <= kV8CCMaxStackParameterToReg) {
+  if ((stack_operands.size() <= kV8CCMaxStackParameterToReg) ||
+      !output().is_wasm()) {
     std::vector<int> allocated_regs;
     for (size_t i = 0; i != stack_operands.size(); ++i) {
       int reg = FindNextReg();
