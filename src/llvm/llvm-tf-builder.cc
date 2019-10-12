@@ -187,6 +187,7 @@ class CallResolver {
   }
   void SetOperandValue(int reg, LValue value);
   int FindNextReg();
+  size_t AvaiableRegs() const;
 
   std::bitset<kV8CCRegisterParameterCount>
       allocatable_register_set_; /* 0 is allocatable */
@@ -290,7 +291,8 @@ class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
 
 CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
                            StackMapInfoMap* stack_map_info_map, int patchid)
-    : operand_values_(kV8CCRegisterParameterCount,
+    : allocatable_register_set_(kTargetRegParameterNotAllocatable),
+      operand_values_(kV8CCRegisterParameterCount,
                       LLVMGetUndef(output.repo().intPtr)),
       operand_value_types_(kV8CCRegisterParameterCount, output.repo().intPtr),
       current_bb_(current_bb),
@@ -313,6 +315,10 @@ int CallResolver::FindNextReg() {
   }
   next_reg_ = -1;
   return -1;
+}
+
+size_t CallResolver::AvaiableRegs() const {
+  return allocatable_register_set_.size() - allocatable_register_set_.count();
 }
 
 void CallResolver::SetOperandValue(int reg, LValue llvm_value) {
@@ -395,8 +401,8 @@ void CallResolver::ResolveOperands(
   }
   locations_.push_back(target_reg);
 
-  if ((stack_operands.size() <= kV8CCMaxStackParameterToReg) ||
-      !output().is_wasm()) {
+  if (stack_operands.size() <= kV8CCMaxStackParameterToReg &&
+      AvaiableRegs() >= stack_operands.size()) {
     std::vector<int> allocated_regs;
     for (size_t i = 0; i != stack_operands.size(); ++i) {
       int reg = FindNextReg();
