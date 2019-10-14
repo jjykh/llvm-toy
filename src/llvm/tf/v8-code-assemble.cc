@@ -323,7 +323,7 @@ void RelocationProcessor::ProcessConstantLoad(
     constant_location_set_.insert(constant_pc_offset);
     int pc_offset = std::distance(code_start, instruction_pointer);
 
-    auto info = load_constant_recorder.Query(static_cast<int64_t>(address));
+    auto info = load_constant_recorder.Query(static_cast<uintptr_t>(address));
     EmitLoadRelocation(constant_pc_offset, pc_offset, info);
   }
 }

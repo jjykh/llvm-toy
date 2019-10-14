@@ -131,7 +131,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
             false);
         return;
       }
-      int64_t magic = static_cast<int64_t>(external_reference.address());
+      uintptr_t magic = static_cast<uintptr_t>(external_reference.address());
       visitor->VisitExternalConstant(node->id(), magic);
     }
       return;
@@ -175,7 +175,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       }
       if (!TryLoadFromConstantTable(node, object, visitor)) {
         visitor->VisitHeapConstant(
-            node->id(), reinterpret_cast<int64_t>(object.location()));
+            node->id(), reinterpret_cast<uintptr_t>(object.location()));
       }
     }
       return;
@@ -1199,7 +1199,7 @@ bool ScheduleEmitter::HandleCodeForCall(compiler::Node* node,
       (iterator == uses.end())) {
     if (relative_call) {
       visitor->VisitCodeForCall(node->id(),
-                                reinterpret_cast<int64_t>(object.location()),
+                                reinterpret_cast<uintptr_t>(object.location()),
                                 relative_call);
       return true;
     }

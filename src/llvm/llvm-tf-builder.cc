@@ -2134,7 +2134,7 @@ void LLVMTFBuilder::VisitIfException(int id) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, exception);
 }
 
-void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
+void LLVMTFBuilder::VisitHeapConstant(int id, uintptr_t magic) {
   output().setLineNumber(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kHeapConstant);
@@ -2142,7 +2142,7 @@ void LLVMTFBuilder::VisitHeapConstant(int id, int64_t magic) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
-void LLVMTFBuilder::VisitExternalConstant(int id, int64_t magic) {
+void LLVMTFBuilder::VisitExternalConstant(int id, uintptr_t magic) {
   output().setLineNumber(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kExternalReference);
@@ -2279,7 +2279,7 @@ void LLVMTFBuilder::VisitLoadFromConstantTable(int id, int constant_index) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().buildLoad(offset));
 }
 
-void LLVMTFBuilder::VisitCodeForCall(int id, int64_t magic, bool relative) {
+void LLVMTFBuilder::VisitCodeForCall(int id, uintptr_t magic, bool relative) {
   output().setLineNumber(id);
   ValueDesc value;
   if (relative) {

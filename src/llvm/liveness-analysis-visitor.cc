@@ -704,11 +704,11 @@ void LivenessAnalysisVisitor::VisitIfDefault(int id) {}
 
 void LivenessAnalysisVisitor::VisitIfException(int id) { Define(id); }
 
-void LivenessAnalysisVisitor::VisitHeapConstant(int id, int64_t magic) {
+void LivenessAnalysisVisitor::VisitHeapConstant(int id, uintptr_t magic) {
   Define(id);
 }
 
-void LivenessAnalysisVisitor::VisitExternalConstant(int id, int64_t magic) {
+void LivenessAnalysisVisitor::VisitExternalConstant(int id, uintptr_t magic) {
   Define(id);
 }
 
@@ -777,7 +777,8 @@ void LivenessAnalysisVisitor::VisitLoadFromConstantTable(int id, int) {
   Define(id);
 }
 
-void LivenessAnalysisVisitor::VisitCodeForCall(int id, int64_t, bool relative) {
+void LivenessAnalysisVisitor::VisitCodeForCall(int id, uintptr_t,
+                                               bool relative) {
   Define(id);
 }
 

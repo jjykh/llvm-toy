@@ -23,15 +23,15 @@ class LoadConstantRecorder {
     ~MagicInfo() = default;
     Type type;
     int rmode;
-    int real_magic;
+    uintptr_t real_magic;
   };
   LoadConstantRecorder() = default;
   ~LoadConstantRecorder() = default;
-  int64_t Register(int64_t magic, Type type, int rmode = 0);
-  const MagicInfo& Query(int64_t magic) const;
+  uintptr_t Register(uintptr_t magic, Type type, int rmode = 0);
+  const MagicInfo& Query(uintptr_t magic) const;
 
  private:
-  std::unordered_map<int64_t, MagicInfo> map_;
+  std::unordered_map<uintptr_t, MagicInfo> map_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

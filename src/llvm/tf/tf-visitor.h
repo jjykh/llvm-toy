@@ -136,7 +136,7 @@ struct CallDescriptor {
   V(IfValue, (int id, int val))                                               \
   V(IfDefault, (int id))                                                      \
   V(IfException, (int id))                                                    \
-  V(HeapConstant, (int id, int64_t magic))                                    \
+  V(HeapConstant, (int id, uintptr_t magic))                                  \
   V(SmiConstant, (int id, void* smi_value))                                   \
   V(Float64Constant, (int id, double value))                                  \
   V(Float32Constant, (int id, double value))                                  \
@@ -144,8 +144,8 @@ struct CallDescriptor {
   V(RootRelative, (int id, int offset, bool tagged))                          \
   V(RootOffset, (int id, int offset))                                         \
   V(LoadFromConstantTable, (int id, int constant_index))                      \
-  V(CodeForCall, (int id, int64_t magic, bool relative))                      \
-  V(ExternalConstant, (int id, int64_t magic))                                \
+  V(CodeForCall, (int id, uintptr_t magic, bool relative))                    \
+  V(ExternalConstant, (int id, uintptr_t magic))                              \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
   V(Call, (int id, bool code, const CallDescriptor& call_desc,                \
            const OperandsVector& operands))                                   \
