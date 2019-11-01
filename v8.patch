@@ -1633,15 +1633,14 @@ index 3e301a4082..d5e8aa3261 100644
    DISALLOW_COPY_AND_ASSIGN(ProfileGenerator);
  };
 diff --git a/src/wasm/wasm-code-manager.cc b/src/wasm/wasm-code-manager.cc
-index 6d663a6264..11d5761455 100644
+index 6d663a6264..710f67c261 100644
 --- a/src/wasm/wasm-code-manager.cc
 +++ b/src/wasm/wasm-code-manager.cc
-@@ -146,7 +146,14 @@ void WasmCode::LogCode(Isolate* isolate) const {
-   ModuleEnv* module_env = GetModuleEnv(native_module()->compilation_state());
+@@ -147,6 +147,13 @@ void WasmCode::LogCode(Isolate* isolate) const {
    WireBytesRef name_ref =
        module_env->module->LookupFunctionName(wire_bytes, index());
-+#if defined(UC_BUILD_TF_LLVM_BACKEND)
    WasmName name_vec = wire_bytes.GetName(name_ref);
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
 +  char buf[256];
 +  if (!strcmp(name_vec.start(), "<?>")) {
 +    int s = snprintf(buf, 256, "wasm-function[%u]", index());
