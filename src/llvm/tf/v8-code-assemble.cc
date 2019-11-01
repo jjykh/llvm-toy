@@ -2,17 +2,17 @@
 
 #include "src/llvm/tf/v8-code-assemble.h"
 
-#include "src/assembler-inl.h"
+#include "src/codegen/assembler-inl.h"
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/exception-table-arm.h"
 #include "src/llvm/stack-maps.h"
 
 #include <unordered_set>
-#include "src/callable.h"
-#include "src/handles-inl.h"
+#include "src/codegen/callable.h"
+#include "src/codegen/macro-assembler.h"
+#include "src/codegen/safepoint-table.h"
+#include "src/handles/handles-inl.h"
 #include "src/heap/factory.h"
-#include "src/macro-assembler.h"
-#include "src/safepoint-table.h"
 
 namespace v8 {
 namespace internal {
@@ -69,7 +69,6 @@ class CodeAssemblerLLVM {
   };
 
   typedef std::unordered_map<uint32_t, RecordReference> RecordReferenceMap;
-  Zone* zone_;
   TurboAssembler& tasm_;
   SafepointTableBuilder& safepoint_table_builder_;
   RecordReferenceMap record_reference_map_;
@@ -82,8 +81,7 @@ class CodeAssemblerLLVM {
 CodeAssemblerLLVM::CodeAssemblerLLVM(
     TurboAssembler* tasm, SafepointTableBuilder* safepoint_table_builder,
     int* handler_table_offset, Zone* zone)
-    : zone_(zone),
-      tasm_(*tasm),
+    : tasm_(*tasm),
       safepoint_table_builder_(*safepoint_table_builder),
       handler_table_offset_(*handler_table_offset) {}
 
@@ -111,31 +109,30 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
       tasm_.bx(Register::from_code(call_target_reg));
   } else {
     int code_target_index = tasm_.LLVMAddCodeTarget(
-        Handle<Code>(reinterpret_cast<Code**>(relative_target)));
+        Handle<Code>(reinterpret_cast<Address*>(relative_target)));
     relocation_processor_.EmitRelativeCall(tasm_.pc_offset());
     if (!call_info->is_tailcall())
-      tasm_.bl(code_target_index * Instruction::kInstrSize);
+      tasm_.bl(code_target_index * kInstrSize);
     else
-      tasm_.b(code_target_index * Instruction::kInstrSize);
+      tasm_.b(code_target_index * kInstrSize);
   }
   if (!call_info->is_tailcall()) {
     // record safepoint
     // FIXME: (UC_linzj) kLazyDeopt is abusing, pass frame-state flags to
     // determine.
-    Safepoint safepoint = safepoint_table_builder_.DefineSafepoint(
-        &tasm_, Safepoint::kSimple, 0, Safepoint::kLazyDeopt);
+    Safepoint safepoint =
+        safepoint_table_builder_.DefineSafepoint(&tasm_, Safepoint::kLazyDeopt);
     for (auto& location : record.locations) {
       if (location.kind != StackMaps::Location::Indirect) continue;
       // only understand stack slot
       if (location.dwarfReg == 13) {
         // Remove the effect from safepoint-table.cc
-        safepoint.DefinePointerSlot(
-            slot_count_ - 1 -
-                (location.offset - call_info->sp_adjust()) / kPointerSize,
-            zone_);
+        safepoint.DefinePointerSlot(slot_count_ - 1 -
+                                    (location.offset - call_info->sp_adjust()) /
+                                        kPointerSize);
       } else {
         CHECK(location.dwarfReg == 11);
-        safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1, zone_);
+        safepoint.DefinePointerSlot(-location.offset / kPointerSize + 1);
       }
     }
   }
@@ -187,8 +184,6 @@ bool CodeAssemblerLLVM::Assemble(const CompilerState& state) {
   const uint32_t* instruction_pointer = code_start;
 
   unsigned num_bytes = code.size();
-  const uint32_t* instruction_end =
-      reinterpret_cast<const uint32_t*>(code.data() + num_bytes);
   ProcessRecordMap(rm, state.stack_map_info_map_);
 
   slot_count_ = state.sm_.stackSize() / kPointerSize;
@@ -219,11 +214,11 @@ bool CodeAssemblerLLVM::Assemble(const CompilerState& state) {
       tasm_.dd(instruction);
     }
   }
+  safepoint_table_builder_.Emit(&tasm_, slot_count_);
   EmitHandlerTable(state);
   instruction_pointer = reinterpret_cast<const uint32_t*>(code.data());
   relocation_processor_.ProcessRelocationWorkList(&tasm_);
   record_reference_map_.clear();
-  safepoint_table_builder_.Emit(&tasm_, slot_count_);
   return true;
 }
 
@@ -260,8 +255,7 @@ void CodeAssemblerLLVM::EmitHandlerTable(const CompilerState& state) {
                                     state.exception_table_->size());
   const std::vector<std::tuple<int, int>>& callsite_handler_pairs =
       exception_table.CallSiteHandlerPairs();
-  handler_table_offset_ = HandlerTable::EmitReturnTableStart(
-      &tasm_, static_cast<int>(callsite_handler_pairs.size()));
+  handler_table_offset_ = HandlerTable::EmitReturnTableStart(&tasm_);
   for (size_t i = 0; i < callsite_handler_pairs.size(); ++i) {
     int callsite, handler;
     std::tie(callsite, handler) = callsite_handler_pairs[i];
@@ -309,11 +303,9 @@ void RelocationProcessor::ProcessConstantLoad(
     const LoadConstantRecorder& load_constant_recorder) {
   Instr instruction = *reinterpret_cast<const Instr*>(instruction_pointer);
   if (Assembler::IsLdrPcImmediateOffset(instruction)) {
-    Address& address =
-        Memory::Address_at(Assembler::constant_pool_entry_address(
-            reinterpret_cast<Address>(
-                const_cast<uint8_t*>(instruction_pointer)),
-            0));
+    Address& address = Memory<Address>(Assembler::constant_pool_entry_address(
+        reinterpret_cast<Address>(const_cast<uint8_t*>(instruction_pointer)),
+        0));
     std::unique_ptr<StackMapInfo> to_push;
     int constant_pc_offset =
         std::distance(code_start, reinterpret_cast<const uint8_t*>(&address));
@@ -352,7 +344,7 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
     switch (magic_info.type) {
       case LoadConstantRecorder::kHeapConstant:
         tasm->reset_pc(std::get<1>(entry));
-        tasm->RecordRelocInfo(RelocInfo::EMBEDDED_OBJECT);
+        tasm->RecordRelocInfo(RelocInfo::FULL_EMBEDDED_OBJECT);
         break;
       case LoadConstantRecorder::kCodeConstant:
         tasm->reset_pc(std::get<1>(entry));

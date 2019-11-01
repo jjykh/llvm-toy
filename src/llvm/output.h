@@ -41,7 +41,7 @@ class Output {
   LValue constInt32(int);
   LValue constIntPtr(intptr_t);
   LValue constInt64(long long);
-  LValue constTagged(void*);
+  LValue constTagged(uintptr_t);
   LValue buildStructGEP(LValue structVal, unsigned field);
   LValue buildGEPWithByteOffset(LValue base, LValue offset, LType dstType);
   LValue buildGEP(LValue base, LValue offset);

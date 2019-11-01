@@ -1,10 +1,11 @@
 // Copyright 2019 UCWeb Co., Ltd.
 #ifndef V8_CODE_ASSEMBLE_H
 #define V8_CODE_ASSEMBLE_H
-#include "src/objects.h"
 
 namespace v8 {
 namespace internal {
+class SafepointTableBuilder;
+class TurboAssembler;
 namespace tf_llvm {
 struct CompilerState;
 bool AssembleCode(const CompilerState& state, TurboAssembler* tasm,

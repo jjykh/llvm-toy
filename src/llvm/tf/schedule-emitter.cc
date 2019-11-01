@@ -11,7 +11,7 @@
 #include "src/compiler/schedule.h"
 #include "src/llvm/log.h"
 #include "src/llvm/tf/tf-visitor.h"
-#include "src/objects-inl.h"
+#include "src/objects/objects-inl.h"
 #include "src/snapshot/serializer-common.h"
 
 namespace v8 {
@@ -121,13 +121,11 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
         visitor->VisitRootOffset(node->id(), offset);
         return;
       } else if (ShouldUseRelativeBranchOrLoadFromConstant()) {
-        ExternalReferenceEncoder encoder(isolate_);
-        ExternalReferenceEncoder::Value v =
-            encoder.Encode(external_reference.address());
         visitor->VisitRootRelative(
             node->id(),
-            TurboAssemblerBase::RootRegisterOffsetForExternalReferenceIndex(
-                v.index()),
+            TurboAssemblerBase::
+                RootRegisterOffsetForExternalReferenceTableEntry(
+                    isolate_, external_reference),
             false);
         return;
       }
@@ -154,7 +152,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kHeapConstant: {
       Handle<HeapObject> object =
           compiler::OpParameter<Handle<HeapObject>>(node->op());
-      Heap::RootListIndex index;
+      RootIndex index;
       int builtin_index;
       if (ShouldUseRelativeBranchOrLoadFromConstant() &&
           isolate_->builtins()->IsBuiltinHandle(object, &builtin_index)) {
@@ -168,7 +166,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
             true);
         return;
       } else if (IsMaterializableFromRoot(object, &index)) {
-        visitor->VisitRoot(node->id(), static_cast<int>(index));
+        visitor->VisitRoot(node->id(), index);
         return;
       } else if (object->IsCode()) {
         if (HandleCodeForCall(node, object, visitor, false)) return;
@@ -183,7 +181,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       double value = compiler::OpParameter<double>(node->op());
       int smi;
       if (DoubleToSmiInteger(value, &smi)) {
-        visitor->VisitSmiConstant(node->id(), Smi::FromInt(smi));
+        visitor->VisitSmiConstant(node->id(), Smi::FromInt(smi).ptr());
         return;
       }
       Handle<HeapNumber> num = isolate_->factory()->NewHeapNumber(value);
@@ -194,12 +192,6 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kCall:
       // Only handle when node != invoke
       if (ShouldEmitCall(node)) VisitCall(node, visitor, false);
-      return;
-    case compiler::IrOpcode::kCallWithCallerSavedRegisters: {
-      const compiler::CallDescriptor* descriptor =
-          compiler::CallDescriptorOf(node->op());
-      VisitCCall(node, visitor, descriptor->InputCount());
-    }
       return;
     case compiler::IrOpcode::kDeoptimizeIf:
       UNREACHABLE();
@@ -215,8 +207,6 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kStateValues:
     case compiler::IrOpcode::kObjectState:
       return;
-    case compiler::IrOpcode::kDebugAbort:
-    // FIXME(UC_linzj): Lazy implementation.
     case compiler::IrOpcode::kDebugBreak:
       visitor->VisitDebugBreak(node->id());
       return;
@@ -239,7 +229,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kStore: {
       compiler::StoreRepresentation store_rep =
           StoreRepresentationOf(node->op());
-      WriteBarrierKind write_barrier_kind = store_rep.write_barrier_kind();
+      compiler::WriteBarrierKind write_barrier_kind =
+          store_rep.write_barrier_kind();
       MachineRepresentation rep = store_rep.representation();
       compiler::Node* base = node->InputAt(0);
       compiler::Node* index = node->InputAt(1);
@@ -440,13 +431,17 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       return;
     case compiler::IrOpcode::kUint64Mod:
       UNREACHABLE();
+    case compiler::IrOpcode::kBitcastTaggedSignedToWord:
+      V8_FALLTHROUGH;
     case compiler::IrOpcode::kBitcastTaggedToWord:
-      UNREACHABLE();
+      visitor->VisitBitcastTaggedToWord(node->id(), node->InputAt(0)->id());
+    // I don't think kBitcastWordToTaggedSigned has difference with
+    // kBitcastWordToTagged for llvm.
+    case compiler::IrOpcode::kBitcastWordToTaggedSigned:
+      V8_FALLTHROUGH;
     case compiler::IrOpcode::kBitcastWordToTagged:
       visitor->VisitBitcastWordToTagged(node->id(), node->InputAt(0)->id());
       return;
-    case compiler::IrOpcode::kBitcastWordToTaggedSigned:
-      UNREACHABLE();
     case compiler::IrOpcode::kChangeFloat32ToFloat64:
       visitor->VisitChangeFloat32ToFloat64(node->id(), node->InputAt(0)->id());
       return;
@@ -699,9 +694,6 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
           StackSlotRepresentationOf(node->op());
       visitor->VisitStackSlot(node->id(), rep.size(), rep.alignment());
     }
-      return;
-    case compiler::IrOpcode::kLoadStackPointer:
-      visitor->VisitLoadStackPointer(node->id());
       return;
     case compiler::IrOpcode::kLoadFramePointer:
       visitor->VisitLoadFramePointer(node->id());
@@ -1022,9 +1014,17 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kWord32PoisonOnSpeculation:
       visitor->VisitIdentity(node->id(), node->InputAt(0)->id());
       return;
+    case compiler::IrOpcode::kStackPointerGreaterThan:
+      visitor->VisitStackPointerGreaterThan(node->id(), node->InputAt(0)->id());
+      return;
     default:
+#ifdef DEBUG
       V8_Fatal(__FILE__, __LINE__, "Unexpected operator #%d:%s @ node #%d",
                node->opcode(), node->op()->mnemonic(), node->id());
+#else
+      V8_Fatal("Unexpected operator #%d:%s @ node #%d", node->opcode(),
+               node->op()->mnemonic(), node->id());
+#endif
       break;
   }
 }
@@ -1040,15 +1040,14 @@ void ScheduleEmitter::VisitBlock(compiler::BasicBlock* bb, TFVisitor* visitor) {
   visitor->VisitBlock(id, bb->deferred(), predecessors);
 }
 
-bool ScheduleEmitter::IsMaterializableFromRoot(
-    Handle<HeapObject> object, Heap::RootListIndex* index_return) {
+bool ScheduleEmitter::IsMaterializableFromRoot(Handle<HeapObject> object,
+                                               RootIndex* index_return) {
   const compiler::CallDescriptor* my_incoming_descriptor =
       incoming_descriptor();
   if (my_incoming_descriptor->flags() &
       compiler::CallDescriptor::kCanUseRoots) {
-    Heap* heap = isolate()->heap();
-    return heap->IsRootHandle(object, index_return) &&
-           !heap->RootCanBeWrittenAfterInitialization(*index_return);
+    return isolate()->roots_table().IsRootHandle(object, index_return) &&
+           RootsTable::IsImmortalImmovable(*index_return);
   }
   return false;
 }
@@ -1119,18 +1118,25 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   EMASSERT(!tail || ((successor_bid == -1) && (exception_bid == -1)));
   const compiler::CallDescriptor* descriptor =
       compiler::CallDescriptorOf(node->op());
-  if (!strcmp(descriptor->debug_name(), "c-call")) {
+  if (!strcmp(descriptor->debug_name(), "c-call") ||
+      descriptor->NeedsCallerSavedRegisters()) {
     VisitCCall(node, visitor, descriptor->InputCount());
     return;
   }
-  bool code = false;
+  CallMode mode;
   switch (descriptor->kind()) {
     case compiler::CallDescriptor::kCallWasmFunction:
     case compiler::CallDescriptor::kCallAddress:
+      mode = CallMode::kAddress;
       break;
     case compiler::CallDescriptor::kCallCodeObject:
-      code = true;
+      mode = CallMode::kCode;
       break;
+    case compiler::CallDescriptor::kCallBuiltinPointer:
+      mode = CallMode::kBuiltin;
+      break;
+    case compiler::CallDescriptor::kCallWasmCapiFunction:
+    case compiler::CallDescriptor::kCallWasmImportWrapper:
     case compiler::CallDescriptor::kCallJSFunction:
       UNREACHABLE();
   }
@@ -1160,12 +1166,12 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   }
   if (!tail) {
     if (successor_bid == -1)
-      visitor->VisitCall(node->id(), code, call_desc, operands);
+      visitor->VisitCall(node->id(), mode, call_desc, operands);
     else
-      visitor->VisitInvoke(node->id(), code, call_desc, operands, successor_bid,
+      visitor->VisitInvoke(node->id(), mode, call_desc, operands, successor_bid,
                            exception_bid);
   } else {
-    visitor->VisitTailCall(node->id(), code, call_desc, operands);
+    visitor->VisitTailCall(node->id(), mode, call_desc, operands);
   }
 }
 
@@ -1236,7 +1242,7 @@ bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
 
 bool ScheduleEmitter::ShouldUseRelativeBranchOrLoadFromConstant() {
   return (builtin_index_ != -1) && FLAG_embedded_builtins && !FLAG_mkwasmllvm &&
-         isolate()->ShouldLoadConstantsFromRootList();
+         isolate()->IsGeneratingEmbeddedBuiltins();
 }
 }  // namespace tf_llvm
 }  // namespace internal

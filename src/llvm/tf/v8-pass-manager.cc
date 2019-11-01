@@ -3,9 +3,9 @@
 #include "src/llvm/tf/v8-pass-manager.h"
 
 #include <iostream>
-#include "src/assembler-inl.h"
 #include "src/builtins/builtins.h"
-#include "src/callable.h"
+#include "src/codegen/assembler-inl.h"
+#include "src/codegen/callable.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/schedule.h"
 #include "src/llvm/compile.h"
@@ -21,7 +21,6 @@
 #include "src/llvm/liveness-analysis-visitor.h"
 #include "src/llvm/llvm-tf-builder.h"
 #include "src/llvm/load-constant-recorder.h"
-#include "src/llvm/tf/tf-parser.h"
 #include "src/snapshot/serializer-common.h"
 
 namespace v8 {
@@ -82,7 +81,6 @@ class BuiltinFunctionClientImpl : public BuiltinFunctionClient {
  public:
   BuiltinFunctionClientImpl(Isolate*);
   ~BuiltinFunctionClientImpl() = default;
-  void BuildGetIsolateFunction(Output&, LValue root) override;
   void BuildGetRecordWriteFunction(Output&, LValue root) override;
   void BuildGetModTwoDoubleFunction(Output&, LValue root) override;
 
@@ -95,12 +93,6 @@ class BuiltinFunctionClientImpl : public BuiltinFunctionClient {
 
 BuiltinFunctionClientImpl::BuiltinFunctionClientImpl(Isolate* isolate)
     : isolate_(isolate) {}
-void BuiltinFunctionClientImpl::BuildGetIsolateFunction(Output& output,
-                                                        LValue root) {
-  ExternalReference isolate_external_reference =
-      ExternalReference::isolate_address(isolate_);
-  BuildLoadExternalRef(output, isolate_external_reference, root);
-}
 
 void BuiltinFunctionClientImpl::BuildGetRecordWriteFunction(Output& output,
                                                             LValue root) {
@@ -140,12 +132,9 @@ void BuiltinFunctionClientImpl::BuildLoadExternalRef(
         output.buildGEPWithByteOffset(root, output.constInt32(offset), type);
     output.buildRet(offset_value);
   } else {
-    ExternalReferenceEncoder encoder(isolate_);
-    ExternalReferenceEncoder::Value v =
-        encoder.Encode(external_reference.address());
     int offset =
-        TurboAssemblerBase::RootRegisterOffsetForExternalReferenceIndex(
-            v.index());
+        TurboAssemblerBase::RootRegisterOffsetForExternalReferenceTableEntry(
+            isolate_, external_reference);
     LType type = pointerType(output.repo().ref8);
     LValue offset_value =
         output.buildGEPWithByteOffset(root, output.constInt32(offset), type);
@@ -210,7 +199,8 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
       CHECK((location.IsRegister()) || location.IsCallerFrameSlot());
       CHECK(!location.IsAnyRegister() || (i == 0));
       int linkage_location;
-      if (location.IsAnyRegister()) linkage_location = 0;
+      if (location.IsAnyRegister())
+        linkage_location = 0;
       else if (location.IsRegister())
         linkage_location = location.AsRegister();
       else
@@ -232,8 +222,6 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
     tf_llvm::dumpModule(compiler_state.module_);
 #endif
     tf_llvm::compile(compiler_state);
-    const ByteBuffer& code = compiler_state.codeSectionList_.front();
-
 #if 0
     disassemble(compiler_state);
 #endif

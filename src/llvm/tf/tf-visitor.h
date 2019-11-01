@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include "src/machine-type.h"
+#include "src/codegen/machine-type.h"
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
@@ -17,13 +17,15 @@ struct CallDescriptor {
   ReturnTypes return_types;
 };
 
+enum class CallMode { kCode, kAddress, kBuiltin };
+
 #define INSTRUCTIONS(V)                                                       \
   V(Parameter, (int id, int pid))                                             \
   V(Return, (int id, int pop_count, const OperandsVector& operands))          \
   V(LoadParentFramePointer, (int id))                                         \
   V(LoadFramePointer, (int id))                                               \
-  V(LoadStackPointer, (int id))                                               \
   V(DebugBreak, (int id))                                                     \
+  V(StackPointerGreaterThan, (int id, int value))                             \
   V(TrapIf, (int id, int value))                                              \
   V(TrapUnless, (int id, int value))                                          \
   V(Int32Constant, (int id, int32_t value))                                   \
@@ -33,12 +35,14 @@ struct CallDescriptor {
   V(Identity, (int id, int value))                                            \
   V(Load, (int id, MachineRepresentation rep, MachineSemantic semantic,       \
            int base, int offset))                                             \
-  V(Store, (int id, MachineRepresentation rep, WriteBarrierKind barrier,      \
-            int base, int offset, int value))                                 \
+  V(Store,                                                                    \
+    (int id, MachineRepresentation rep, compiler::WriteBarrierKind barrier,   \
+     int base, int offset, int value))                                        \
   V(UnalignedLoad, (int id, MachineRepresentation rep, int base, int offset)) \
   V(UnalignedStore,                                                           \
     (int id, MachineRepresentation rep, int base, int offset, int value))     \
   V(StackSlot, (int id, int size, int alignment))                             \
+  V(BitcastTaggedToWord, (int id, int e))                                     \
   V(BitcastWordToTagged, (int id, int e))                                     \
   V(ChangeInt32ToFloat64, (int id, int e))                                    \
   V(ChangeFloat32ToFloat64, (int id, int e))                                  \
@@ -137,22 +141,22 @@ struct CallDescriptor {
   V(IfDefault, (int id))                                                      \
   V(IfException, (int id))                                                    \
   V(HeapConstant, (int id, uintptr_t magic))                                  \
-  V(SmiConstant, (int id, void* smi_value))                                   \
+  V(SmiConstant, (int id, uintptr_t smi_value))                               \
   V(Float64Constant, (int id, double value))                                  \
   V(Float32Constant, (int id, double value))                                  \
-  V(Root, (int id, int index))                                                \
+  V(Root, (int id, RootIndex index))                                          \
   V(RootRelative, (int id, int offset, bool tagged))                          \
   V(RootOffset, (int id, int offset))                                         \
   V(LoadFromConstantTable, (int id, int constant_index))                      \
   V(CodeForCall, (int id, uintptr_t magic, bool relative))                    \
   V(ExternalConstant, (int id, uintptr_t magic))                              \
   V(Phi, (int id, MachineRepresentation rep, const OperandsVector& operands)) \
-  V(Call, (int id, bool code, const CallDescriptor& call_desc,                \
+  V(Call, (int id, CallMode mode, const CallDescriptor& call_desc,            \
            const OperandsVector& operands))                                   \
-  V(Invoke, (int id, bool code, const CallDescriptor& call_desc,              \
+  V(Invoke, (int id, CallMode mode, const CallDescriptor& call_desc,          \
              const OperandsVector& operands, int then, int exception))        \
   V(CallWithCallerSavedRegisters, (int id, const OperandsVector& operands))   \
-  V(TailCall, (int id, bool code, const CallDescriptor& call_desc,            \
+  V(TailCall, (int id, CallMode mode, const CallDescriptor& call_desc,        \
                const OperandsVector& operands))
 
 class TFVisitor {

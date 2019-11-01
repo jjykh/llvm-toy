@@ -167,7 +167,8 @@ StackMaps::RecordMap StackMaps::computeRecordMap() const {
 }
 
 unsigned StackMaps::stackSize() const {
-  EMASSERT(stackSizes.size() == 1);
+  EMASSERT(stackSizes.size() <= 1);
+  if (stackSizes.empty()) return 0;
 
   unsigned stack_size = stackSizes[0].size;
   EMASSERT(stack_size != -1U || state_->is_wasm_);

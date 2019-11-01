@@ -18,7 +18,6 @@ class LoadConstantRecorder;
 class BuiltinFunctionClient {
  public:
   virtual ~BuiltinFunctionClient() = default;
-  virtual void BuildGetIsolateFunction(Output&, LValue root) = 0;
   virtual void BuildGetRecordWriteFunction(Output&, LValue root) = 0;
   virtual void BuildGetModTwoDoubleFunction(Output&, LValue root) = 0;
 };
@@ -43,9 +42,9 @@ class LLVMTFBuilder final : public TFVisitor {
   bool AllPredecessorStarted(BasicBlock* bb, BasicBlock** ref_pred);
   void BuildPhiAndPushToWorkList(BasicBlock* bb, BasicBlock* ref_pred);
   void ProcessPhiWorkList();
-  void DoCall(int id, bool code, const CallDescriptor&,
+  void DoCall(int id, CallMode mode, const CallDescriptor&,
               const OperandsVector& operands, bool tailcall);
-  void DoTailCall(int id, bool code, const CallDescriptor&,
+  void DoTailCall(int id, CallMode mode, const CallDescriptor&,
                   const OperandsVector& operands);
   void EndCurrentBlock();
   LValue EnsureBoolean(LValue);
@@ -53,12 +52,10 @@ class LLVMTFBuilder final : public TFVisitor {
   LValue EnsureWord64(LValue);
   LValue EnsurePhiInput(BasicBlock*, int, LType);
   LValue EnsurePhiInputAndPosition(BasicBlock*, int, LType);
-  LValue CallGetIsolateFunction();
   LValue CallGetRecordWriteBuiltin();
   LValue CallGetModTwoDoubleFunction();
   LValue BuildInt64FromPair(int e0, int e1);
   void SetInt32PairFromInt64(int id, LValue n);
-  void BuildGetIsolateFunction(BuiltinFunctionClient* builtin_function_client);
   void BuildGetRecordWriteBuiltin(
       BuiltinFunctionClient* builtin_function_client);
   void BuildGetModTwoDoubleFunction(
@@ -71,7 +68,6 @@ class LLVMTFBuilder final : public TFVisitor {
   StackMapInfoMap* stack_map_info_map_;
   LoadConstantRecorder* load_constant_recorder_;
   // builtin_functions
-  LValue get_isolate_function_;
   LValue get_record_write_function_;
   LValue get_mod_two_double_function_;
   LType int32_pair_type_;

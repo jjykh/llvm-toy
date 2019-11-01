@@ -2,7 +2,7 @@
 
 #ifndef SCHEDULE_EMITTER_H
 #define SCHEDULE_EMITTER_H
-#include "src/handles.h"
+#include "src/handles/handles.h"
 #include "src/heap/heap.h"
 namespace v8 {
 namespace internal {
@@ -37,7 +37,7 @@ class ScheduleEmitter final {
   Isolate* isolate() { return isolate_; }
 
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
-                                Heap::RootListIndex* index_return);
+                                RootIndex* index_return);
   bool ShouldEmitCall(compiler::Node* node);
   bool HandleCodeForCall(compiler::Node*, Handle<HeapObject>, TFVisitor*,
                          bool /*relative_call*/);

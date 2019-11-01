@@ -11,5 +11,5 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/PassManagerBuilder.h>
-#include "src/globals.h"
+#include "src/common/globals.h"
 #endif  // LLVM_HEADERS_H

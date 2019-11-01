@@ -2,7 +2,7 @@
 
 #include "src/llvm/output.h"
 #include <llvm-c/DebugInfo.h>
-#include "src/frames.h"
+#include "src/execution/frames.h"
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/log.h"
 
@@ -196,8 +196,7 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   }
   static const char kJSWASMCall[] = "js-wasm-call";
   if (is_wasm) {
-    LLVMAddTargetDependentFunctionAttr(state_.function_, kJSWASMCall,
-                                       nullptr);
+    LLVMAddTargetDependentFunctionAttr(state_.function_, kJSWASMCall, nullptr);
   }
 
   char file_name[256];
@@ -247,8 +246,8 @@ LValue Output::constIntPtr(intptr_t i) {
   return v8::internal::tf_llvm::constInt(repo_.intPtr, i);
 }
 
-LValue Output::constTagged(void* magic) {
-  LValue intptr = constIntPtr(reinterpret_cast<intptr_t>(magic));
+LValue Output::constTagged(uintptr_t magic) {
+  LValue intptr = constIntPtr(static_cast<intptr_t>(magic));
   return buildCast(LLVMIntToPtr, intptr, taggedType());
 }
 
@@ -538,6 +537,7 @@ static bool ValueKindIsFind(LValue v) {
     case LLVMConstantIntValueKind:
     case LLVMConstantFPValueKind:
     case LLVMConstantPointerNullValueKind:
+    case LLVMArgumentValueKind:
       return false;
     default:
       return true;
@@ -554,9 +554,7 @@ LValue Output::setInstrDebugLoc(LValue v) {
 
 void Output::finalizeDebugInfo() { LLVMDIBuilderFinalize(di_builder_); }
 
-void Output::finalize() {
-  finalizeDebugInfo();
-}
+void Output::finalize() { finalizeDebugInfo(); }
 
 LValue Output::addFunction(const char* name, LType type) {
   LValue function = tf_llvm::addFunction(state_.module_, name, type);

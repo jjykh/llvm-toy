@@ -159,9 +159,12 @@ void LivenessAnalysisVisitor::VisitLoadParentFramePointer(int id) {
 
 void LivenessAnalysisVisitor::VisitLoadFramePointer(int id) { Define(id); }
 
-void LivenessAnalysisVisitor::VisitLoadStackPointer(int id) { Define(id); }
-
 void LivenessAnalysisVisitor::VisitDebugBreak(int id) {}
+
+void LivenessAnalysisVisitor::VisitStackPointerGreaterThan(int id, int value) {
+  Define(id);
+  AddIfNotInDefines(value);
+}
 
 void LivenessAnalysisVisitor::VisitTrapIf(int id, int value) {
   AddIfNotInDefines(value);
@@ -203,8 +206,8 @@ void LivenessAnalysisVisitor::VisitLoad(int id, MachineRepresentation rep,
 }
 
 void LivenessAnalysisVisitor::VisitStore(int id, MachineRepresentation rep,
-                                         WriteBarrierKind barrier, int base,
-                                         int offset, int value) {
+                                         compiler::WriteBarrierKind barrier,
+                                         int base, int offset, int value) {
   Define(id);
   AddIfNotInDefines(base);
   AddIfNotInDefines(offset);
@@ -232,6 +235,11 @@ void LivenessAnalysisVisitor::VisitUnalignedStore(int id,
 void LivenessAnalysisVisitor::VisitStackSlot(int id, int, int) { Define(id); }
 
 void LivenessAnalysisVisitor::VisitBitcastWordToTagged(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
+void LivenessAnalysisVisitor::VisitBitcastTaggedToWord(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
 }
@@ -722,8 +730,7 @@ void LivenessAnalysisVisitor::VisitPhi(int id, MachineRepresentation rep,
   }
 }
 
-void LivenessAnalysisVisitor::VisitCall(int id, bool code,
-                                        const CallDescriptor&,
+void LivenessAnalysisVisitor::VisitCall(int id, CallMode, const CallDescriptor&,
                                         const OperandsVector& operands) {
   Define(id);
   for (int e : operands) {
@@ -732,7 +739,7 @@ void LivenessAnalysisVisitor::VisitCall(int id, bool code,
   basicBlockManager().set_needs_frame(true);
 }
 
-void LivenessAnalysisVisitor::VisitInvoke(int id, bool code,
+void LivenessAnalysisVisitor::VisitInvoke(int id, CallMode,
                                           const CallDescriptor&,
                                           const OperandsVector& operands,
                                           int then, int exception) {
@@ -756,7 +763,7 @@ void LivenessAnalysisVisitor::VisitCallWithCallerSavedRegisters(
   }
 }
 
-void LivenessAnalysisVisitor::VisitTailCall(int id, bool code,
+void LivenessAnalysisVisitor::VisitTailCall(int id, CallMode,
                                             const CallDescriptor&,
                                             const OperandsVector& operands) {
   for (int e : operands) {
@@ -765,7 +772,7 @@ void LivenessAnalysisVisitor::VisitTailCall(int id, bool code,
   EndBlock();
 }
 
-void LivenessAnalysisVisitor::VisitRoot(int id, int) { Define(id); }
+void LivenessAnalysisVisitor::VisitRoot(int id, RootIndex) { Define(id); }
 
 void LivenessAnalysisVisitor::VisitRootRelative(int id, int, bool) {
   Define(id);
@@ -782,7 +789,9 @@ void LivenessAnalysisVisitor::VisitCodeForCall(int id, uintptr_t,
   Define(id);
 }
 
-void LivenessAnalysisVisitor::VisitSmiConstant(int id, void*) { Define(id); }
+void LivenessAnalysisVisitor::VisitSmiConstant(int id, uintptr_t) {
+  Define(id);
+}
 
 void LivenessAnalysisVisitor::VisitFloat64Constant(int id, double) {
   Define(id);

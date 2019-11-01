@@ -9,7 +9,7 @@
 #include "src/llvm/basic-block.h"
 #include "src/llvm/load-constant-recorder.h"
 #include "src/llvm/output.h"
-#include "src/objects.h"
+#include "src/objects/objects.h"
 
 namespace v8 {
 namespace internal {
@@ -31,12 +31,10 @@ struct GCRelocateDesc {
   GCRelocateDesc(int v, int w) : value(v), where(w) {}
 };
 
+using GCRelocateDescList = std::vector<GCRelocateDesc>;
+
 struct PredecessorCallInfo {
-  std::vector<GCRelocateDesc> gc_relocates;
-  LValue call_value = nullptr;
-  int call_id = -1;
-  LType return_type = nullptr;
-  int target_patch_id = 0;
+  GCRelocateDescList gc_relocates;
 };
 
 enum class ValueType { LLVMValue, RelativeCallTarget };
@@ -56,7 +54,6 @@ struct LLVMTFBuilderBasicBlockImpl {
 
   LBasicBlock native_bb = nullptr;
   LBasicBlock continuation = nullptr;
-  LValue landing_pad = nullptr;
 
   bool started = false;
   bool ended = false;
@@ -147,12 +144,29 @@ void StartBuild(BasicBlock* bb, Output& output) {
   output.positionToBBEnd(GetNativeBB(bb));
 }
 
-class CallResolver {
+class ContinuationResolver {
+ protected:
+  ContinuationResolver(BasicBlock* bb, Output& output, int id);
+  ~ContinuationResolver() = default;
+  void CreateContination();
+  inline Output& output() { return *output_; }
+  inline BasicBlock* current_bb() { return current_bb_; }
+  inline int id() { return id_; }
+  LBasicBlock old_continuation_;
+  LLVMTFBuilderBasicBlockImpl* impl_;
+
+ private:
+  BasicBlock* current_bb_;
+  Output* output_;
+  int id_;
+};
+
+class CallResolver : public ContinuationResolver {
  public:
   CallResolver(BasicBlock* current_bb, Output& output, int id,
                StackMapInfoMap* stack_map_info_map, int patchid);
   virtual ~CallResolver() = default;
-  void Resolve(bool code, const CallDescriptor& call_desc,
+  void Resolve(CallMode mode, const CallDescriptor& call_desc,
                const OperandsVector& operands);
 
  protected:
@@ -161,8 +175,6 @@ class CallResolver {
   virtual void BuildCall(const CallDescriptor& call_desc);
   virtual void PopulateCallInfo(CallInfo*);
   virtual bool IsTailCall() const { return false; }
-  inline Output& output() { return *output_; }
-  inline int id() { return id_; }
   inline int patchid() { return patchid_; }
   inline size_t location_count() const { return locations_.size(); }
   inline int call_instruction_bytes() const {
@@ -176,11 +188,11 @@ class CallResolver {
   }
 
  private:
-  void ResolveOperands(bool code, const OperandsVector& operands,
+  void ResolveOperands(CallMode mode, const OperandsVector& operands,
                        const RegistersForOperands& registers_for_operands);
-  void ResolveCallTarget(bool code, int target_id);
+  void ResolveCallTarget(CallMode mode, int target_id);
   void UpdateAfterStatePoint(LValue statepoint_ret, LType return_type);
-  void EmitToSuccessors(std::vector<LValue>&);
+  void ProcessGCRelocate(std::vector<LValue>&);
   void PopulateToStackMap();
   inline CallInfo::LocationVector&& release_location() {
     return std::move(locations_);
@@ -193,13 +205,11 @@ class CallResolver {
       allocatable_register_set_; /* 0 is allocatable */
   std::vector<LValue> operand_values_;
   std::vector<LType> operand_value_types_;
+  std::vector<GCRelocateDescList> relocate_descs_;
   CallInfo::LocationVector locations_;
-  BasicBlock* current_bb_;
   StackMapInfoMap* stack_map_info_map_;
-  Output* output_;
   LValue target_;
   int64_t relative_target_;
-  int id_;
   int next_reg_;
   int patchid_;
   int sp_adjust_;
@@ -232,35 +242,18 @@ class InvokeResolver final : public CallResolver {
   BasicBlock* exception_bb_;
 };
 
-class ContinuationResolver {
- protected:
-  ContinuationResolver(BasicBlock* bb, Output& output, int id);
-  ~ContinuationResolver() = default;
-  void CreateContination();
-  inline Output& output() { return *output_; }
-  inline BasicBlock* current_bb() { return current_bb_; }
-  inline int id() { return id_; }
-  LBasicBlock old_continuation_;
-  LLVMTFBuilderBasicBlockImpl* impl_;
-
- private:
-  BasicBlock* current_bb_;
-  Output* output_;
-  int id_;
-};
-
 class StoreBarrierResolver final : public ContinuationResolver {
  public:
   StoreBarrierResolver(BasicBlock* bb, Output& output, int id,
                        StackMapInfoMap* stack_map_info_map, int patch_point_id);
   void Resolve(LValue base, LValue offset, LValue value,
-               WriteBarrierKind barrier_kind, std::function<LValue()> isolate,
+               compiler::WriteBarrierKind barrier_kind,
                std::function<LValue()> record_write);
 
  private:
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
-                      LValue save_fp_mode, std::function<LValue()> isolate,
+                      LValue save_fp_mode,
                       std::function<LValue()> record_write);
   void CheckSmi(LValue value);
   StackMapInfoMap* stack_map_info_map_;
@@ -291,16 +284,14 @@ class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
 
 CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
                            StackMapInfoMap* stack_map_info_map, int patchid)
-    : allocatable_register_set_(kTargetRegParameterNotAllocatable),
+    : ContinuationResolver(current_bb, output, id),
+      allocatable_register_set_(kTargetRegParameterNotAllocatable),
       operand_values_(kV8CCRegisterParameterCount,
                       LLVMGetUndef(output.repo().intPtr)),
       operand_value_types_(kV8CCRegisterParameterCount, output.repo().intPtr),
-      current_bb_(current_bb),
       stack_map_info_map_(stack_map_info_map),
-      output_(&output),
       target_(nullptr),
       relative_target_(0),
-      id_(id),
       next_reg_(0),
       patchid_(patchid),
       sp_adjust_(0) {}
@@ -333,51 +324,68 @@ void CallResolver::SetOperandValue(int reg, LValue llvm_value) {
   }
 }
 
-void CallResolver::Resolve(bool code, const CallDescriptor& call_desc,
+void CallResolver::Resolve(CallMode mode, const CallDescriptor& call_desc,
                            const OperandsVector& operands) {
-  ResolveOperands(code, operands, call_desc.registers_for_operands);
+  ResolveOperands(mode, operands, call_desc.registers_for_operands);
   BuildCall(call_desc);
   PopulateToStackMap();
 }
 
-void CallResolver::ResolveCallTarget(bool code, int target_id) {
-  if (code) {
-    auto& value = GetBuilderImpl(current_bb_)->GetValue(target_id);
-    if (value.type == ValueType::RelativeCallTarget) {
-      relative_target_ = value.relative_call_target;
-      return;
+void CallResolver::ResolveCallTarget(CallMode mode, int target_id) {
+  switch (mode) {
+    case CallMode::kCode: {
+      auto& value = GetBuilderImpl(current_bb())->GetValue(target_id);
+      if (value.type == ValueType::RelativeCallTarget) {
+        relative_target_ = value.relative_call_target;
+        return;
+      }
+      EMASSERT(value.type == ValueType::LLVMValue);
+      LValue code_value = value.llvm_value;
+      if (typeOf(code_value) != output().taggedType()) {
+        EMASSERT(typeOf(code_value) == output().repo().ref8);
+        target_ = code_value;
+      } else {
+        target_ = output().buildGEPWithByteOffset(
+            code_value, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
+            output().repo().ref8);
+      }
+      break;
     }
-    EMASSERT(value.type == ValueType::LLVMValue);
-    LValue code_value = value.llvm_value;
-    if (typeOf(code_value) != output().taggedType()) {
-      EMASSERT(typeOf(code_value) == output().repo().ref8);
-      target_ = code_value;
-    } else {
-      target_ = output().buildGEPWithByteOffset(
-          code_value, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
-          output().repo().ref8);
+    case CallMode::kAddress: {
+      int addr_value = target_id;
+      target_ = GetBuilderImpl(current_bb())->GetLLVMValue(addr_value);
+      break;
     }
-  } else {
-    int addr_value = target_id;
-    target_ = GetBuilderImpl(current_bb_)->GetLLVMValue(addr_value);
+    case CallMode::kBuiltin: {
+      LValue builtin_offset = output().buildShl(
+          GetBuilderImpl(current_bb())->GetLLVMValue(target_id),
+          output().constIntPtr(kSystemPointerSizeLog2 - kSmiTagSize));
+      builtin_offset = output().buildAdd(
+          builtin_offset,
+          output().constIntPtr(IsolateData::builtin_entry_table_offset()));
+      builtin_offset = output().buildGEPWithByteOffset(
+          output().root(), builtin_offset, pointerType(output().repo().ref8));
+      target_ = output().buildLoad(builtin_offset);
+      break;
+    }
   }
 }
 
 void CallResolver::ResolveOperands(
-    bool code, const OperandsVector& operands,
+    CallMode mode, const OperandsVector& operands,
     const RegistersForOperands& registers_for_operands) {
   auto operands_iterator = operands.begin();
   // layout
   // return value | register operands | stack operands | artifact operands
   int target_id = *(operands_iterator++);
-  ResolveCallTarget(code, target_id);
+  ResolveCallTarget(mode, target_id);
   // setup register operands
   OperandsVector stack_operands;
   std::vector<std::tuple<int, int>> floatpoint_operands;
   for (int reg : registers_for_operands) {
     EMASSERT(reg < kV8CCRegisterParameterCount);
     int operand_id = *(operands_iterator++);
-    LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand_id);
+    LValue llvm_value = GetBuilderImpl(current_bb())->GetLLVMValue(operand_id);
     LType llvm_value_type = typeOf(llvm_value);
     if (llvm_value_type == output().repo().doubleType ||
         llvm_value_type == output().repo().floatType) {
@@ -412,7 +420,7 @@ void CallResolver::ResolveOperands(
     auto reg_iterator = allocated_regs.begin();
 
     for (auto operand : stack_operands) {
-      LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+      LValue llvm_value = GetBuilderImpl(current_bb())->GetLLVMValue(operand);
       int reg = *(reg_iterator++);
       SetOperandValue(reg, llvm_value);
       locations_.push_back(reg);
@@ -420,7 +428,7 @@ void CallResolver::ResolveOperands(
   } else {
     CHECK(!IsTailCall());
     for (auto operand : stack_operands) {
-      LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+      LValue llvm_value = GetBuilderImpl(current_bb())->GetLLVMValue(operand);
       LType type = typeOf(llvm_value);
       EMASSERT(type != output().repo().floatType &&
                type != output().repo().doubleType);
@@ -433,7 +441,7 @@ void CallResolver::ResolveOperands(
   for (auto tuple : floatpoint_operands) {
     int operand, reg;
     std::tie(operand, reg) = tuple;
-    LValue llvm_value = GetBuilderImpl(current_bb_)->GetLLVMValue(operand);
+    LValue llvm_value = GetBuilderImpl(current_bb())->GetLLVMValue(operand);
     while (current_floatpoint_reg != reg) {
       SetOperandValue(-1, LLVMGetUndef(output().repo().floatType));
       current_floatpoint_reg++;
@@ -475,7 +483,7 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
   statepoint_operands.push_back(output().constInt32(0));  // # transition args
   statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
   // push current defines
-  EmitToSuccessors(statepoint_operands);
+  ProcessGCRelocate(statepoint_operands);
   LValue statepoint_ret =
       EmitCallInstr(output().getStatePointFunction(callee_type),
                     statepoint_operands.data(), statepoint_operands.size());
@@ -483,41 +491,49 @@ void CallResolver::BuildCall(const CallDescriptor& call_desc) {
   UpdateAfterStatePoint(statepoint_ret, return_type);
 }
 
-void CallResolver::EmitToSuccessors(std::vector<LValue>& statepoint_operands) {
+void CallResolver::ProcessGCRelocate(std::vector<LValue>& statepoint_operands) {
   // value, pos
   std::unordered_map<int, int> position_map;
-  auto& values = GetBuilderImpl(current_bb_)->values();
-  for (BasicBlock* successor : current_bb_->successors()) {
-    auto impl = EnsureImpl(successor);
+  auto& values = GetBuilderImpl(current_bb())->values();
+  for (BasicBlock* successor : current_bb()->successors()) {
     auto& successor_liveins = successor->liveins();
+    GCRelocateDescList desc_list;
     for (int livein : successor_liveins) {
-      if (livein == id_) continue;
+      if (livein == id()) continue;
       auto found = values.find(livein);
       EMASSERT(found != values.end());
-      EMASSERT(found->second.type == ValueType::LLVMValue);
+      if (found->second.type != ValueType::LLVMValue) continue;
       LValue to_gc = found->second.llvm_value;
       if (typeOf(to_gc) != output().taggedType()) continue;
-      auto pair = position_map.insert(
-          std::make_pair(livein, statepoint_operands.size()));
+      auto pair = position_map.emplace(livein, statepoint_operands.size());
       if (pair.second) {
         statepoint_operands.emplace_back(to_gc);
       }
-      impl->call_info.gc_relocates.emplace_back(livein, pair.first->second);
+      desc_list.emplace_back(livein, pair.first->second);
     }
+    relocate_descs_.emplace_back(desc_list);
   }
 }
 
 void CallResolver::UpdateAfterStatePoint(LValue statepoint_ret,
                                          LType return_type) {
-  BasicBlock* successor = current_bb_->successors().front();
-  GetBuilderImpl(successor)->call_info.call_id = id_;
-  GetBuilderImpl(successor)->call_info.call_value = statepoint_ret;
-  GetBuilderImpl(successor)->call_info.return_type = return_type;
-  if (current_bb_->successors().size() == 2) {
-    BasicBlock* exception = current_bb_->successors()[1];
+  if (current_bb()->successors().empty()) return;
+  if (current_bb()->successors().size() == 2) {
+    BasicBlock* exception = current_bb()->successors()[1];
     GetBuilderImpl(exception)->exception_block = true;
-    GetBuilderImpl(exception)->call_info.target_patch_id = patchid_;
+    GetBuilderImpl(exception)->call_info.gc_relocates =
+        std::move(relocate_descs_[1]);
   }
+  for (auto& gc_relocate : relocate_descs_[0]) {
+    LValue relocated = output().buildCall(
+        output().repo().gcRelocateIntrinsic(), statepoint_ret,
+        output().constInt32(gc_relocate.where),
+        output().constInt32(gc_relocate.where));
+    GetBuilderImpl(current_bb())->SetLLVMValue(gc_relocate.value, relocated);
+  }
+  LValue intrinsic = output().getGCResultFunction(return_type);
+  LValue ret = output().buildCall(intrinsic, statepoint_ret);
+  GetBuilderImpl(current_bb())->SetLLVMValue(id(), ret);
 }
 
 void CallResolver::PopulateToStackMap() {
@@ -563,7 +579,11 @@ void TCCallResolver::PopulateCallInfo(CallInfo* callinfo) {
 
 LValue CallResolver::EmitCallInstr(LValue function, LValue* operands,
                                    size_t operands_count) {
-  return output().buildCall(function, operands, operands_count);
+  LValue ret = output().buildCall(function, operands, operands_count);
+  CreateContination();
+  output().buildBr(impl_->continuation);
+  output().positionToBBEnd(impl_->continuation);
+  return ret;
 }
 
 InvokeResolver::InvokeResolver(BasicBlock* current_bb, Output& output, int id,
@@ -575,9 +595,15 @@ InvokeResolver::InvokeResolver(BasicBlock* current_bb, Output& output, int id,
 
 LValue InvokeResolver::EmitCallInstr(LValue function, LValue* operands,
                                      size_t operands_count) {
-  return output().buildInvoke(function, operands, operands_count,
-                              GetNativeBB(then_bb_),
-                              GetNativeBB(exception_bb_));
+  CreateContination();
+  LValue ret =
+      output().buildInvoke(function, operands, operands_count,
+                           impl_->continuation, GetNativeBB(exception_bb_));
+  output().positionToBBEnd(impl_->continuation);
+  output().buildBr(GetNativeBB(then_bb_));
+  LValue terminator = LLVMGetBasicBlockTerminator(impl_->continuation);
+  output().positionBefore(terminator);
+  return ret;
 }
 
 ContinuationResolver::ContinuationResolver(BasicBlock* bb, Output& output,
@@ -605,25 +631,23 @@ StoreBarrierResolver::StoreBarrierResolver(BasicBlock* bb, Output& output,
       patch_point_id_(patch_point_id) {}
 
 void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
-                                   WriteBarrierKind barrier_kind,
-                                   std::function<LValue()> isolate,
+                                   compiler::WriteBarrierKind barrier_kind,
                                    std::function<LValue()> record_write) {
   CreateContination();
   CheckPageFlag(base, MemoryChunk::kPointersFromHereAreInterestingMask);
-  if (barrier_kind > kPointerWriteBarrier) {
+  if (barrier_kind > compiler::kPointerWriteBarrier) {
     CheckSmi(value);
   }
   CheckPageFlag(value, MemoryChunk::kPointersToHereAreInterestingMask);
   RememberedSetAction const remembered_set_action =
-      barrier_kind > kMapWriteBarrier ? EMIT_REMEMBERED_SET
-                                      : OMIT_REMEMBERED_SET;
+      barrier_kind > compiler::kMapWriteBarrier ? EMIT_REMEMBERED_SET
+                                                : OMIT_REMEMBERED_SET;
   // now v8cc clobbers all fp.
   SaveFPRegsMode const save_fp_mode = kDontSaveFPRegs;
   CallPatchpoint(
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
-      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), isolate,
-      record_write);
+      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), record_write);
   output().buildBr(impl_->continuation);
   output().positionToBBEnd(impl_->continuation);
 }
@@ -643,10 +667,8 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
   LValue and_result = output().buildAnd(flag, output().constInt32(mask));
   LValue cmp =
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
-#if !defined(FEATURE_SAMPLE_PGO)
   cmp = output().buildCall(output().repo().expectIntrinsic(), cmp,
                            output().repo().booleanTrue);
-#endif  // FEATURE_SAMPLE_PGO
 
   char buf[256];
   snprintf(buf, 256, "B%d_value%d_checkpageflag_%d", current_bb()->id(), id(),
@@ -659,14 +681,12 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
 
 void StoreBarrierResolver::CallPatchpoint(
     LValue base, LValue offset, LValue remembered_set_action,
-    LValue save_fp_mode, std::function<LValue()> get_isolate,
-    std::function<LValue()> get_record_write) {
+    LValue save_fp_mode, std::function<LValue()> get_record_write) {
   // blx ip
   // 1 instructions.
   int instructions_count = 1;
   int patchid = patch_point_id_;
   // will not be true again.
-  LValue isolate = get_isolate();
   LValue stub = get_record_write();
   LValue stub_entry = output().buildGEPWithByteOffset(
       stub, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
@@ -676,7 +696,7 @@ void StoreBarrierResolver::CallPatchpoint(
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),
       output().constInt32(4 * instructions_count),
       constNull(output().repo().ref8), output().constInt32(8), base, offset,
-      isolate, remembered_set_action, save_fp_mode,
+      remembered_set_action, save_fp_mode, LLVMGetUndef(output().taggedType()),
       LLVMGetUndef(typeOf(output().root())),
       LLVMGetUndef(typeOf(output().fp())), stub_entry);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
@@ -691,10 +711,8 @@ void StoreBarrierResolver::CheckSmi(LValue value) {
   LValue and_result = output().buildAnd(value_int, output().repo().intPtrOne);
   LValue cmp =
       output().buildICmp(LLVMIntEQ, and_result, output().repo().int32Zero);
-#if !defined(FEATURE_SAMPLE_PGO)
   cmp = output().buildCall(output().repo().expectIntrinsic(), cmp,
                            output().repo().booleanFalse);
-#endif  // FEATURE_SAMPLE_PGO
   char buf[256];
   snprintf(buf, 256, "B%d_value%d_checksmi", current_bb()->id(), id());
   LBasicBlock continuation = output().appendBasicBlock(buf);
@@ -735,10 +753,8 @@ void TruncateFloat64ToWord32Resolver::FastPath(LValue fp, LBasicBlock slow_bb) {
   LValue subed = output().buildSub(maybe_return, output().constInt32(1));
   LValue cmp_val =
       output().buildICmp(LLVMIntSGE, subed, output().constInt32(0x7ffffffe));
-#if !defined(FEATURE_SAMPLE_PGO)
   cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
                                output().repo().booleanFalse);
-#endif  // FEATURE_SAMPLE_PGO
 
   output().buildCondBr(cmp_val, slow_bb, impl_->continuation);
   to_merge_value_.push_back(maybe_return);
@@ -860,7 +876,6 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       current_bb_(nullptr),
       stack_map_info_map_(&stack_map_info_map),
       load_constant_recorder_(&load_constant_recorder),
-      get_isolate_function_(nullptr),
       get_record_write_function_(nullptr),
       get_mod_two_double_function_(nullptr),
       int32_pair_type_(nullptr),
@@ -880,7 +895,6 @@ void LLVMTFBuilder::End(BuiltinFunctionClient* builtin_function_client) {
   v8::internal::tf_llvm::ResetImpls<LLVMTFBuilderBasicBlockImpl>(
       basic_block_manager());
 
-  BuildGetIsolateFunction(builtin_function_client);
   BuildGetModTwoDoubleFunction(builtin_function_client);
   BuildGetRecordWriteBuiltin(builtin_function_client);
 }
@@ -892,31 +906,23 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
     BasicBlock* pred = bb->predecessors()[0];
     EMASSERT(IsBBStartedToBuild(pred));
     for (int live : bb->liveins()) {
-      if (live == GetBuilderImpl(bb)->call_info.call_id) continue;
       auto& value = GetBuilderImpl(pred)->GetValue(live);
       GetBuilderImpl(bb)->SetValue(live, value);
     }
-    PredecessorCallInfo& callinfo = GetBuilderImpl(bb)->call_info;
-    LValue call_value = callinfo.call_value;
     if (GetBuilderImpl(bb)->exception_block) {
       LValue landing_pad = output().buildLandingPad();
-      GetBuilderImpl(bb)->landing_pad = landing_pad;
-      call_value = landing_pad;
-    }
-    auto& values = GetBuilderImpl(bb)->values();
-    for (auto& gc_relocate : callinfo.gc_relocates) {
-      auto found = values.find(gc_relocate.value);
-      EMASSERT(found->second.type == ValueType::LLVMValue);
-      LValue relocated =
-          output().buildCall(output().repo().gcRelocateIntrinsic(), call_value,
-                             output().constInt32(gc_relocate.where),
-                             output().constInt32(gc_relocate.where));
-      found->second.llvm_value = relocated;
-    }
-    if (callinfo.call_id != -1) {
-      LValue intrinsic = output().getGCResultFunction(callinfo.return_type);
-      LValue ret = output().buildCall(intrinsic, callinfo.call_value);
-      GetBuilderImpl(current_bb_)->SetLLVMValue(callinfo.call_id, ret);
+      LValue call_value = landing_pad;
+      PredecessorCallInfo& callinfo = GetBuilderImpl(bb)->call_info;
+      auto& values = GetBuilderImpl(bb)->values();
+      for (auto& gc_relocate : callinfo.gc_relocates) {
+        auto found = values.find(gc_relocate.value);
+        EMASSERT(found->second.type == ValueType::LLVMValue);
+        LValue relocated = output().buildCall(
+            output().repo().gcRelocateIntrinsic(), call_value,
+            output().constInt32(gc_relocate.where),
+            output().constInt32(gc_relocate.where));
+        found->second.llvm_value = relocated;
+      }
     }
     return;
   }
@@ -967,7 +973,12 @@ void LLVMTFBuilder::BuildPhiAndPushToWorkList(BasicBlock* bb,
                                               BasicBlock* ref_pred) {
   auto impl = EnsureImpl(bb);
   for (int live : bb->liveins()) {
-    LValue ref_value = GetBuilderImpl(ref_pred)->GetLLVMValue(live);
+    const ValueDesc& value_desc = GetBuilderImpl(ref_pred)->GetValue(live);
+    if (value_desc.type != ValueType::LLVMValue) {
+      GetBuilderImpl(bb)->SetValue(live, value_desc);
+      continue;
+    }
+    LValue ref_value = value_desc.llvm_value;
     LType ref_type = typeOf(ref_value);
     if (ref_type != output().taggedType()) {
       GetBuilderImpl(bb)->SetLLVMValue(live, ref_value);
@@ -1007,14 +1018,15 @@ void LLVMTFBuilder::ProcessPhiWorkList() {
   phi_rebuild_worklist_.clear();
 }
 
-void LLVMTFBuilder::DoTailCall(int id, bool code,
+void LLVMTFBuilder::DoTailCall(int id, CallMode mode,
                                const CallDescriptor& call_desc,
                                const OperandsVector& operands) {
-  DoCall(id, code, call_desc, operands, true);
+  DoCall(id, mode, call_desc, operands, true);
   output().buildUnreachable();
 }
 
-void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
+void LLVMTFBuilder::DoCall(int id, CallMode mode,
+                           const CallDescriptor& call_desc,
                            const OperandsVector& operands, bool tailcall) {
   std::unique_ptr<CallResolver> call_resolver;
   if (!tailcall)
@@ -1025,7 +1037,7 @@ void LLVMTFBuilder::DoCall(int id, bool code, const CallDescriptor& call_desc,
     call_resolver.reset(new TCCallResolver(current_bb_, output(), id,
                                            stack_map_info_map_,
                                            state_point_id_next_++));
-  call_resolver->Resolve(code, call_desc, operands);
+  call_resolver->Resolve(mode, call_desc, operands);
 }
 
 LValue LLVMTFBuilder::EnsureWord32(LValue v) {
@@ -1164,18 +1176,23 @@ void LLVMTFBuilder::VisitLoadFramePointer(int id) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, fp);
 }
 
-void LLVMTFBuilder::VisitLoadStackPointer(int id) {
-  output().setLineNumber(id);
-  LValue value = output().buildCall(output().repo().stackSaveIntrinsic());
-  GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
-}
-
 void LLVMTFBuilder::VisitDebugBreak(int id) {
   output().setLineNumber(id);
   char kUdf[] = "udf #0\n";
   char empty[] = "\0";
   output().buildInlineAsm(functionType(output().repo().voidType), kUdf,
                           sizeof(kUdf) - 1, empty, 0, true);
+}
+
+void LLVMTFBuilder::VisitStackPointerGreaterThan(int id, int value) {
+  auto impl = GetBuilderImpl(current_bb_);
+  LValue stack_pointer =
+      output().buildCall(output().repo().stackSaveIntrinsic());
+  LValue stack_pointer_int =
+      output().buildCast(LLVMPtrToInt, stack_pointer, output().repo().intPtr);
+  LValue llvm_value = impl->GetLLVMValue(value);
+  LValue cmp = output().buildICmp(LLVMIntUGT, stack_pointer_int, llvm_value);
+  impl->SetLLVMValue(id, cmp);
 }
 
 void LLVMTFBuilder::VisitTrapIf(int id, int value) {
@@ -1356,8 +1373,8 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
 }
 
 void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
-                               WriteBarrierKind barrier, int base, int offset,
-                               int value) {
+                               compiler::WriteBarrierKind barrier, int base,
+                               int offset, int value) {
   output().setLineNumber(id);
   LValue pointer = buildAccessPointer(
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
@@ -1404,12 +1421,11 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
     LLVMSetAlignment(val, 1);
   // store should not be recorded, whatever.
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, val);
-  if (barrier != kNoWriteBarrier) {
+  if (barrier != compiler::kNoWriteBarrier) {
     StoreBarrierResolver resolver(current_bb_, output(), id,
                                   stack_map_info_map_, state_point_id_next_++);
     resolver.Resolve(GetBuilderImpl(current_bb_)->GetLLVMValue(base), pointer,
                      llvm_value, barrier,
-                     [this]() { return CallGetIsolateFunction(); },
                      [this]() { return CallGetRecordWriteBuiltin(); });
   }
 }
@@ -1421,7 +1437,6 @@ void LLVMTFBuilder::VisitUnalignedLoad(int id, MachineRepresentation rep,
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
       GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
   LValue value = output().buildLoad(pointer);
-  LType pointer_type = typeOf(pointer);
   LLVMSetAlignment(value, 1);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
@@ -1472,6 +1487,15 @@ void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
           id, output().buildCast(LLVMIntToPtr,
                                  GetBuilderImpl(current_bb_)->GetLLVMValue(e),
                                  output().taggedType()));
+}
+
+void LLVMTFBuilder::VisitBitcastTaggedToWord(int id, int e) {
+  output().setLineNumber(id);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(
+          id, output().buildCast(LLVMPtrToInt,
+                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                                 output().repo().intPtr));
 }
 
 void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
@@ -2060,23 +2084,19 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
   BasicBlock* bbFalse = basic_block_manager().ensureBB(bfalse);
   EnsureNativeBB(bbTrue, output());
   EnsureNativeBB(bbFalse, output());
-#if !defined(FEATURE_SAMPLE_PGO)
   int expected_value = -1;
   if (bbTrue->is_deferred()) {
     if (!bbFalse->is_deferred()) expected_value = 0;
   } else if (bbFalse->is_deferred()) {
     expected_value = 1;
   }
-#endif  // FEATURE_SAMPLE_PGO
   LValue cmp_val = GetBuilderImpl(current_bb_)->GetLLVMValue(cmp);
   cmp_val = EnsureBoolean(cmp_val);
-#if !defined(FEATURE_SAMPLE_PGO)
   if (expected_value != -1) {
     cmp_val = output().buildCall(output().repo().expectIntrinsic(), cmp_val,
                                  expected_value ? output().repo().booleanTrue
                                                 : output().repo().booleanFalse);
   }
-#endif  // FEATURE_SAMPLE_PGO
   output().buildCondBr(cmp_val, GetNativeBB(bbTrue), GetNativeBB(bbFalse));
   EndCurrentBlock();
 }
@@ -2179,21 +2199,21 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, phi);
 }
 
-void LLVMTFBuilder::VisitCall(int id, bool code,
+void LLVMTFBuilder::VisitCall(int id, CallMode mode,
                               const CallDescriptor& call_desc,
                               const OperandsVector& operands) {
   output().setLineNumber(id);
-  DoCall(id, code, call_desc, operands, false);
+  DoCall(id, mode, call_desc, operands, false);
 }
 
-void LLVMTFBuilder::VisitTailCall(int id, bool code,
+void LLVMTFBuilder::VisitTailCall(int id, CallMode mode,
                                   const CallDescriptor& call_desc,
                                   const OperandsVector& operands) {
   output().setLineNumber(id);
-  DoTailCall(id, code, call_desc, operands);
+  DoTailCall(id, mode, call_desc, operands);
 }
 
-void LLVMTFBuilder::VisitInvoke(int id, bool code,
+void LLVMTFBuilder::VisitInvoke(int id, CallMode mode,
                                 const CallDescriptor& call_desc,
                                 const OperandsVector& operands, int then,
                                 int exception) {
@@ -2204,7 +2224,7 @@ void LLVMTFBuilder::VisitInvoke(int id, bool code,
   EnsureNativeBB(exception_bb, output());
   InvokeResolver resolver(current_bb_, output(), id, stack_map_info_map_,
                           state_point_id_next_++, then_bb, exception_bb);
-  resolver.Resolve(code, call_desc, operands);
+  resolver.Resolve(mode, call_desc, operands);
 }
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
@@ -2233,11 +2253,12 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
   impl->SetLLVMValue(id, result);
 }
 
-void LLVMTFBuilder::VisitRoot(int id, int index) {
+void LLVMTFBuilder::VisitRoot(int id, RootIndex index) {
   output().setLineNumber(id);
   LValue offset = output().buildGEPWithByteOffset(
       output().root(),
-      output().constInt32(index * sizeof(void*) - kRootRegisterBias),
+      output().constInt32(
+          TurboAssemblerBase::RootRegisterOffsetForRootIndex(index)),
       pointerType(output().taggedType()));
   LValue value = output().buildLoad(offset);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
@@ -2265,9 +2286,8 @@ void LLVMTFBuilder::VisitLoadFromConstantTable(int id, int constant_index) {
   output().setLineNumber(id);
   LValue constant_table_offset = output().buildGEPWithByteOffset(
       output().root(),
-      output().constInt32(Heap::kBuiltinsConstantsTableRootIndex *
-                              sizeof(void*) -
-                          kRootRegisterBias),
+      output().constInt32(TurboAssemblerBase::RootRegisterOffsetForRootIndex(
+          RootIndex::kBuiltinsConstantsTable)),
       pointerType(output().taggedType()));
   LValue constant_table = output().buildLoad(constant_table_offset);
   LValue offset = output().buildGEPWithByteOffset(
@@ -2295,7 +2315,7 @@ void LLVMTFBuilder::VisitCodeForCall(int id, uintptr_t magic, bool relative) {
   GetBuilderImpl(current_bb_)->SetValue(id, value);
 }
 
-void LLVMTFBuilder::VisitSmiConstant(int id, void* smi_value) {
+void LLVMTFBuilder::VisitSmiConstant(int id, uintptr_t smi_value) {
   output().setLineNumber(id);
   LValue value = output().constTagged(smi_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
@@ -2575,16 +2595,6 @@ void LLVMTFBuilder::VisitReturn(int id, int pop_count,
   stack_map_info_map_->emplace(patchid, std::move(info));
 }
 
-LValue LLVMTFBuilder::CallGetIsolateFunction() {
-  if (!get_isolate_function_) {
-    get_isolate_function_ = output().addFunction(
-        "GetIsolate",
-        functionType(output().repo().ref8, pointerType(output().taggedType())));
-    LLVMSetLinkage(get_isolate_function_, LLVMInternalLinkage);
-  }
-  return output().buildCall(get_isolate_function_, output().root());
-}
-
 LValue LLVMTFBuilder::CallGetRecordWriteBuiltin() {
   if (!get_record_write_function_) {
     get_record_write_function_ = output().addFunction(
@@ -2612,14 +2622,6 @@ void LLVMTFBuilder::BuildFunctionUtil(LValue func,
     output().positionToBBEnd(bb);
     f(LLVMGetParam(func, 0));
   }
-}
-
-void LLVMTFBuilder::BuildGetIsolateFunction(
-    BuiltinFunctionClient* builtin_function_client) {
-  BuildFunctionUtil(
-      get_isolate_function_, [this, builtin_function_client](LValue root) {
-        builtin_function_client->BuildGetIsolateFunction(output(), root);
-      });
 }
 
 void LLVMTFBuilder::BuildGetRecordWriteBuiltin(
