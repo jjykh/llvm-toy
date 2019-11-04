@@ -229,87 +229,6 @@ index f9e2ba74fa..49234d4775 100644
  }  // namespace internal
  }  // namespace v8
  
-diff --git a/src/builtins/setup-builtins-internal.cc b/src/builtins/setup-builtins-internal.cc
-index 99ac0d6b1f..cfe49ca925 100644
---- a/src/builtins/setup-builtins-internal.cc
-+++ b/src/builtins/setup-builtins-internal.cc
-@@ -148,6 +148,56 @@ Code BuildAdaptor(Isolate* isolate, int32_t builtin_index,
-   return *code;
- }
- 
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+void ConfigLLVMBuiltins(int32_t builtin_index,
-+                        compiler::CodeAssemblerState* state) {
-+  switch (builtin_index) {
-+    case Builtins::kMathAcos:
-+    case Builtins::kMathAcosh:
-+    case Builtins::kMathAsin:
-+    case Builtins::kMathAsinh:
-+    case Builtins::kMathAtan:
-+    case Builtins::kMathAtan2:
-+    case Builtins::kMathAtanh:
-+    case Builtins::kMathCbrt:
-+    case Builtins::kMathCos:
-+    case Builtins::kMathCosh:
-+    case Builtins::kMathExp:
-+    case Builtins::kMathExpm1:
-+    case Builtins::kMathFround:
-+    case Builtins::kMathLog:
-+    case Builtins::kMathLog1p:
-+    case Builtins::kMathLog10:
-+    case Builtins::kMathLog2:
-+    case Builtins::kMathSin:
-+    case Builtins::kMathSign:
-+    case Builtins::kMathSinh:
-+    case Builtins::kMathSqrt:
-+    case Builtins::kMathTan:
-+    case Builtins::kMathTanh:
-+    case Builtins::kMathCeil:
-+    case Builtins::kMathFloor:
-+    case Builtins::kMathPow:
-+    case Builtins::kMathMax:
-+    case Builtins::kMathMin:
-+    case Builtins::kExponentiate:
-+    case Builtins::kAtomicsLoad:
-+    case Builtins::kAtomicsStore:
-+    case Builtins::kAtomicsExchange:
-+    case Builtins::kAtomicsCompareExchange:
-+    case Builtins::kAtomicsAdd:
-+    case Builtins::kAtomicsSub:
-+    case Builtins::kAtomicsAnd:
-+    case Builtins::kAtomicsOr:
-+    case Builtins::kAtomicsXor:
-+      state->set_llvm_enabled(false);
-+      break;
-+    default:
-+      break;
-+  }
-+}
-+#endif
-+
- // Builder for builtins implemented in TurboFan with JS linkage.
- Code BuildWithCodeStubAssemblerJS(Isolate* isolate, int32_t builtin_index,
-                                   CodeAssemblerGenerator generator, int argc,
-@@ -163,6 +213,9 @@ Code BuildWithCodeStubAssemblerJS(Isolate* isolate, int32_t builtin_index,
-   compiler::CodeAssemblerState state(
-       isolate, &zone, argc_with_recv, Code::BUILTIN, name,
-       PoisoningMitigationLevel::kDontPoison, builtin_index);
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+  ConfigLLVMBuiltins(builtin_index, &state);
-+#endif
-   generator(&state);
-   Handle<Code> code = compiler::CodeAssembler::GenerateCode(
-       &state, BuiltinAssemblerOptions(isolate, builtin_index));
-@@ -187,6 +240,9 @@ Code BuildWithCodeStubAssemblerCS(Isolate* isolate, int32_t builtin_index,
-   compiler::CodeAssemblerState state(
-       isolate, &zone, descriptor, Code::BUILTIN, name,
-       PoisoningMitigationLevel::kDontPoison, builtin_index);
-+#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+  ConfigLLVMBuiltins(builtin_index, &state);
-+#endif
-   generator(&state);
-   Handle<Code> code = compiler::CodeAssembler::GenerateCode(
-       &state, BuiltinAssemblerOptions(isolate, builtin_index));
 diff --git a/src/codegen/arm/assembler-arm.cc b/src/codegen/arm/assembler-arm.cc
 index 9c46063537..e02f05114f 100644
 --- a/src/codegen/arm/assembler-arm.cc
@@ -408,7 +327,7 @@ index 624517283e..1894567193 100644
    // We retain a reference the bytecode array specifically to ensure it doesn't
    // get flushed while we are optimizing the code.
 diff --git a/src/compiler/backend/code-generator.cc b/src/compiler/backend/code-generator.cc
-index e7702bcdf6..7bfd5761c6 100644
+index e7702bcdf6..31b312bb6c 100644
 --- a/src/compiler/backend/code-generator.cc
 +++ b/src/compiler/backend/code-generator.cc
 @@ -19,6 +19,9 @@
@@ -441,7 +360,7 @@ index e7702bcdf6..7bfd5761c6 100644
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
 +void CodeGenerator::AssembleCodeLLVM() {
 +  CHECK(tf_llvm::AssembleCode(*compiler_state_, tasm(), safepoints(),
-+                              &handler_table_offset_, zone()));
++                              &handler_table_offset_));
 +  result_ = kSuccess;
 +}
 +#endif
@@ -496,23 +415,80 @@ index e9ebf67590..d7cf93a86b 100644
  
  }  // namespace compiler
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
-index 4f18011463..4ceb0f9d9b 100644
+index 4f18011463..02ae58dd0a 100644
 --- a/src/compiler/code-assembler.cc
 +++ b/src/compiler/code-assembler.cc
-@@ -82,7 +82,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
+@@ -41,6 +41,56 @@ static_assert(
+     !std::is_convertible<TNode<UnionT<Smi, HeapObject>>, TNode<Number>>::value,
+     "test subtyping");
+ 
++#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
++static void ConfigLLVMBuiltins(int32_t builtin_index,
++                        compiler::CodeAssemblerState* state) {
++  switch (builtin_index) {
++    case Builtins::kMathAcos:
++    case Builtins::kMathAcosh:
++    case Builtins::kMathAsin:
++    case Builtins::kMathAsinh:
++    case Builtins::kMathAtan:
++    case Builtins::kMathAtan2:
++    case Builtins::kMathAtanh:
++    case Builtins::kMathCbrt:
++    case Builtins::kMathCos:
++    case Builtins::kMathCosh:
++    case Builtins::kMathExp:
++    case Builtins::kMathExpm1:
++    case Builtins::kMathFround:
++    case Builtins::kMathLog:
++    case Builtins::kMathLog1p:
++    case Builtins::kMathLog10:
++    case Builtins::kMathLog2:
++    case Builtins::kMathSin:
++    case Builtins::kMathSign:
++    case Builtins::kMathSinh:
++    case Builtins::kMathSqrt:
++    case Builtins::kMathTan:
++    case Builtins::kMathTanh:
++    case Builtins::kMathCeil:
++    case Builtins::kMathFloor:
++    case Builtins::kMathPow:
++    case Builtins::kMathMax:
++    case Builtins::kMathMin:
++    case Builtins::kExponentiate:
++    case Builtins::kAtomicsLoad:
++    case Builtins::kAtomicsStore:
++    case Builtins::kAtomicsExchange:
++    case Builtins::kAtomicsCompareExchange:
++    case Builtins::kAtomicsAdd:
++    case Builtins::kAtomicsSub:
++    case Builtins::kAtomicsAnd:
++    case Builtins::kAtomicsOr:
++    case Builtins::kAtomicsXor:
++      state->set_llvm_enabled(false);
++      break;
++    default:
++      break;
++  }
++}
++#endif
++
+ CodeAssemblerState::CodeAssemblerState(
+     Isolate* isolate, Zone* zone, const CallInterfaceDescriptor& descriptor,
+     Code::Kind kind, const char* name, PoisoningMitigationLevel poisoning_level,
+@@ -82,7 +132,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
        name_(name),
        builtin_index_(builtin_index),
        code_generated_(false),
 -      variables_(zone) {}
 +      variables_(zone) {
 +#if defined(UC_BUILD_TF_LLVM_BACKEND) && USE_SIMULATOR
-+  set_llvm_enabled(true);
++  ConfigLLVMBuiltins(builtin_index, this);
 +#endif
 +}
  
  CodeAssemblerState::~CodeAssemblerState() = default;
  
-@@ -177,11 +181,20 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
+@@ -177,11 +231,20 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
    Handle<Code> code;
    Graph* graph = rasm->ExportForOptimization();
  
@@ -708,7 +684,7 @@ index 3b335f9712..e5b0fcf929 100644
      if (block->deferred()) os << " (deferred)";
      if (block->PredecessorCount() != 0) os << " <- ";
 diff --git a/src/compiler/scheduler.cc b/src/compiler/scheduler.cc
-index bf23e436f6..af63811aef 100644
+index bf23e436f6..3781eb0b70 100644
 --- a/src/compiler/scheduler.cc
 +++ b/src/compiler/scheduler.cc
 @@ -1724,6 +1724,9 @@ void Scheduler::ScheduleLate() {
@@ -721,7 +697,7 @@ index bf23e436f6..af63811aef 100644
    // Serialize the assembly order and reverse-post-order numbering.
    special_rpo_->SerializeRPOIntoSchedule();
    special_rpo_->PrintAndVerifySpecialRPO();
-@@ -1741,6 +1744,59 @@ void Scheduler::SealFinalSchedule() {
+@@ -1741,6 +1744,71 @@ void Scheduler::SealFinalSchedule() {
    }
  }
  
@@ -747,15 +723,25 @@ index bf23e436f6..af63811aef 100644
 +    part2->successors() = std::move(part1->successors());
 +    part2->set_control(part1->control());
 +    part2->set_control_input(part1->control_input());
++    part1->set_control_input(nullptr);
 +    part1->set_control(BasicBlock::kNone);
 +    part2->set_rpo_next(part1->rpo_next());
 +    part1->set_rpo_next(part2);
++    part2->set_deferred(part1->deferred());
++    part2->set_loop_depth(part1->loop_depth());
 +    schedule_->AddGoto(part1, part2);
++    // Reset the successors/predecessors relationship.
 +    for (BasicBlock* part2_successor : part2->successors()) {
 +      for (BasicBlock*& pred : part2_successor->predecessors()) {
 +        if (pred == part1) pred = part2;
 +      }
 +    }
++
++    // Reset the dominate relationship.
++    for (BasicBlock* b : *schedule_->all_blocks()) {
++      if (b->dominator() == part1) b->set_dominator(part2);
++    }
++    part2->set_dominator(part1);
 +
 +    // Migrate nodes.
 +    auto after_call = found + 1;
@@ -774,7 +760,9 @@ index bf23e436f6..af63811aef 100644
 +    work_list.emplace_back(new_vector);
 +
 +    // Replan all the node for new vector
-+    for (Node* node : *new_vector) schedule_->PlanNode(part2, node);
++    for (Node* node : *new_vector) schedule_->SetBlockForNode(part2, node);
++    if (part2->control_input())
++      schedule_->SetBlockForNode(part2, part2->control_input());
 +  }
 +}
 +#endif

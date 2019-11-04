@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include "src/codegen/machine-type.h"
+#include "src/compiler/write-barrier-kind.h"
+#include "src/roots/roots.h"
 namespace v8 {
 namespace internal {
 namespace tf_llvm {

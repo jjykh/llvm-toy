@@ -16,6 +16,7 @@
 #include "src/llvm/stack-map-info.h"
 #include "src/llvm/tf/schedule-emitter.h"
 
+#include "src/codegen/turbo-assembler.h"
 #include "src/llvm/basic-block-manager.h"
 #include "src/llvm/basic-block.h"
 #include "src/llvm/liveness-analysis-visitor.h"

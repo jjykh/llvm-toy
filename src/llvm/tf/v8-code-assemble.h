@@ -10,7 +10,7 @@ namespace tf_llvm {
 struct CompilerState;
 bool AssembleCode(const CompilerState& state, TurboAssembler* tasm,
                   SafepointTableBuilder* safepoint_builder,
-                  int* handler_table_offset, Zone* zone);
+                  int* handler_table_offset);
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

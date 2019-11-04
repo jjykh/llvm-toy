@@ -40,7 +40,7 @@ class RelocationProcessor {
 
 class CodeAssemblerLLVM {
  public:
-  CodeAssemblerLLVM(TurboAssembler*, SafepointTableBuilder*, int*, Zone*);
+  CodeAssemblerLLVM(TurboAssembler*, SafepointTableBuilder*, int*);
   ~CodeAssemblerLLVM() = default;
   bool Assemble(const CompilerState& state);
 
@@ -80,7 +80,7 @@ class CodeAssemblerLLVM {
 
 CodeAssemblerLLVM::CodeAssemblerLLVM(
     TurboAssembler* tasm, SafepointTableBuilder* safepoint_table_builder,
-    int* handler_table_offset, Zone* zone)
+    int* handler_table_offset)
     : tasm_(*tasm),
       safepoint_table_builder_(*safepoint_table_builder),
       handler_table_offset_(*handler_table_offset) {}
@@ -377,9 +377,9 @@ void RelocationProcessor::ProcessRelocationWorkList(TurboAssembler* tasm) {
 
 bool AssembleCode(const CompilerState& state, TurboAssembler* tasm,
                   SafepointTableBuilder* safepoint_builder,
-                  int* handler_table_offset, Zone* zone) {
+                  int* handler_table_offset) {
   CodeAssemblerLLVM code_assembler(tasm, safepoint_builder,
-                                   handler_table_offset, zone);
+                                   handler_table_offset);
   return code_assembler.Assemble(state);
 }
 }  // namespace tf_llvm

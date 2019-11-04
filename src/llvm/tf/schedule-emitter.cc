@@ -4,6 +4,7 @@
 
 #include <unordered_map>
 #include "src/builtins/constants-table-builder.h"
+#include "src/codegen/turbo-assembler.h"
 #include "src/compiler/common-operator.h"
 #include "src/compiler/linkage.h"
 #include "src/compiler/machine-operator.h"
@@ -1016,6 +1017,9 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       return;
     case compiler::IrOpcode::kStackPointerGreaterThan:
       visitor->VisitStackPointerGreaterThan(node->id(), node->InputAt(0)->id());
+      return;
+    case compiler::IrOpcode::kAbortCSAAssert:
+      // ignore this.
       return;
     default:
 #ifdef DEBUG

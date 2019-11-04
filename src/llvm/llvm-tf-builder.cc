@@ -4,6 +4,8 @@
 #include <llvm/Support/Compiler.h>
 #include <bitset>
 #include <sstream>
+#include "src/codegen/turbo-assembler.h"
+#include "src/execution/isolate-data.h"
 #include "src/heap/spaces.h"
 #include "src/llvm/basic-block-manager.h"
 #include "src/llvm/basic-block.h"

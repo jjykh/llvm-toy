@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "src/codegen/machine-type.h"
 #include "src/llvm/intrinsic-repository.h"
 namespace v8 {
 namespace internal {
