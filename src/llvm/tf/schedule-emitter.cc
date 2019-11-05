@@ -433,13 +433,12 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kUint64Mod:
       UNREACHABLE();
     case compiler::IrOpcode::kBitcastTaggedSignedToWord:
-      V8_FALLTHROUGH;
     case compiler::IrOpcode::kBitcastTaggedToWord:
       visitor->VisitBitcastTaggedToWord(node->id(), node->InputAt(0)->id());
+      break;
     // I don't think kBitcastWordToTaggedSigned has difference with
     // kBitcastWordToTagged for llvm.
     case compiler::IrOpcode::kBitcastWordToTaggedSigned:
-      V8_FALLTHROUGH;
     case compiler::IrOpcode::kBitcastWordToTagged:
       visitor->VisitBitcastWordToTagged(node->id(), node->InputAt(0)->id());
       return;

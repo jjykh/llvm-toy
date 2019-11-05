@@ -71,7 +71,7 @@ static void disassemble(ByteBuffer& code) {
   LLVMDisasmDispose(DCR);
 }
 
-static void disassemble(CompilerState& state) {
+static ALLOW_UNUSED_TYPE void disassemble(CompilerState& state) {
   for (auto& code : state.codeSectionList_) {
     disassemble(code);
   }
