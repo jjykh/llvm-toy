@@ -56,6 +56,7 @@ struct LLVMTFBuilderBasicBlockImpl {
 
   LBasicBlock native_bb = nullptr;
   LBasicBlock continuation = nullptr;
+  LValue landing_pad = nullptr;
 
   bool started = false;
   bool ended = false;
@@ -925,6 +926,7 @@ void LLVMTFBuilder::MergePredecessors(BasicBlock* bb) {
             output().constInt32(gc_relocate.where));
         found->second.llvm_value = relocated;
       }
+      GetBuilderImpl(bb)->landing_pad = landing_pad;
     }
     return;
   }
@@ -1180,10 +1182,7 @@ void LLVMTFBuilder::VisitLoadFramePointer(int id) {
 
 void LLVMTFBuilder::VisitDebugBreak(int id) {
   output().setLineNumber(id);
-  char kUdf[] = "udf #0\n";
-  char empty[] = "\0";
-  output().buildInlineAsm(functionType(output().repo().voidType), kUdf,
-                          sizeof(kUdf) - 1, empty, 0, true);
+  output().buildCall(output().repo().trapIntrinsic());
 }
 
 void LLVMTFBuilder::VisitStackPointerGreaterThan(int id, int value) {
@@ -2128,31 +2127,9 @@ void LLVMTFBuilder::VisitIfDefault(int id) { output().setLineNumber(id); }
 
 void LLVMTFBuilder::VisitIfException(int id) {
   output().setLineNumber(id);
-#if 0
-  std::vector<LValue> statepoint_operands;
-  LType ret_type = output().repo().taggedType;
-  LType callee_function_type = functionType(ret_type);
-  LType callee_type = pointerType(callee_function_type);
-  int patchid = state_point_id_next_++;
-  statepoint_operands.push_back(output().constInt64(patchid));
-  statepoint_operands.push_back(output().constInt32(4));
-  statepoint_operands.push_back(constNull(callee_type));
-  statepoint_operands.push_back(output().constInt32(0));  // # call params
-  statepoint_operands.push_back(output().constInt32(0));  // flags
-  statepoint_operands.push_back(output().constInt32(0));  // # transition args
-  statepoint_operands.push_back(output().constInt32(0));  // # deopt arguments
-  LValue result = output().buildCall(
-      output().getStatePointFunction(callee_type), statepoint_operands.data(),
-      statepoint_operands.size());
-  LLVMSetInstructionCallConv(result, LLVMV8CallConv);
   LValue exception =
-      output().buildCall(output().repo().gcResultIntrinsic(), result);
-#endif
-  char kEmpty[] = "\0";
-  char kConstraint[] = "={r0}";
-  LValue exception =
-      output().buildInlineAsm(functionType(output().taggedType()), kEmpty, 0,
-                              kConstraint, sizeof(kConstraint) - 1, true);
+      output().buildCall(output().repo().gcExceptionIntrinsic(),
+                         GetBuilderImpl(current_bb_)->landing_pad);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, exception);
 }
 

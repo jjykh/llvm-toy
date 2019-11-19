@@ -51,6 +51,51 @@ Index: include/llvm/IR/CallingConv.h
  
      /// The highest possible calling convention ID. Must be some 2^k - 1.
      MaxID = 1023
+Index: include/llvm/IR/Intrinsics.td
+===================================================================
+--- include/llvm/IR/Intrinsics.td	(revision 359070)
++++ include/llvm/IR/Intrinsics.td	(working copy)
+@@ -907,6 +907,8 @@
+ def int_experimental_gc_relocate : Intrinsic<[llvm_any_ty],
+                                 [llvm_token_ty, llvm_i32_ty, llvm_i32_ty],
+                                 [IntrReadMem]>;
++def int_experimental_gc_exception : Intrinsic<[llvm_any_ty], [llvm_token_ty],
++                                             [IntrReadMem]>;
+ 
+ //===------------------------ Coroutine Intrinsics ---------------===//
+ // These are documented in docs/Coroutines.rst
+Index: include/llvm/IR/Statepoint.h
+===================================================================
+--- include/llvm/IR/Statepoint.h	(revision 359070)
++++ include/llvm/IR/Statepoint.h	(working copy)
+@@ -331,7 +331,8 @@
+ public:
+   static bool classof(const IntrinsicInst *I) {
+     return I->getIntrinsicID() == Intrinsic::experimental_gc_relocate ||
+-      I->getIntrinsicID() == Intrinsic::experimental_gc_result;
++           I->getIntrinsicID() == Intrinsic::experimental_gc_result ||
++           I->getIntrinsicID() == Intrinsic::experimental_gc_exception;
+   }
+ 
+   static bool classof(const Value *V) {
+@@ -417,6 +418,17 @@
+   }
+ };
+ 
++class GCExceptionInst : public GCProjectionInst {
++public:
++  static bool classof(const IntrinsicInst *I) {
++    return I->getIntrinsicID() == Intrinsic::experimental_gc_exception;
++  }
++
++  static bool classof(const Value *V) {
++    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
++  }
++};
++
+ template <typename FunTy, typename InstructionTy, typename ValueTy,
+           typename CallSiteTy>
+ std::vector<const GCRelocateInst *>
 Index: include/llvm/Support/TargetOpcodes.def
 ===================================================================
 --- include/llvm/Support/TargetOpcodes.def	(revision 359070)
@@ -439,7 +484,17 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 359070)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -8187,6 +8187,32 @@
+@@ -6155,6 +6155,9 @@
+   case Intrinsic::experimental_gc_relocate:
+     visitGCRelocate(cast<GCRelocateInst>(I));
+     return nullptr;
++  case Intrinsic::experimental_gc_exception:
++    visitGCException(cast<GCExceptionInst>(I));
++    return nullptr;
+   case Intrinsic::instrprof_increment:
+     llvm_unreachable("instrprof failed to lower an increment");
+   case Intrinsic::instrprof_value_profile:
+@@ -8187,6 +8190,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
@@ -472,7 +527,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8230,17 +8256,24 @@
+@@ -8230,17 +8259,24 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
@@ -506,7 +561,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8311,8 +8344,9 @@
+@@ -8311,8 +8347,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
@@ -518,6 +573,18 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  
    // Update the NodeMap.
    if (HasDef) {
+Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h
+===================================================================
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(revision 359070)
++++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(working copy)
+@@ -947,6 +947,7 @@
+   // These two are implemented in StatepointLowering.cpp
+   void visitGCRelocate(const GCRelocateInst &Relocate);
+   void visitGCResult(const GCResultInst &I);
++  void visitGCException(const GCExceptionInst &I);
+ 
+   void visitVectorReduce(const CallInst &I, unsigned Intrinsic);
+ 
 Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 359070)
@@ -554,6 +621,35 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    } else {
      ActualCallee = getValue(ISP.getCalledValue());
    }
+@@ -956,6 +962,28 @@
+   }
+ }
+ 
++void SelectionDAGBuilder::visitGCException(const GCExceptionInst &CI) {
++  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
++  const Constant *PersonalityFn = FuncInfo.Fn->getPersonalityFn();
++  if (TLI.getExceptionPointerRegister(PersonalityFn) == 0 &&
++      TLI.getExceptionSelectorRegister(PersonalityFn) == 0)
++    return;
++  assert(FuncInfo.MBB->isEHPad() && "Call to landingpad not in landing pad!");
++  SDValue Op;
++  SDLoc dl = getCurSDLoc();
++  const Instruction *I = CI.getStatepoint();
++  PointerType *CalleeType =
++      cast<PointerType>(ImmutableStatepoint(I).getCalledValue()->getType());
++  Type *RetTy =
++      cast<FunctionType>(CalleeType->getElementType())->getReturnType();
++  Op = DAG.getZExtOrTrunc(
++      DAG.getCopyFromReg(DAG.getEntryNode(), dl,
++                         FuncInfo.ExceptionPointerVirtReg,
++                         TLI.getPointerTy(DAG.getDataLayout())),
++      dl, TLI.getValueType(DAG.getDataLayout(), RetTy));
++  setValue(&CI, Op);
++}
++
+ void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
+ #ifndef NDEBUG
+   // Consistency check
 Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 359070)
@@ -701,6 +797,30 @@ Index: lib/IR/AsmWriter.cpp
    case CallingConv::PreserveMost:  Out << "preserve_mostcc"; break;
    case CallingConv::PreserveAll:   Out << "preserve_allcc"; break;
    case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
+Index: lib/IR/Verifier.cpp
+===================================================================
+--- lib/IR/Verifier.cpp	(revision 359070)
++++ lib/IR/Verifier.cpp	(working copy)
+@@ -2013,7 +2013,8 @@
+     Assert(UserCall, "illegal use of statepoint token", Call, U);
+     if (!UserCall)
+       continue;
+-    Assert(isa<GCRelocateInst>(UserCall) || isa<GCResultInst>(UserCall),
++    Assert(isa<GCRelocateInst>(UserCall) || isa<GCResultInst>(UserCall) ||
++               isa<GCExceptionInst>(UserCall),
+            "gc.result or gc.relocate are the only value uses "
+            "of a gc.statepoint",
+            Call, U);
+@@ -2023,6 +2024,9 @@
+     } else if (isa<GCRelocateInst>(Call)) {
+       Assert(UserCall->getArgOperand(0) == &Call,
+              "gc.relocate connected to wrong gc.statepoint", Call, UserCall);
++    } else if (isa<GCExceptionInst>(UserCall)) {
++      Assert(UserCall->getArgOperand(0) == &Call,
++             "gc.exception connected to wrong gc.statepoint", Call, UserCall);
+     }
+   }
+ 
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
 --- lib/MC/MCAsmStreamer.cpp	(revision 359070)
