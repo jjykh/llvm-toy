@@ -621,7 +621,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    } else {
      ActualCallee = getValue(ISP.getCalledValue());
    }
-@@ -956,6 +962,28 @@
+@@ -956,6 +962,24 @@
    }
  }
  
@@ -634,11 +634,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 +  assert(FuncInfo.MBB->isEHPad() && "Call to landingpad not in landing pad!");
 +  SDValue Op;
 +  SDLoc dl = getCurSDLoc();
-+  const Instruction *I = CI.getStatepoint();
-+  PointerType *CalleeType =
-+      cast<PointerType>(ImmutableStatepoint(I).getCalledValue()->getType());
-+  Type *RetTy =
-+      cast<FunctionType>(CalleeType->getElementType())->getReturnType();
++  Type *RetTy = CI.getFunctionType()->getReturnType();
 +  Op = DAG.getZExtOrTrunc(
 +      DAG.getCopyFromReg(DAG.getEntryNode(), dl,
 +                         FuncInfo.ExceptionPointerVirtReg,
