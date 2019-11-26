@@ -10,7 +10,7 @@ index b3e9762a93..06558cde43 100644
 +*.so binary
 +
 diff --git a/BUILD.gn b/BUILD.gn
-index c486f1a1c8..ddaf53d33d 100644
+index c486f1a1c8..7e4d7d6b85 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -202,6 +202,20 @@ declare_args() {
@@ -68,10 +68,11 @@ index c486f1a1c8..ddaf53d33d 100644
  }
  
  # This is split out to be a non-code containing target that the Chromium browser
-@@ -1973,6 +2007,55 @@ v8_source_set("v8_compiler") {
+@@ -1973,6 +2007,56 @@ v8_source_set("v8_compiler") {
    ]
  
    configs = [ ":internal_config" ]
++
 +  #if UC_BUILD_TF_LLVM_BACKEND
 +  if (v8_enable_llvm) {
 +    llvm_sources = [
@@ -124,11 +125,10 @@ index c486f1a1c8..ddaf53d33d 100644
  }
  
  group("v8_compiler_for_mksnapshot") {
-@@ -3841,6 +3924,35 @@ if (current_toolchain == v8_generator_toolchain) {
+@@ -3841,6 +3925,32 @@ if (current_toolchain == v8_generator_toolchain) {
  }
  
  if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
-+
 +  v8_executable("mkwasmsnapshot") {
 +    visibility = [ ":*" ]  # Only targets in this file can depend on this.
 +
@@ -148,11 +148,9 @@ index c486f1a1c8..ddaf53d33d 100644
 +    deps = [
 +      ":v8_base_without_compiler",
 +      ":v8_compiler_for_mksnapshot",
-+      ":v8_init",
 +      ":v8_libbase",
 +      ":v8_libplatform",
 +      ":v8_snapshot",
-+      "//build/win:default_exe_manifest",
 +      "//build/win:default_exe_manifest",
 +    ]
 +  }
@@ -160,7 +158,7 @@ index c486f1a1c8..ddaf53d33d 100644
    v8_executable("mksnapshot") {
      visibility = [ ":*" ]  # Only targets in this file can depend on this.
  
-@@ -3862,6 +3974,13 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
+@@ -3862,6 +3972,13 @@ if (v8_use_snapshot && current_toolchain == v8_snapshot_toolchain) {
  
      configs = [ ":internal_config" ]
  
@@ -174,6 +172,17 @@ index c486f1a1c8..ddaf53d33d 100644
      deps = [
        ":v8_base_without_compiler",
        ":v8_compiler_for_mksnapshot",
+@@ -4200,6 +4317,10 @@ v8_executable("d8") {
+   if (v8_use_perfetto) {
+     deps += [ "//third_party/perfetto/include/perfetto/tracing" ]
+   }
++
++  if (uc_build_tf_llvm_backend) {
++    deps += [ ":mkwasmsnapshot($v8_snapshot_toolchain)" ]
++  }
+ }
+ 
+ v8_executable("v8_hello_world") {
 diff --git a/gni/v8.gni b/gni/v8.gni
 index 769a126a17..94d3d48471 100644
 --- a/gni/v8.gni
@@ -301,6 +310,21 @@ index f669943f34..1d5702cb90 100644
    void ConstantPoolAddEntry(int position, RelocInfo::Mode rmode,
                              intptr_t value);
    void AllocateAndInstallRequestedHeapObjects(Isolate* isolate);
+diff --git a/src/codegen/arm/constants-arm.h b/src/codegen/arm/constants-arm.h
+index 66eea2180b..8d109cf458 100644
+--- a/src/codegen/arm/constants-arm.h
++++ b/src/codegen/arm/constants-arm.h
+@@ -656,8 +656,10 @@ class Instruction {
+       if (pre == kDoublePrecision) {
+         return reg_num;
+       }
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+       DCHECK_EQ(kSimd128Precision, pre);
+       DCHECK_EQ(reg_num & 1, 0);
++#endif
+       return reg_num / 2;
+     }
+   }
 diff --git a/src/codegen/optimized-compilation-info.h b/src/codegen/optimized-compilation-info.h
 index 624517283e..1894567193 100644
 --- a/src/codegen/optimized-compilation-info.h
@@ -415,10 +439,10 @@ index e9ebf67590..d7cf93a86b 100644
  
  }  // namespace compiler
 diff --git a/src/compiler/code-assembler.cc b/src/compiler/code-assembler.cc
-index 4f18011463..02ae58dd0a 100644
+index 4f18011463..6895b2ce96 100644
 --- a/src/compiler/code-assembler.cc
 +++ b/src/compiler/code-assembler.cc
-@@ -41,6 +41,56 @@ static_assert(
+@@ -41,6 +41,58 @@ static_assert(
      !std::is_convertible<TNode<UnionT<Smi, HeapObject>>, TNode<Number>>::value,
      "test subtyping");
  
@@ -464,9 +488,11 @@ index 4f18011463..02ae58dd0a 100644
 +    case Builtins::kAtomicsAnd:
 +    case Builtins::kAtomicsOr:
 +    case Builtins::kAtomicsXor:
++    case Builtins::kWasmRecordWrite:
 +      state->set_llvm_enabled(false);
 +      break;
 +    default:
++      state->set_llvm_enabled(true);
 +      break;
 +  }
 +}
@@ -475,7 +501,7 @@ index 4f18011463..02ae58dd0a 100644
  CodeAssemblerState::CodeAssemblerState(
      Isolate* isolate, Zone* zone, const CallInterfaceDescriptor& descriptor,
      Code::Kind kind, const char* name, PoisoningMitigationLevel poisoning_level,
-@@ -82,7 +132,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
+@@ -82,7 +134,11 @@ CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
        name_(name),
        builtin_index_(builtin_index),
        code_generated_(false),
@@ -488,7 +514,7 @@ index 4f18011463..02ae58dd0a 100644
  
  CodeAssemblerState::~CodeAssemblerState() = default;
  
-@@ -177,11 +231,20 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
+@@ -177,11 +233,20 @@ Handle<Code> CodeAssembler::GenerateCode(CodeAssemblerState* state,
    Handle<Code> code;
    Graph* graph = rasm->ExportForOptimization();
  
@@ -798,6 +824,101 @@ index 28f9943e59..092efb68b3 100644
    if (env->runtime_exception_support) {
      info.SetWasmRuntimeExceptionSupport();
    }
+diff --git a/src/diagnostics/arm/disasm-arm.cc b/src/diagnostics/arm/disasm-arm.cc
+index 51b6594e70..7856978c66 100644
+--- a/src/diagnostics/arm/disasm-arm.cc
++++ b/src/diagnostics/arm/disasm-arm.cc
+@@ -946,7 +946,11 @@ void Decoder::DecodeType01(Instruction* instr) {
+         } else {
+           // Other instructions matching this pattern are handled in the
+           // miscellaneous instructions part above.
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+           UNREACHABLE();
++#else
++          Format(instr, "unknown");
++#endif
+         }
+         break;
+       }
+@@ -964,7 +968,11 @@ void Decoder::DecodeType01(Instruction* instr) {
+         } else {
+           // Other instructions matching this pattern are handled in the
+           // miscellaneous instructions part above.
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+           UNREACHABLE();
++#else
++          Format(instr, "unknown");
++#endif
+         }
+         break;
+       }
+@@ -1063,10 +1071,18 @@ void Decoder::DecodeType3(Instruction* instr) {
+               }
+               break;
+             case 1:
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+               UNREACHABLE();
++#else
++              Format(instr, "unknown");
++#endif
+               break;
+             case 2:
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+               UNREACHABLE();
++#else
++              Format(instr, "unknown");
++#endif
+               break;
+             case 3:
+               Format(instr, "usat 'rd, #'imm05@16, 'rm'shift_sat");
+@@ -1169,10 +1185,18 @@ void Decoder::DecodeType3(Instruction* instr) {
+                       break;
+                   }
+                 } else {
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+                   UNREACHABLE();
++#else
++                  Format(instr, "unknown");
++#endif
+                 }
+               } else {
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+                 UNREACHABLE();
++#else
++                Format(instr, "unknown");
++#endif
+               }
+               break;
+             case 3:
+@@ -1248,7 +1272,11 @@ void Decoder::DecodeType3(Instruction* instr) {
+                     (instr->Bits(11, 4) == 0xF3)) {
+                   Format(instr, "rbit'cond 'rd, 'rm");
+                 } else {
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+                   UNREACHABLE();
++#else
++                  Format(instr, "unknown");
++#endif
+                 }
+               }
+               break;
+@@ -2519,12 +2547,16 @@ bool Decoder::IsConstantPoolAt(byte* instr_ptr) {
+ }
+ 
+ int Decoder::ConstantPoolSizeAt(byte* instr_ptr) {
++#if !defined(UC_BUILD_TF_LLVM_BACKEND)
+   if (IsConstantPoolAt(instr_ptr)) {
+     int instruction_bits = *(reinterpret_cast<int*>(instr_ptr));
+     return DecodeConstantPoolLength(instruction_bits);
+   } else {
+     return -1;
+   }
++#else
++  return -1;
++#endif
+ }
+ 
+ // Disassemble the instruction at *instr_ptr into the output buffer.
 diff --git a/src/flags/flag-definitions.h b/src/flags/flag-definitions.h
 index c7c07e6dc6..25b9f0a8fe 100644
 --- a/src/flags/flag-definitions.h
