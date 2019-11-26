@@ -1,6 +1,6 @@
 Index: include/llvm/CodeGen/MachineRegisterInfo.h
 ===================================================================
---- include/llvm/CodeGen/MachineRegisterInfo.h	(revision 359070)
+--- include/llvm/CodeGen/MachineRegisterInfo.h	(revision 365284)
 +++ include/llvm/CodeGen/MachineRegisterInfo.h	(working copy)
 @@ -933,6 +933,10 @@
    /// corresponding live-in physical register.
@@ -15,7 +15,7 @@ Index: include/llvm/CodeGen/MachineRegisterInfo.h
    void EmitLiveInCopies(MachineBasicBlock *EntryMBB,
 Index: include/llvm/CodeGen/TargetRegisterInfo.h
 ===================================================================
---- include/llvm/CodeGen/TargetRegisterInfo.h	(revision 359070)
+--- include/llvm/CodeGen/TargetRegisterInfo.h	(revision 365284)
 +++ include/llvm/CodeGen/TargetRegisterInfo.h	(working copy)
 @@ -968,6 +968,13 @@
      return StringRef(getName(Reg));
@@ -33,7 +33,7 @@ Index: include/llvm/CodeGen/TargetRegisterInfo.h
  
 Index: include/llvm/IR/CallingConv.h
 ===================================================================
---- include/llvm/IR/CallingConv.h	(revision 359070)
+--- include/llvm/IR/CallingConv.h	(revision 365284)
 +++ include/llvm/IR/CallingConv.h	(working copy)
 @@ -220,8 +220,14 @@
      /// shader if tessellation is in use, or otherwise the vertex shader.
@@ -53,7 +53,7 @@ Index: include/llvm/IR/CallingConv.h
      MaxID = 1023
 Index: include/llvm/IR/Intrinsics.td
 ===================================================================
---- include/llvm/IR/Intrinsics.td	(revision 359070)
+--- include/llvm/IR/Intrinsics.td	(revision 365284)
 +++ include/llvm/IR/Intrinsics.td	(working copy)
 @@ -907,6 +907,8 @@
  def int_experimental_gc_relocate : Intrinsic<[llvm_any_ty],
@@ -66,7 +66,7 @@ Index: include/llvm/IR/Intrinsics.td
  // These are documented in docs/Coroutines.rst
 Index: include/llvm/IR/Statepoint.h
 ===================================================================
---- include/llvm/IR/Statepoint.h	(revision 359070)
+--- include/llvm/IR/Statepoint.h	(revision 365284)
 +++ include/llvm/IR/Statepoint.h	(working copy)
 @@ -331,7 +331,8 @@
  public:
@@ -98,7 +98,7 @@ Index: include/llvm/IR/Statepoint.h
  std::vector<const GCRelocateInst *>
 Index: include/llvm/Support/TargetOpcodes.def
 ===================================================================
---- include/llvm/Support/TargetOpcodes.def	(revision 359070)
+--- include/llvm/Support/TargetOpcodes.def	(revision 365284)
 +++ include/llvm/Support/TargetOpcodes.def	(working copy)
 @@ -120,6 +120,7 @@
  /// rewrite calls to runtimes with more efficient code sequences.
@@ -110,7 +110,7 @@ Index: include/llvm/Support/TargetOpcodes.def
  /// to prevent the stack guard value or address from being spilled to the
 Index: include/llvm/Target/Target.td
 ===================================================================
---- include/llvm/Target/Target.td	(revision 359070)
+--- include/llvm/Target/Target.td	(revision 365284)
 +++ include/llvm/Target/Target.td	(working copy)
 @@ -1068,6 +1068,17 @@
    let mayLoad = 1;
@@ -132,7 +132,7 @@ Index: include/llvm/Target/Target.td
    let InOperandList = (ins variable_ops);
 Index: include/llvm/Transforms/IPO/SampleProfile.h
 ===================================================================
---- include/llvm/Transforms/IPO/SampleProfile.h	(revision 359070)
+--- include/llvm/Transforms/IPO/SampleProfile.h	(revision 365284)
 +++ include/llvm/Transforms/IPO/SampleProfile.h	(working copy)
 @@ -31,6 +31,7 @@
          IsThinLTOPreLink(IsThinLTOPreLink) {}
@@ -144,7 +144,7 @@ Index: include/llvm/Transforms/IPO/SampleProfile.h
    std::string ProfileFileName;
 Index: include/llvm-c/Core.h
 ===================================================================
---- include/llvm-c/Core.h	(revision 359070)
+--- include/llvm-c/Core.h	(revision 365284)
 +++ include/llvm-c/Core.h	(working copy)
 @@ -245,7 +245,9 @@
    LLVMAMDGPUHSCallConv      = 93,
@@ -159,7 +159,7 @@ Index: include/llvm-c/Core.h
  typedef enum {
 Index: include/llvm-c/Target.h
 ===================================================================
---- include/llvm-c/Target.h	(revision 359070)
+--- include/llvm-c/Target.h	(revision 365284)
 +++ include/llvm-c/Target.h	(working copy)
 @@ -211,6 +211,9 @@
  void LLVMAddTargetLibraryInfo(LLVMTargetLibraryInfoRef TLI,
@@ -173,7 +173,7 @@ Index: include/llvm-c/Target.h
      See the constructor llvm::DataLayout::DataLayout. */
 Index: lib/Analysis/BranchProbabilityInfo.cpp
 ===================================================================
---- lib/Analysis/BranchProbabilityInfo.cpp	(revision 359070)
+--- lib/Analysis/BranchProbabilityInfo.cpp	(revision 365284)
 +++ lib/Analysis/BranchProbabilityInfo.cpp	(working copy)
 @@ -302,7 +302,13 @@
    assert(WeightSum <= UINT32_MAX &&
@@ -202,7 +202,7 @@ Index: lib/Analysis/BranchProbabilityInfo.cpp
      for (auto i : UnreachableIdxs)
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
---- lib/AsmParser/LLLexer.cpp	(revision 359070)
+--- lib/AsmParser/LLLexer.cpp	(revision 365284)
 +++ lib/AsmParser/LLLexer.cpp	(working copy)
 @@ -607,6 +607,8 @@
    KEYWORD(webkit_jscc);
@@ -215,7 +215,7 @@ Index: lib/AsmParser/LLLexer.cpp
    KEYWORD(ghccc);
 Index: lib/AsmParser/LLParser.cpp
 ===================================================================
---- lib/AsmParser/LLParser.cpp	(revision 359070)
+--- lib/AsmParser/LLParser.cpp	(revision 365284)
 +++ lib/AsmParser/LLParser.cpp	(working copy)
 @@ -1931,6 +1931,12 @@
    case lltok::kw_win64cc:        CC = CallingConv::Win64; break;
@@ -232,7 +232,7 @@ Index: lib/AsmParser/LLParser.cpp
    case lltok::kw_ghccc:          CC = CallingConv::GHC; break;
 Index: lib/AsmParser/LLToken.h
 ===================================================================
---- lib/AsmParser/LLToken.h	(revision 359070)
+--- lib/AsmParser/LLToken.h	(revision 365284)
 +++ lib/AsmParser/LLToken.h	(working copy)
 @@ -151,6 +151,8 @@
    kw_win64cc,
@@ -245,7 +245,7 @@ Index: lib/AsmParser/LLToken.h
    kw_preserve_allcc,
 Index: lib/CodeGen/InlineSpiller.cpp
 ===================================================================
---- lib/CodeGen/InlineSpiller.cpp	(revision 359070)
+--- lib/CodeGen/InlineSpiller.cpp	(revision 365284)
 +++ lib/CodeGen/InlineSpiller.cpp	(working copy)
 @@ -57,6 +57,7 @@
  #include <cassert>
@@ -332,7 +332,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
         RegI = MRI.reg_bundle_begin(Reg), E = MRI.reg_bundle_end();
 Index: lib/CodeGen/LocalStackSlotAllocation.cpp
 ===================================================================
---- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 359070)
+--- lib/CodeGen/LocalStackSlotAllocation.cpp	(revision 365284)
 +++ lib/CodeGen/LocalStackSlotAllocation.cpp	(working copy)
 @@ -299,6 +299,7 @@
        // range, so they don't need any updates.
@@ -344,7 +344,7 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
  
 Index: lib/CodeGen/MachineRegisterInfo.cpp
 ===================================================================
---- lib/CodeGen/MachineRegisterInfo.cpp	(revision 359070)
+--- lib/CodeGen/MachineRegisterInfo.cpp	(revision 365284)
 +++ lib/CodeGen/MachineRegisterInfo.cpp	(working copy)
 @@ -458,6 +458,14 @@
    return 0;
@@ -363,7 +363,7 @@ Index: lib/CodeGen/MachineRegisterInfo.cpp
  void
 Index: lib/CodeGen/MachineVerifier.cpp
 ===================================================================
---- lib/CodeGen/MachineVerifier.cpp	(revision 359070)
+--- lib/CodeGen/MachineVerifier.cpp	(revision 365284)
 +++ lib/CodeGen/MachineVerifier.cpp	(working copy)
 @@ -1203,6 +1203,8 @@
    unsigned NumDefs = MCID.getNumDefs();
@@ -376,7 +376,7 @@ Index: lib/CodeGen/MachineVerifier.cpp
    if (MONum < NumDefs) {
 Index: lib/CodeGen/RegAllocBase.cpp
 ===================================================================
---- lib/CodeGen/RegAllocBase.cpp	(revision 359070)
+--- lib/CodeGen/RegAllocBase.cpp	(revision 365284)
 +++ lib/CodeGen/RegAllocBase.cpp	(working copy)
 @@ -30,6 +30,7 @@
  #include "llvm/Support/Timer.h"
@@ -428,7 +428,7 @@ Index: lib/CodeGen/RegAllocBase.cpp
 +}
 Index: lib/CodeGen/RegAllocBase.h
 ===================================================================
---- lib/CodeGen/RegAllocBase.h	(revision 359070)
+--- lib/CodeGen/RegAllocBase.h	(revision 365284)
 +++ lib/CodeGen/RegAllocBase.h	(working copy)
 @@ -118,6 +118,7 @@
  
@@ -440,20 +440,144 @@ Index: lib/CodeGen/RegAllocBase.h
  } // end namespace llvm
 Index: lib/CodeGen/RegisterCoalescer.cpp
 ===================================================================
---- lib/CodeGen/RegisterCoalescer.cpp	(revision 359070)
+--- lib/CodeGen/RegisterCoalescer.cpp	(revision 365284)
 +++ lib/CodeGen/RegisterCoalescer.cpp	(working copy)
-@@ -1929,6 +1929,8 @@
+@@ -36,6 +36,7 @@
+ #include "llvm/CodeGen/Passes.h"
+ #include "llvm/CodeGen/RegisterClassInfo.h"
+ #include "llvm/CodeGen/SlotIndexes.h"
++#include "llvm/CodeGen/StackMaps.h"
+ #include "llvm/CodeGen/TargetInstrInfo.h"
+ #include "llvm/CodeGen/TargetOpcodes.h"
+ #include "llvm/CodeGen/TargetRegisterInfo.h"
+@@ -165,6 +166,11 @@
+     /// Join compatible live intervals
+     void joinAllIntervals();
+ 
++    /// Remove the redundant move immediate from statepoints.
++    void removeMoveImmediateFromPatchpoint();
++
++    void removeMoveImmediateFromPatchpoint(MachineInstr *MI);
++
+     /// Coalesce copies in the specified MBB, putting
+     /// copies that cannot yet be coalesced into WorkList.
+     void copyCoalesceInMBB(MachineBasicBlock *MBB);
+@@ -1929,6 +1935,10 @@
    // Update regalloc hint.
    TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
  
 +  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
 +
++  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
++
    LLVM_DEBUG({
      dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
             << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
+@@ -3615,6 +3625,93 @@
+   lateLiveIntervalUpdate();
+ }
+ 
++void RegisterCoalescer::removeMoveImmediateFromPatchpoint() {
++  SmallVector<MachineInstr *, 8> WorkList;
++  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
++    MachineBasicBlock *MBB = &*I;
++    for (MachineInstr &MI : *MBB) {
++      switch (MI.getOpcode()) {
++      case TargetOpcode::STACKMAP:
++      case TargetOpcode::PATCHPOINT:
++      case TargetOpcode::TCPATCHPOINT:
++      case TargetOpcode::STATEPOINT:
++        WorkList.emplace_back(&MI);
++        break;
++      }
++    }
++  }
++  for (MachineInstr *MI : WorkList)
++    removeMoveImmediateFromPatchpoint(MI);
++}
++
++static bool shouldFoldAsConstant(const MachineOperand &MO,
++                                 const MachineRegisterInfo &MRI, int64_t *imm) {
++  if (!MO.isReg())
++    return false;
++  auto defs_iterator = MRI.def_begin(MO.getReg());
++  auto defs_end = MRI.def_end();
++  bool changed = false;
++  for (; defs_iterator != defs_end; ++defs_iterator) {
++    // Could not handle more than one defs.
++    if (changed)
++      return false;
++
++    const MachineInstr *MI = defs_iterator->getParent();
++    if (!MI->isMoveImmediate())
++      return false;
++    const MachineOperand &ImmOperand = MI->getOperand(1);
++    assert(ImmOperand.isImm());
++    *imm = ImmOperand.getImm();
++    changed = true;
++  }
++  return changed;
++}
++
++void RegisterCoalescer::removeMoveImmediateFromPatchpoint(
++    MachineInstr *PatchPoint) {
++  unsigned StartIdx = 0;
++  switch (PatchPoint->getOpcode()) {
++  case TargetOpcode::STACKMAP: {
++    StartIdx = StackMapOpers(PatchPoint).getVarIdx();
++    break;
++  }
++  case TargetOpcode::TCPATCHPOINT:
++  case TargetOpcode::PATCHPOINT: {
++    StartIdx = PatchPointOpers(PatchPoint).getVarIdx();
++    break;
++  }
++  case TargetOpcode::STATEPOINT: {
++    StartIdx = StatepointOpers(PatchPoint).getVarIdx();
++    break;
++  }
++  default:
++    llvm_unreachable("unexpected stackmap opcode");
++  }
++
++  MachineInstr *NewMI = MF->CreateMachineInstr(
++      TII->get(PatchPoint->getOpcode()), PatchPoint->getDebugLoc(), true);
++  MachineInstrBuilder MIB(*MF, NewMI);
++
++  // No need to fold return, the meta data, and function arguments
++  for (unsigned i = 0; i < StartIdx; ++i)
++    MIB.add(PatchPoint->getOperand(i));
++  for (unsigned i = StartIdx; i < PatchPoint->getNumOperands(); ++i) {
++    MachineOperand &MO = PatchPoint->getOperand(i);
++    int64_t imm;
++    if (!shouldFoldAsConstant(MO, *MRI, &imm)) {
++      MIB.add(MO);
++      continue;
++    }
++    MIB.addImm(StackMaps::ConstantOp);
++    MIB.addImm(imm);
++  }
++  MachineBasicBlock *MBB = PatchPoint->getParent();
++  LIS->ReplaceMachineInstrInMaps(*PatchPoint, *NewMI);
++  MachineBasicBlock::iterator Pos = PatchPoint;
++  MBB->insert(Pos, NewMI);
++  MBB->erase(PatchPoint);
++}
++
+ void RegisterCoalescer::releaseMemory() {
+   ErasedInstrs.clear();
+   WorkList.clear();
+@@ -3649,6 +3746,7 @@
+ 
+   RegClassInfo.runOnMachineFunction(fn);
+ 
++  removeMoveImmediateFromPatchpoint();
+   // Join (coalesce) intervals if requested.
+   if (EnableJoining)
+     joinAllIntervals();
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 359070)
+--- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(working copy)
 @@ -832,7 +832,8 @@
    const MCPhysReg *ScratchRegs = nullptr;
@@ -467,7 +591,7 @@ Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
      // scratch registers as AnyRegCC.
 Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 359070)
+--- lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp	(working copy)
 @@ -538,6 +538,10 @@
      NodeNumDefs = 0;
@@ -482,7 +606,7 @@ Index: lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
      // PATCHPOINT is defined to have one result, but it might really have none
 Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 359070)
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
 @@ -6155,6 +6155,9 @@
    case Intrinsic::experimental_gc_relocate:
@@ -575,7 +699,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    if (HasDef) {
 Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h
 ===================================================================
---- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(revision 359070)
+--- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(working copy)
 @@ -947,6 +947,7 @@
    // These two are implemented in StatepointLowering.cpp
@@ -587,7 +711,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h
  
 Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 359070)
+--- lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/StatepointLowering.cpp	(working copy)
 @@ -541,14 +541,15 @@
    // arrays interwoven with each (lowered) base pointer immediately followed by
@@ -648,7 +772,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    // Consistency check
 Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
 ===================================================================
---- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 359070)
+--- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/TargetLowering.cpp	(working copy)
 @@ -89,6 +89,9 @@
      // (We look for a CopyFromReg reading a virtual register that is used
@@ -662,7 +786,7 @@ Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
      unsigned ArgReg = cast<RegisterSDNode>(Value->getOperand(1))->getReg();
 Index: lib/CodeGen/ShrinkWrap.cpp
 ===================================================================
---- lib/CodeGen/ShrinkWrap.cpp	(revision 359070)
+--- lib/CodeGen/ShrinkWrap.cpp	(revision 365284)
 +++ lib/CodeGen/ShrinkWrap.cpp	(working copy)
 @@ -264,6 +264,8 @@
      LLVM_DEBUG(dbgs() << "Frame instruction: " << MI << '\n');
@@ -686,7 +810,7 @@ Index: lib/CodeGen/ShrinkWrap.cpp
        for (unsigned Reg : getCurrentCSRs(RS)) {
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
---- lib/CodeGen/StackMaps.cpp	(revision 359070)
+--- lib/CodeGen/StackMaps.cpp	(revision 365284)
 +++ lib/CodeGen/StackMaps.cpp	(working copy)
 @@ -30,6 +30,7 @@
  #include "llvm/Support/ErrorHandling.h"
@@ -718,7 +842,7 @@ Index: lib/CodeGen/StackMaps.cpp
    }
 Index: lib/CodeGen/TargetInstrInfo.cpp
 ===================================================================
---- lib/CodeGen/TargetInstrInfo.cpp	(revision 359070)
+--- lib/CodeGen/TargetInstrInfo.cpp	(revision 365284)
 +++ lib/CodeGen/TargetInstrInfo.cpp	(working copy)
 @@ -468,6 +468,7 @@
      StartIdx = StackMapOpers(&MI).getVarIdx();
@@ -746,7 +870,7 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
        isLoadFromStackSlot(LoadMI, FrameIndex)) {
 Index: lib/CodeGen/TargetPassConfig.cpp
 ===================================================================
---- lib/CodeGen/TargetPassConfig.cpp	(revision 359070)
+--- lib/CodeGen/TargetPassConfig.cpp	(revision 365284)
 +++ lib/CodeGen/TargetPassConfig.cpp	(working copy)
 @@ -954,6 +954,7 @@
    if (getOptLevel() != CodeGenOpt::None)
@@ -766,7 +890,7 @@ Index: lib/CodeGen/TargetPassConfig.cpp
    // Insert before XRay Instrumentation.
 Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
---- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 359070)
+--- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 365284)
 +++ lib/ExecutionEngine/ExecutionEngineBindings.cpp	(working copy)
 @@ -200,6 +200,7 @@
           .setErrorStr(&Error)
@@ -778,7 +902,7 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
      builder.setCodeModel(*CM);
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
---- lib/IR/AsmWriter.cpp	(revision 359070)
+--- lib/IR/AsmWriter.cpp	(revision 365284)
 +++ lib/IR/AsmWriter.cpp	(working copy)
 @@ -349,6 +349,12 @@
    case CallingConv::Cold:          Out << "coldcc"; break;
@@ -795,7 +919,7 @@ Index: lib/IR/AsmWriter.cpp
    case CallingConv::CXX_FAST_TLS:  Out << "cxx_fast_tlscc"; break;
 Index: lib/IR/Verifier.cpp
 ===================================================================
---- lib/IR/Verifier.cpp	(revision 359070)
+--- lib/IR/Verifier.cpp	(revision 365284)
 +++ lib/IR/Verifier.cpp	(working copy)
 @@ -2013,7 +2013,8 @@
      Assert(UserCall, "illegal use of statepoint token", Call, U);
@@ -819,7 +943,7 @@ Index: lib/IR/Verifier.cpp
  
 Index: lib/MC/MCAsmStreamer.cpp
 ===================================================================
---- lib/MC/MCAsmStreamer.cpp	(revision 359070)
+--- lib/MC/MCAsmStreamer.cpp	(revision 365284)
 +++ lib/MC/MCAsmStreamer.cpp	(working copy)
 @@ -941,7 +941,7 @@
    if (!Directive) {
@@ -832,7 +956,7 @@ Index: lib/MC/MCAsmStreamer.cpp
      // the request down into several, smaller, integers.
 Index: lib/Target/ARM/ARMAsmPrinter.cpp
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 359070)
+--- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMAsmPrinter.cpp	(working copy)
 @@ -55,7 +55,7 @@
  ARMAsmPrinter::ARMAsmPrinter(TargetMachine &TM,
@@ -991,7 +1115,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.cpp
  //===----------------------------------------------------------------------===//
 Index: lib/Target/ARM/ARMAsmPrinter.h
 ===================================================================
---- lib/Target/ARM/ARMAsmPrinter.h	(revision 359070)
+--- lib/Target/ARM/ARMAsmPrinter.h	(revision 365284)
 +++ lib/Target/ARM/ARMAsmPrinter.h	(working copy)
 @@ -12,6 +12,7 @@
  
@@ -1031,7 +1155,7 @@ Index: lib/Target/ARM/ARMAsmPrinter.h
      // ARM/Darwin adds ISA to the DWARF info for each function.
 Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 359070)
+--- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMBaseInstrInfo.cpp	(working copy)
 @@ -721,6 +721,10 @@
      return 0;
@@ -1127,7 +1251,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    // widened to VMOVD.  We prefer the VMOVD when possible because it may be
 Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
---- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 359070)
+--- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 365284)
 +++ lib/Target/ARM/ARMBaseInstrInfo.h	(working copy)
 @@ -398,6 +398,8 @@
    virtual void expandLoadStackGuard(MachineBasicBlock::iterator MI) const = 0;
@@ -1140,7 +1264,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.h
    /// Modeling special VFP / NEON fp MLA / MLS hazards.
 Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
---- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 359070)
+--- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
 @@ -90,6 +90,10 @@
        // exception handling.
@@ -1223,7 +1347,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +}
 Index: lib/Target/ARM/ARMBaseRegisterInfo.h
 ===================================================================
---- lib/Target/ARM/ARMBaseRegisterInfo.h	(revision 359070)
+--- lib/Target/ARM/ARMBaseRegisterInfo.h	(revision 365284)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.h	(working copy)
 @@ -210,6 +210,8 @@
                        unsigned DstSubReg,
@@ -1236,7 +1360,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.h
  } // end namespace llvm
 Index: lib/Target/ARM/ARMCallingConv.td
 ===================================================================
---- lib/Target/ARM/ARMCallingConv.td	(revision 359070)
+--- lib/Target/ARM/ARMCallingConv.td	(revision 365284)
 +++ lib/Target/ARM/ARMCallingConv.td	(working copy)
 @@ -239,6 +239,61 @@
  ]>;
@@ -1314,7 +1438,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  
 Index: lib/Target/ARM/ARMConstantIslandPass.cpp
 ===================================================================
---- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 359070)
+--- lib/Target/ARM/ARMConstantIslandPass.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMConstantIslandPass.cpp	(working copy)
 @@ -241,6 +241,7 @@
      CPEntry *findConstPoolEntry(unsigned CPI, const MachineInstr *CPEMI);
@@ -1385,7 +1509,7 @@ Index: lib/Target/ARM/ARMConstantIslandPass.cpp
  /// and finding all of the constant pool users.
 Index: lib/Target/ARM/ARMFastISel.cpp
 ===================================================================
---- lib/Target/ARM/ARMFastISel.cpp	(revision 359070)
+--- lib/Target/ARM/ARMFastISel.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMFastISel.cpp	(working copy)
 @@ -1890,6 +1890,10 @@
        report_fatal_error("Can't return in GHC call convention");
@@ -1400,7 +1524,7 @@ Index: lib/Target/ARM/ARMFastISel.cpp
  
 Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.cpp	(revision 359070)
+--- lib/Target/ARM/ARMFrameLowering.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
 @@ -122,6 +122,9 @@
  /// included as part of the stack frame.
@@ -2094,7 +2218,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +}
 Index: lib/Target/ARM/ARMFrameLowering.h
 ===================================================================
---- lib/Target/ARM/ARMFrameLowering.h	(revision 359070)
+--- lib/Target/ARM/ARMFrameLowering.h	(revision 365284)
 +++ lib/Target/ARM/ARMFrameLowering.h	(working copy)
 @@ -31,6 +31,8 @@
    /// the function.
@@ -2119,7 +2243,7 @@ Index: lib/Target/ARM/ARMFrameLowering.h
                      const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
 Index: lib/Target/ARM/ARMISelDAGToDAG.cpp
 ===================================================================
---- lib/Target/ARM/ARMISelDAGToDAG.cpp	(revision 359070)
+--- lib/Target/ARM/ARMISelDAGToDAG.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMISelDAGToDAG.cpp	(working copy)
 @@ -13,6 +13,7 @@
  
@@ -2147,7 +2271,7 @@ Index: lib/Target/ARM/ARMISelDAGToDAG.cpp
      SelectionDAGISel::runOnMachineFunction(MF);
 Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.cpp	(revision 359070)
+--- lib/Target/ARM/ARMISelLowering.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
 @@ -1388,6 +1388,7 @@
    case ARMISD::VBICIMM:       return "ARMISD::VBICIMM";
@@ -2304,7 +2428,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      return false;
 Index: lib/Target/ARM/ARMISelLowering.h
 ===================================================================
---- lib/Target/ARM/ARMISelLowering.h	(revision 359070)
+--- lib/Target/ARM/ARMISelLowering.h	(revision 365284)
 +++ lib/Target/ARM/ARMISelLowering.h	(working copy)
 @@ -233,6 +233,8 @@
        // Pseudo-instruction representing a memory copy using ldm/stm
@@ -2329,7 +2453,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
      unsigned
 Index: lib/Target/ARM/ARMInstrInfo.td
 ===================================================================
---- lib/Target/ARM/ARMInstrInfo.td	(revision 359070)
+--- lib/Target/ARM/ARMInstrInfo.td	(revision 365284)
 +++ lib/Target/ARM/ARMInstrInfo.td	(working copy)
 @@ -79,6 +79,7 @@
  def SDT_ARMMEMCPY  : SDTypeProfile<2, 3, [SDTCisVT<0, i32>, SDTCisVT<1, i32>,
@@ -2367,7 +2491,7 @@ Index: lib/Target/ARM/ARMInstrInfo.td
  }]>;
 Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 ===================================================================
---- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 359070)
+--- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 365284)
 +++ lib/Target/ARM/ARMMachineFunctionInfo.h	(working copy)
 @@ -85,6 +85,7 @@
    /// areas.
@@ -2426,7 +2550,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  } // end namespace llvm
 Index: lib/Target/ARM/ARMTargetTransformInfo.h
 ===================================================================
---- lib/Target/ARM/ARMTargetTransformInfo.h	(revision 359070)
+--- lib/Target/ARM/ARMTargetTransformInfo.h	(revision 365284)
 +++ lib/Target/ARM/ARMTargetTransformInfo.h	(working copy)
 @@ -47,6 +47,7 @@
  
@@ -2456,7 +2580,7 @@ Index: lib/Target/ARM/ARMTargetTransformInfo.h
      // lookup tables if any of the values would need relocation.
 Index: lib/Target/Target.cpp
 ===================================================================
---- lib/Target/Target.cpp	(revision 359070)
+--- lib/Target/Target.cpp	(revision 365284)
 +++ lib/Target/Target.cpp	(working copy)
 @@ -66,6 +66,12 @@
    unwrap(PM)->add(new TargetLibraryInfoWrapperPass(*unwrap(TLI)));
@@ -2473,7 +2597,7 @@ Index: lib/Target/Target.cpp
    return strdup(StringRep.c_str());
 Index: lib/Transforms/IPO/PassManagerBuilder.cpp
 ===================================================================
---- lib/Transforms/IPO/PassManagerBuilder.cpp	(revision 359070)
+--- lib/Transforms/IPO/PassManagerBuilder.cpp	(revision 365284)
 +++ lib/Transforms/IPO/PassManagerBuilder.cpp	(working copy)
 @@ -34,6 +34,7 @@
  #include "llvm/Transforms/IPO/ForceFunctionAttrs.h"
@@ -2512,7 +2636,7 @@ Index: lib/Transforms/IPO/PassManagerBuilder.cpp
      PM.add(createPruneEHPass());
 Index: lib/Transforms/IPO/SampleProfile.cpp
 ===================================================================
---- lib/Transforms/IPO/SampleProfile.cpp	(revision 359070)
+--- lib/Transforms/IPO/SampleProfile.cpp	(revision 365284)
 +++ lib/Transforms/IPO/SampleProfile.cpp	(working copy)
 @@ -1669,3 +1669,7 @@
  
@@ -2524,7 +2648,7 @@ Index: lib/Transforms/IPO/SampleProfile.cpp
 +}
 Index: lib/Transforms/Vectorize/LoopVectorize.cpp
 ===================================================================
---- lib/Transforms/Vectorize/LoopVectorize.cpp	(revision 359070)
+--- lib/Transforms/Vectorize/LoopVectorize.cpp	(revision 365284)
 +++ lib/Transforms/Vectorize/LoopVectorize.cpp	(working copy)
 @@ -7512,6 +7512,14 @@
    }
@@ -2543,7 +2667,7 @@ Index: lib/Transforms/Vectorize/LoopVectorize.cpp
  
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
---- tools/llvm-shlib/CMakeLists.txt	(revision 359070)
+--- tools/llvm-shlib/CMakeLists.txt	(revision 365284)
 +++ tools/llvm-shlib/CMakeLists.txt	(working copy)
 @@ -64,6 +64,7 @@
    endif()
@@ -2555,7 +2679,7 @@ Index: tools/llvm-shlib/CMakeLists.txt
      set_property(TARGET LLVM APPEND_STRING PROPERTY
 Index: tools/llvm-shlib/simple_version_script.map.in
 ===================================================================
---- tools/llvm-shlib/simple_version_script.map.in	(revision 359070)
+--- tools/llvm-shlib/simple_version_script.map.in	(revision 365284)
 +++ tools/llvm-shlib/simple_version_script.map.in	(working copy)
 @@ -1 +1 @@
 -LLVM_@LLVM_VERSION_MAJOR@ { global: *; };
