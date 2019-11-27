@@ -1168,7 +1168,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    case ARM::MOVi16_ga_pcrel:
    case ARM::MOVTi16_ga_pcrel:
    case ARM::t2MOVi16_ga_pcrel:
-@@ -1462,6 +1466,68 @@
+@@ -1462,6 +1466,72 @@
    BB->erase(MI);
  }
  
@@ -1180,6 +1180,10 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +  MachineBasicBlock::iterator end = MI->getParent()->end();
 +  for (; it != end; ++it) {
 +    bool IsDef = false, IsUse = false;
++    if (it->isCall()) {
++      ShouldExpand = true;
++      break;
++    }
 +    for (unsigned i = 0, e = it->getNumOperands(); i != e; ++i) {
 +      const MachineOperand &MO = it->getOperand(i);
 +      if (!MO.isReg())
@@ -1237,7 +1241,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
  bool ARMBaseInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
    if (MI.getOpcode() == TargetOpcode::LOAD_STACK_GUARD) {
      assert(getSubtarget().getTargetTriple().isOSBinFormatMachO() &&
-@@ -1476,6 +1542,11 @@
+@@ -1476,6 +1546,11 @@
      return true;
    }
  
