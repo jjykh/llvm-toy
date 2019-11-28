@@ -1,16 +1,18 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
 #include "src/llvm/compile.h"
+
+#include <assert.h>
 #include <fcntl.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <assert.h>
-#include <string.h>
 #include <memory>
+
 #include "src/llvm/compiler-state.h"
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 
 #define SECTION_NAME_PREFIX "."
 #define SECTION_NAME(NAME) (SECTION_NAME_PREFIX NAME)

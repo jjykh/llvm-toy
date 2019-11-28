@@ -2,7 +2,7 @@
 
 #include "src/llvm/exception-table-arm.h"
 
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 #include "src/llvm/stack-maps.h"
 namespace v8 {
 namespace internal {

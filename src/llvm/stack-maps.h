@@ -4,10 +4,12 @@
 #define STACK_MAPS_H
 #include <assert.h>
 #include <stdint.h>
+
 #include <bitset>
 #include <unordered_map>
 #include <vector>
-#include "src/llvm/log.h"
+
+#include "src/llvm/llvm-log.h"
 namespace v8 {
 namespace internal {
 namespace tf_llvm {

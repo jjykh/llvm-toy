@@ -1,6 +1,7 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
-#include "log.h"
+#include "src/llvm/llvm-log.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/syscall.h> /* For SYS_xxx definitions */

@@ -1,10 +1,12 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
 #include "src/llvm/output.h"
+
 #include <llvm-c/DebugInfo.h>
+
 #include "src/frames.h"
 #include "src/llvm/compiler-state.h"
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 
 namespace v8 {
 namespace internal {
@@ -597,8 +599,7 @@ void Output::AddFunctionCommonAttr(LValue function) {
 
   static const char kFS[] = "target-features";
   static const char kFSValue[] =
-      "+armv7-a,+dsp,+neon,+vfp3,-crypto,-d16,-fp-armv8,-fp-only-sp,-fp16,"
-      "-thumb-mode,-vfp4";
+      "+armv7-a,+dsp,+neon,+vfp3,-crypto,-fp-armv8,-fp16,-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
 }
 }  // namespace tf_llvm
