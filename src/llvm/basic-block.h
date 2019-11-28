@@ -3,10 +3,12 @@
 #ifndef BASIC_BLOCK_H
 #define BASIC_BLOCK_H
 #include <assert.h>
+
 #include <set>
 #include <vector>
+
 #include "src/llvm/common-values.h"
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 
 namespace v8 {
 namespace internal {

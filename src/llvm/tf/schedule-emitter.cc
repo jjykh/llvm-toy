@@ -3,6 +3,7 @@
 #include "src/llvm/tf/schedule-emitter.h"
 
 #include <unordered_map>
+
 #include "src/builtins/constants-table-builder.h"
 #include "src/codegen/turbo-assembler.h"
 #include "src/compiler/common-operator.h"
@@ -10,7 +11,7 @@
 #include "src/compiler/machine-operator.h"
 #include "src/compiler/node.h"
 #include "src/compiler/schedule.h"
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 #include "src/llvm/tf/tf-visitor.h"
 #include "src/objects/objects-inl.h"
 #include "src/snapshot/serializer-common.h"

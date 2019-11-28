@@ -1,7 +1,8 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
 #include "src/llvm/load-constant-recorder.h"
-#include "src/llvm/log.h"
+
+#include "src/llvm/llvm-log.h"
 
 namespace v8 {
 namespace internal {

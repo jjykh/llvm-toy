@@ -10,7 +10,7 @@ index b3e9762a93..06558cde43 100644
 +*.so binary
 +
 diff --git a/BUILD.gn b/BUILD.gn
-index c486f1a1c8..7e4d7d6b85 100644
+index c486f1a1c8..883703ddff 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -202,6 +202,20 @@ declare_args() {
@@ -42,7 +42,7 @@ index c486f1a1c8..7e4d7d6b85 100644
 +if (v8_enable_llvm) {
 +  config("llvm_configs") {
 +    include_dirs = [ "src/llvm/include" ]
-+    libs = [ "LLVM-8" ]
++    libs = [ "LLVM-9" ]
 +    defines = [ "LLVMLOG_LEVEL=1" ]
 +    ldflags = [ "-Wl,-rpath,../../v8/lib" ]
 +
@@ -101,8 +101,8 @@ index c486f1a1c8..7e4d7d6b85 100644
 +      "src/llvm/llvm-tf-builder.h",
 +      "src/llvm/load-constant-recorder.cc",
 +      "src/llvm/load-constant-recorder.h",
-+      "src/llvm/log.cpp",
-+      "src/llvm/log.h",
++      "src/llvm/llvm-log.cc",
++      "src/llvm/llvm-log.h",
 +      "src/llvm/output.cc",
 +      "src/llvm/output.h",
 +      "src/llvm/stack-map-info.cc",
@@ -1112,14 +1112,17 @@ index f5f7184613..fcfd1577bd 100644
  
    if (FLAG_prof_browser_mode) {
 diff --git a/src/snapshot/serializer-common.h b/src/snapshot/serializer-common.h
-index 2a30fefe33..eecd7043f7 100644
+index 2a30fefe33..2bc0c5d399 100644
 --- a/src/snapshot/serializer-common.h
 +++ b/src/snapshot/serializer-common.h
-@@ -332,8 +332,13 @@ class SerializedData {
+@@ -332,8 +332,16 @@ class SerializedData {
    using IsLastChunkBits = BitField<bool, 31, 1>;
  
    static constexpr uint32_t kMagicNumberOffset = 0;
-+#if defined(UC_BUILD)
++#if defined(UC_BUILD_TF_LLVM_BACKEND)
++  static constexpr uint32_t kMagicNumber =
++      0xD0DEBA00 ^ ExternalReferenceTable::kSize;
++#elif defined(UC_BUILD)
 +  static constexpr uint32_t kMagicNumber =
 +      0xD0DEBD00 ^ ExternalReferenceTable::kSize;
 +#else

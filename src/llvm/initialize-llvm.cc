@@ -1,12 +1,13 @@
 // Copyright 2019 UCWeb Co., Ltd.
 
+#include "src/llvm/initialize-llvm.h"
+
 #include <assert.h>
+#include <llvm-c/Support.h>
 #include <stdio.h>
 
-#include <llvm-c/Support.h>
-#include "src/llvm/initialize-llvm.h"
 #include "src/llvm/llvm-headers.h"
-#include "src/llvm/log.h"
+#include "src/llvm/llvm-log.h"
 
 namespace v8 {
 namespace internal {
