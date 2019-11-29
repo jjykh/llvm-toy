@@ -690,10 +690,13 @@ void StoreBarrierResolver::CallPatchpoint(
   int instructions_count = 1;
   int patchid = patch_point_id_;
   // will not be true again.
-  LValue stub = get_record_write();
-  LValue stub_entry = output().buildGEPWithByteOffset(
-      stub, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
-      output().repo().ref8);
+  LValue stub_entry = LLVMGetUndef(output().repo().ref8);
+  if (!FLAG_embedded_builtins) {
+    LValue stub = get_record_write();
+    stub_entry = output().buildGEPWithByteOffset(
+        stub, output().constInt32(Code::kHeaderSize - kHeapObjectTag),
+        output().repo().ref8);
+  }
 
   LValue call = output().buildCall(
       output().repo().patchpointVoidIntrinsic(), output().constInt64(patchid),

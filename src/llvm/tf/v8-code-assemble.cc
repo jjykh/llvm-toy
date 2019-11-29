@@ -142,7 +142,15 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
 
 int CodeAssemblerLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   int pc_offset = tasm_.pc_offset();
-  tasm_.blx(ip);
+  if (!FLAG_embedded_builtins) {
+    tasm_.blx(ip);
+  } else {
+    Handle<Code> code =
+        tasm_.isolate()->builtins()->builtin_handle(Builtins::kRecordWrite);
+    int code_target_index = tasm_.LLVMAddCodeTarget(code);
+    relocation_processor_.EmitRelativeCall(tasm_.pc_offset());
+    tasm_.bl(code_target_index * kInstrSize);
+  }
   CHECK(0 == ((tasm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
