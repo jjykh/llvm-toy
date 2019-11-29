@@ -20,6 +20,9 @@ ReturnInfo::ReturnInfo()
     : StackMapInfo(StackMapInfoType::kReturn),
       pop_count_is_constant_(false),
       constant_(0) {}
+
+StoreBarrierInfo::StoreBarrierInfo()
+    : StackMapInfo(StackMapInfoType::kStoreBarrier), write_barrier_kind_(0) {}
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

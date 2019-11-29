@@ -2,17 +2,18 @@
 
 #include "src/llvm/tf/v8-code-assemble.h"
 
-#include "src/codegen/assembler-inl.h"
-#include "src/llvm/compiler-state.h"
-#include "src/llvm/exception-table-arm.h"
-#include "src/llvm/stack-maps.h"
-
 #include <unordered_set>
+
+#include "src/codegen/assembler-inl.h"
 #include "src/codegen/callable.h"
 #include "src/codegen/macro-assembler.h"
 #include "src/codegen/safepoint-table.h"
+#include "src/compiler/write-barrier-kind.h"
 #include "src/handles/handles-inl.h"
 #include "src/heap/factory.h"
+#include "src/llvm/compiler-state.h"
+#include "src/llvm/exception-table-arm.h"
+#include "src/llvm/stack-maps.h"
 
 namespace v8 {
 namespace internal {
@@ -46,7 +47,7 @@ class CodeAssemblerLLVM {
 
  private:
   int HandleCall(const CallInfo*, const StackMaps::Record&);
-  int HandleStoreBarrier(const StackMaps::Record&);
+  int HandleStoreBarrier(const StoreBarrierInfo*, const StackMaps::Record&);
   int HandleReturn(const ReturnInfo*, const StackMaps::Record&);
   int HandleStackMapInfo(const StackMapInfo* stack_map_info,
                          const StackMaps::Record* record);
@@ -140,13 +141,23 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
   return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
-int CodeAssemblerLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
+int CodeAssemblerLLVM::HandleStoreBarrier(const StoreBarrierInfo* info,
+                                          const StackMaps::Record& r) {
   int pc_offset = tasm_.pc_offset();
   if (!FLAG_embedded_builtins) {
     tasm_.blx(ip);
   } else {
+    int builtin_index;
+    switch (info->write_barrier_kind()) {
+      case compiler::kEphemeronKeyWriteBarrier:
+        builtin_index = Builtins::kEphemeronKeyBarrier;
+        break;
+      default:
+        builtin_index = Builtins::kRecordWrite;
+        break;
+    }
     Handle<Code> code =
-        tasm_.isolate()->builtins()->builtin_handle(Builtins::kRecordWrite);
+        tasm_.isolate()->builtins()->builtin_handle(builtin_index);
     int code_target_index = tasm_.LLVMAddCodeTarget(code);
     relocation_processor_.EmitRelativeCall(tasm_.pc_offset());
     tasm_.bl(code_target_index * kInstrSize);
@@ -176,7 +187,8 @@ int CodeAssemblerLLVM::HandleStackMapInfo(const StackMapInfo* stack_map_info,
     case StackMapInfoType::kCallInfo:
       return HandleCall(static_cast<const CallInfo*>(stack_map_info), *record);
     case StackMapInfoType::kStoreBarrier:
-      return HandleStoreBarrier(*record);
+      return HandleStoreBarrier(
+          static_cast<const StoreBarrierInfo*>(stack_map_info), *record);
     case StackMapInfoType::kReturn:
       return HandleReturn(static_cast<const ReturnInfo*>(stack_map_info),
                           *record);

@@ -257,6 +257,7 @@ class StoreBarrierResolver final : public ContinuationResolver {
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
                       LValue save_fp_mode,
+                      compiler::WriteBarrierKind barrier_kind,
                       std::function<LValue()> record_write);
   void CheckSmi(LValue value);
   StackMapInfoMap* stack_map_info_map_;
@@ -650,7 +651,8 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
   CallPatchpoint(
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
-      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), record_write);
+      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), barrier_kind,
+      record_write);
   output().buildBr(impl_->continuation);
   output().positionToBBEnd(impl_->continuation);
 }
@@ -684,7 +686,8 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
 
 void StoreBarrierResolver::CallPatchpoint(
     LValue base, LValue offset, LValue remembered_set_action,
-    LValue save_fp_mode, std::function<LValue()> get_record_write) {
+    LValue save_fp_mode, compiler::WriteBarrierKind barrier_kind,
+    std::function<LValue()> get_record_write) {
   // blx ip
   // 1 instructions.
   int instructions_count = 1;
@@ -706,8 +709,10 @@ void StoreBarrierResolver::CallPatchpoint(
       LLVMGetUndef(typeOf(output().root())),
       LLVMGetUndef(typeOf(output().fp())), stub_entry);
   LLVMSetInstructionCallConv(call, LLVMV8SBCallConv);
-  std::unique_ptr<StackMapInfo> info(
-      new StackMapInfo(StackMapInfoType::kStoreBarrier));
+  std::unique_ptr<StoreBarrierInfo> info(new StoreBarrierInfo());
+  info->set_write_barrier_kind(barrier_kind);
+  EMASSERT(barrier_kind == compiler::kFullWriteBarrier ||
+           FLAG_embedded_builtins);
   stack_map_info_map_->emplace(patchid, std::move(info));
 }
 

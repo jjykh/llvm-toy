@@ -62,6 +62,17 @@ class ReturnInfo final : public StackMapInfo {
   int constant_;
 };
 
+class StoreBarrierInfo final : public StackMapInfo {
+ public:
+  StoreBarrierInfo();
+  ~StoreBarrierInfo() override = default;
+  inline uint8_t write_barrier_kind() const { return write_barrier_kind_; }
+  inline void set_write_barrier_kind(uint8_t wbk) { write_barrier_kind_ = wbk; }
+
+ private:
+  uint8_t write_barrier_kind_;
+};
+
 // By zuojian.lzj, should be int64_t. But I believe there will not be any number
 // greater.
 typedef std::unordered_map<int, std::unique_ptr<StackMapInfo>> StackMapInfoMap;
