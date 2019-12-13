@@ -1168,12 +1168,7 @@ void LLVMTFBuilder::VisitParameter(int id, int pid) {
 
 void LLVMTFBuilder::VisitLoadParentFramePointer(int id) {
   output().setLineNumber(id);
-  LValue fp = output().fp();
-  if (basic_block_manager().needs_frame())
-    GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().parent_fp());
-  else
-    GetBuilderImpl(current_bb_)
-        ->SetLLVMValue(id, output().buildBitCast(fp, output().repo().ref8));
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().parent_fp());
 }
 
 void LLVMTFBuilder::VisitIdentity(int id, int value) {

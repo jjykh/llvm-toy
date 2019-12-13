@@ -176,7 +176,8 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   else
     setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
 
-  if (state_.needs_frame_) {
+  // Setup function's frame.
+  {
     static const char kJSFunctionCall[] = "js-function-call";
     static const char kJSStubCall[] = "js-stub-call";
     switch (state_.prologue_kind_) {

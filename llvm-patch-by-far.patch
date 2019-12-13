@@ -1712,29 +1712,37 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    return true;
  }
-@@ -1623,6 +1699,21 @@
+@@ -1623,6 +1699,7 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
 +
-+  if (AFI->isJSFunction() || AFI->isJSStub()) {
-+    SavedRegs.set(ARM::R11);
-+    SavedRegs.set(ARM::LR);
-+    CanEliminateFrame = false;
-+  }
-+
-+  if (AFI->isJSFunction()) {
-+    SavedRegs.set(ARM::R0);
-+    SavedRegs.set(ARM::R1);
-+    SavedRegs.set(ARM::R7);
-+  } else if (AFI->isWASM()) {
-+    SavedRegs.set(ARM::R3);
-+  }
-+
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1841,7 +1932,10 @@
+@@ -1736,6 +1813,21 @@
+     }
+   }
+ 
++  if (!CanEliminateFrame) {
++    if (AFI->isJSFunction() || AFI->isJSStub()) {
++      SavedRegs.set(ARM::R11);
++      SavedRegs.set(ARM::LR);
++    }
++
++    if (AFI->isJSFunction()) {
++      SavedRegs.set(ARM::R0);
++      SavedRegs.set(ARM::R1);
++      SavedRegs.set(ARM::R7);
++    } else if (AFI->isWASM()) {
++      SavedRegs.set(ARM::R3);
++    }
++  }
++
+   bool ForceLRSpill = false;
+   if (!LRSpilled && AFI->isThumb1OnlyFunction()) {
+     unsigned FnSize = EstimateFunctionSizeInBytes(MF, TII);
+@@ -1841,7 +1933,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -1746,7 +1754,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1855,7 +1949,6 @@
+@@ -1855,7 +1950,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -1754,7 +1762,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2112,12 +2205,13 @@
+@@ -2112,12 +2206,13 @@
      DebugLoc dl = Old.getDebugLoc();
      unsigned Amount = TII.getFrameSize(Old);
      if (Amount != 0) {
@@ -1770,7 +1778,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        assert(!AFI->isThumb1OnlyFunction() &&
               "This eliminateCallFramePseudoInstr does not support Thumb1!");
        bool isARM = !AFI->isThumbFunction();
-@@ -2132,7 +2226,7 @@
+@@ -2132,7 +2227,7 @@
        if (Opc == ARM::ADJCALLSTACKDOWN || Opc == ARM::tADJCALLSTACKDOWN) {
          emitSPUpdate(isARM, MBB, I, dl, TII, -Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
@@ -1779,7 +1787,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
-@@ -2580,3 +2674,451 @@
+@@ -2580,3 +2675,464 @@
    MF.verify();
  #endif
  }
@@ -1875,6 +1883,16 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  StackAdjustingInsts DefCFAOffsetCandidates;
 +  bool HasFP = hasFP(MF);
 +
++  if (!AFI->hasStackFrame()) {
++    if (NumBytes != 0) {
++      emitSPUpdate(isARM, MBB, MBBI, dl, TII, -NumBytes,
++                   MachineInstr::FrameSetup);
++      DefCFAOffsetCandidates.addInst(std::prev(MBBI), NumBytes, true);
++    }
++    DefCFAOffsetCandidates.emitDefCFAOffsets(MBB, dl, TII, HasFP);
++    return;
++  }
++
 +  // Determine spill area sizes.
 +  for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
 +    unsigned Reg = CSI[i].getReg();
@@ -1923,11 +1941,14 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  unsigned DPRGapSize = (GPRCS1Size + GPRCS2Size + GPRCS3Size) % DPRAlign;
 +  unsigned DPRCSOffset = GPRCS3Offset - DPRGapSize - DPRCSSize;
 +  int FramePtrOffsetInPush = 0;
-+  int FPOffset = MFI.getObjectOffset(FramePtrSpillFI);
-+  assert(getMaxFPOffset(MF.getFunction(), *AFI) <= FPOffset &&
-+         "Max FP estimation is wrong");
-+  FramePtrOffsetInPush = FPOffset;
-+  AFI->setFramePtrSpillOffset(MFI.getObjectOffset(FramePtrSpillFI) + NumBytes);
++  if (FramePtrSpillFI) {
++    int FPOffset = MFI.getObjectOffset(FramePtrSpillFI);
++    assert(getMaxFPOffset(MF.getFunction(), *AFI) <= FPOffset &&
++           "Max FP estimation is wrong");
++    FramePtrOffsetInPush = FPOffset;
++    AFI->setFramePtrSpillOffset(MFI.getObjectOffset(FramePtrSpillFI) +
++                                NumBytes);
++  }
 +  AFI->setGPRCalleeSavedArea1Offset(GPRCS1Offset);
 +  AFI->setGPRCalleeSavedArea2Offset(GPRCS2Offset);
 +  AFI->setDPRCalleeSavedAreaOffset(DPRCSOffset);
