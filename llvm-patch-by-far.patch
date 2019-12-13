@@ -171,35 +171,6 @@ Index: include/llvm-c/Target.h
  /** Converts target data to a target layout string. The string must be disposed
      with LLVMDisposeMessage.
      See the constructor llvm::DataLayout::DataLayout. */
-Index: lib/Analysis/BranchProbabilityInfo.cpp
-===================================================================
---- lib/Analysis/BranchProbabilityInfo.cpp	(revision 375507)
-+++ lib/Analysis/BranchProbabilityInfo.cpp	(working copy)
-@@ -301,7 +301,13 @@
-   assert(WeightSum <= UINT32_MAX &&
-          "Expected weights to scale down to 32 bits");
- 
--  if (WeightSum == 0 || ReachableIdxs.size() == 0) {
-+  bool NoUnreachableHeuristic = false;
-+  CallingConv::ID CC = BB->getParent()->getCallingConv();
-+  if ((CC == CallingConv::V8CC) || (CC == CallingConv::V8SBCC))
-+    NoUnreachableHeuristic = true;
-+
-+  if (!NoUnreachableHeuristic &&
-+      (WeightSum == 0 || ReachableIdxs.size() == 0)) {
-     for (unsigned i = 0, e = TI->getNumSuccessors(); i != e; ++i)
-       Weights[i] = 1;
-     WeightSum = TI->getNumSuccessors();
-@@ -314,7 +320,8 @@
- 
-   // Examine the metadata against unreachable heuristic.
-   // If the unreachable heuristic is more strong then we use it for this edge.
--  if (UnreachableIdxs.size() > 0 && ReachableIdxs.size() > 0) {
-+  if (!NoUnreachableHeuristic &&
-+      (UnreachableIdxs.size() > 0 && ReachableIdxs.size() > 0)) {
-     auto ToDistribute = BranchProbability::getZero();
-     auto UnreachableProb = UR_TAKEN_PROB;
-     for (auto i : UnreachableIdxs)
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
 --- lib/AsmParser/LLLexer.cpp	(revision 375507)
@@ -616,7 +587,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    case Intrinsic::instrprof_increment:
      llvm_unreachable("instrprof failed to lower an increment");
    case Intrinsic::instrprof_value_profile:
-@@ -8657,6 +8660,32 @@
+@@ -8657,6 +8660,40 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
@@ -624,10 +595,6 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 +  const Instruction *I = CS.getInstruction();
 +  const BasicBlock *ExitBB = I->getParent();
 +  const Instruction *Term = ExitBB->getTerminator();
-+  const ReturnInst *Ret = dyn_cast<ReturnInst>(Term);
-+  // If Term is not a ReturnInst, then it must be a UnreachableInst.
-+  if (!Ret && !isa<UnreachableInst>(Term))
-+    return false;
 +  // Copy from isInTailCallPosition.
 +  // If I will have a chain, make sure no other instruction that will have a
 +  // chain interposes between I and the return.
@@ -643,13 +610,25 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 +          !isSafeToSpeculativelyExecute(&*BBI))
 +        return false;
 +    }
-+  return true;
++  if (isa<ReturnInst>(Term))
++    return true;
++  // Terminator must be a branch inst here
++  if (!isa<BranchInst>(Term))
++    return false;
++  const BranchInst *br = dyn_cast<BranchInst>(Term);
++  if (!br->isUnconditional())
++    return false;
++  const BasicBlock *bb = br->getSuccessor(0);
++  // This bb must contains only ret
++  if (bb->size() == 1 && isa<ReturnInst>(bb->getTerminator()))
++    return true;
++  return false;
 +}
 +
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8700,17 +8729,25 @@
+@@ -8700,17 +8737,25 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, cast<CallBase>(CS.getInstruction()),
                             NumMetaOpers, NumCallArgs, Callee, ReturnTy, true);
@@ -683,7 +662,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8781,8 +8818,9 @@
+@@ -8781,8 +8826,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.

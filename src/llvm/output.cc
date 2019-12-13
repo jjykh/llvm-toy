@@ -375,6 +375,10 @@ LValue Output::buildRetVoid(void) {
   return setInstrDebugLoc(v8::internal::tf_llvm::buildRetVoid(builder_));
 }
 
+void Output::buildReturnForTailCall() {
+  buildRet(LLVMGetUndef(taggedType()));
+}
+
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
   return setInstrDebugLoc(LLVMBuildCast(builder_, Op, Val, DestTy, ""));
 }

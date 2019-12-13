@@ -1034,7 +1034,7 @@ void LLVMTFBuilder::DoTailCall(int id, CallMode mode,
                                const CallDescriptor& call_desc,
                                const OperandsVector& operands) {
   DoCall(id, mode, call_desc, operands, true);
-  output().buildUnreachable();
+  output().buildReturnForTailCall();
 }
 
 void LLVMTFBuilder::DoCall(int id, CallMode mode,
@@ -2578,7 +2578,7 @@ void LLVMTFBuilder::VisitReturn(int id, int pop_count,
       constNull(output().repo().ref8), output().constInt32(3), return_values[0],
       return_values[1], pop_count_value);
   LLVMSetInstructionCallConv(call, LLVMV8CallConv);
-  output().buildUnreachable();
+  output().buildReturnForTailCall();
   stack_map_info_map_->emplace(patchid, std::move(info));
 }
 

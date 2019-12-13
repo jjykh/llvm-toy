@@ -73,6 +73,7 @@ class Output {
   LValue buildSwitch(LValue, LBasicBlock, unsigned);
   LValue buildCondBr(LValue condition, LBasicBlock taken, LBasicBlock notTaken);
   LValue buildRet(LValue ret);
+  void buildReturnForTailCall();
   LValue buildRetVoid(void);
   LValue buildSelect(LValue condition, LValue taken, LValue notTaken);
   LValue buildICmp(LIntPredicate cond, LValue left, LValue right);
