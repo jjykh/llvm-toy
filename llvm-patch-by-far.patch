@@ -1787,7 +1787,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
-@@ -2580,3 +2675,464 @@
+@@ -2580,3 +2675,467 @@
    MF.verify();
  #endif
  }
@@ -1803,12 +1803,12 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  int FixedOffset;
 +  if (AFI->isJSStub()) {
 +    MFI.CreateFixedSpillStackObject(4, -12);
-+    FixedOffset = -16;
++    FixedOffset = -12;
 +    if (AFI->isWASM()) {
 +      // wasm instance for v8.
 +      CSI.emplace_back(ARM::R3);
 +      CSI.back().setFrameIdx(MFI.CreateFixedSpillStackObject(4, -16));
-+      FixedOffset = -20;
++      FixedOffset = -16;
 +    }
 +  } else {
 +    int CPFI = MFI.CreateFixedSpillStackObject(4, -12);  // cp
@@ -1820,7 +1820,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    CSI.back().setFrameIdx(FunFI);
 +    CSI.emplace_back(ARM::R0);
 +    CSI.back().setFrameIdx(ArgFI);
-+    FixedOffset = -24;
++    FixedOffset = -20;
 +  }
 +
 +  for (auto &i : CSI) {
@@ -1829,14 +1829,17 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +    } else if (i.getReg() == ARM::R11) {
 +      i.setFrameIdx(MFI.CreateFixedSpillStackObject(4, -8));
 +    } else if (i.getReg() >= ARM::R5 && i.getReg() < ARM::R9) {
-+      i.setFrameIdx(MFI.CreateFixedSpillStackObject(4, FixedOffset));
 +      FixedOffset -= 4;
++      i.setFrameIdx(MFI.CreateFixedSpillStackObject(4, FixedOffset));
 +    }
 +  }
++  
++  unsigned Align = STI.getFrameLowering()->getStackAlignment();
++  FixedOffset &= ~(Align - 1);
 +  for (auto &i : CSI) {
-+    if (i.getReg() >= ARM::D0 && i.getReg() <= ARM::D15) {
-+      i.setFrameIdx(MFI.CreateFixedSpillStackObject(8, FixedOffset));
++    if (i.getReg() >= ARM::D0 && i.getReg() <= ARM::D31) {
 +      FixedOffset -= 8;
++      i.setFrameIdx(MFI.CreateFixedSpillStackObject(8, FixedOffset));
 +    }
 +  }
 +  return true;
@@ -1920,7 +1923,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +      // This is a DPR. Exclude the aligned DPRCS2 spills.
 +      if (Reg == ARM::D8)
 +        D8SpillFI = FI;
-+      if (Reg < ARM::D8 || Reg >= ARM::D8 + AFI->getNumAlignedDPRCS2Regs())
++      if ((Reg <= ARM::D31) && (Reg >= ARM::D0))
 +        DPRCSSize += 8;
 +    }
 +  }
