@@ -529,15 +529,12 @@ LValue Output::buildLandingPad() {
 }
 
 void Output::setLineNumber(int linenum) {
-#if defined(FEATURE_SAMPLE_PGO)
   LLVMMetadataRef loc = LLVMDIBuilderCreateDebugLocation(
       state_.context_, linenum, 0, subprogram_, nullptr);
   LValue loc_value = LLVMMetadataAsValue(state_.context_, loc);
   LLVMSetCurrentDebugLocation(builder_, loc_value);
-#endif
 }
 
-#if defined(FEATURE_SAMPLE_PGO)
 static bool ValueKindIsFind(LValue v) {
   switch (LLVMGetValueKind(v)) {
     case LLVMConstantExprValueKind:
@@ -550,12 +547,9 @@ static bool ValueKindIsFind(LValue v) {
       return true;
   }
 }
-#endif
 
 LValue Output::setInstrDebugLoc(LValue v) {
-#if defined(FEATURE_SAMPLE_PGO)
   if (ValueKindIsFind(v)) LLVMSetInstDebugLocation(builder_, v);
-#endif  // FEATURE_SAMPLE_PGO
   return v;
 }
 

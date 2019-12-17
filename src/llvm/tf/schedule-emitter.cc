@@ -19,11 +19,13 @@
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
-ScheduleEmitter::ScheduleEmitter(Isolate* isolate, compiler::Schedule* schedule,
-                                 compiler::CallDescriptor* incoming_descriptor,
-                                 int32_t builtin_index)
+ScheduleEmitter::ScheduleEmitter(
+    Isolate* isolate, compiler::Schedule* schedule,
+    compiler::SourcePositionTable* source_positions,
+    compiler::CallDescriptor* incoming_descriptor, int32_t builtin_index)
     : isolate_(isolate),
       schedule_(schedule),
+      source_positions_(source_positions),
       incoming_descriptor_(incoming_descriptor),
       current_block_(nullptr),
       builtin_index_(builtin_index) {}
@@ -54,6 +56,14 @@ static bool CanProduceSignalingNaN(compiler::Node* node) {
 }
 
 void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
+  SourcePosition source_position = GetSourcePosition(node);
+  if (source_position.IsKnown()) {
+    if (source_position.IsExternal())
+      visitor->SetSourcePosition(source_position.ExternalLine(),
+                                 source_position.ExternalFileId());
+    else
+      visitor->SetSourcePosition(source_position.ScriptOffset(), -1);
+  }
   switch (node->opcode()) {
     case compiler::IrOpcode::kStart:
     case compiler::IrOpcode::kLoop:
@@ -1247,6 +1257,13 @@ bool ScheduleEmitter::TryLoadFromConstantTable(compiler::Node* node,
 bool ScheduleEmitter::ShouldUseRelativeBranchOrLoadFromConstant() {
   return (builtin_index_ != -1) && FLAG_embedded_builtins && !FLAG_mkwasmllvm &&
          isolate()->IsGeneratingEmbeddedBuiltins();
+}
+
+SourcePosition ScheduleEmitter::GetSourcePosition(compiler::Node* node) const {
+  if (source_positions_) {
+    return source_positions_->GetSourcePosition(node);
+  }
+  return SourcePosition::Unknown();
 }
 }  // namespace tf_llvm
 }  // namespace internal

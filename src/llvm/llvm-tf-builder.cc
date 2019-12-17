@@ -890,6 +890,7 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       get_record_write_function_(nullptr),
       get_mod_two_double_function_(nullptr),
       int32_pair_type_(nullptr),
+      line_number_(-1),
       state_point_id_next_(0) {
   int32_pair_type_ = structType(output.repo().context_, output.repo().int32,
                                 output.repo().int32);
@@ -1161,30 +1162,30 @@ void LLVMTFBuilder::VisitGoto(int bid) {
 }
 
 void LLVMTFBuilder::VisitParameter(int id, int pid) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = output().parameter(pid + 1);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitLoadParentFramePointer(int id) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().parent_fp());
 }
 
 void LLVMTFBuilder::VisitIdentity(int id, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(id, GetBuilderImpl(current_bb_)->GetLLVMValue(value));
 }
 
 void LLVMTFBuilder::VisitLoadFramePointer(int id) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue fp = output().fp();
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, fp);
 }
 
 void LLVMTFBuilder::VisitDebugBreak(int id) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   output().buildCall(output().repo().trapIntrinsic());
 }
 
@@ -1200,7 +1201,7 @@ void LLVMTFBuilder::VisitStackPointerGreaterThan(int id, int value) {
 }
 
 void LLVMTFBuilder::VisitTrapIf(int id, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   auto impl = GetBuilderImpl(current_bb_);
   LValue trap_val = EnsureWord32(impl->GetLLVMValue(value));
 
@@ -1222,7 +1223,7 @@ void LLVMTFBuilder::VisitTrapIf(int id, int value) {
 }
 
 void LLVMTFBuilder::VisitTrapUnless(int id, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   auto impl = GetBuilderImpl(current_bb_);
   LValue trap_val = EnsureWord32(impl->GetLLVMValue(value));
 
@@ -1244,18 +1245,18 @@ void LLVMTFBuilder::VisitTrapUnless(int id, int value) {
 }
 
 void LLVMTFBuilder::VisitInt32Constant(int id, int32_t value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().constInt32(value));
 }
 
 void LLVMTFBuilder::VisitInt64Constant(int id, int64_t value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().constInt64(value));
 }
 
 void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
                                                   int rmode) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   magic = static_cast<int32_t>(load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kRelocatableInt32Constant, rmode));
   LValue value = output().buildLoadMagic(output().repo().int32, magic);
@@ -1263,7 +1264,7 @@ void LLVMTFBuilder::VisitRelocatableInt32Constant(int id, int32_t magic,
 }
 
 void LLVMTFBuilder::VisitFloat64SilenceNaN(int id, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue llvalue = GetBuilderImpl(current_bb_)->GetLLVMValue(value);
   LValue result =
       output().buildFSub(llvalue, constReal(output().repo().doubleType, 0.0));
@@ -1325,7 +1326,7 @@ static LValue buildAccessPointer(Output& output, LValue value, LValue offset,
 
 void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
                               MachineSemantic semantic, int base, int offset) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue pointer = buildAccessPointer(
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
       GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
@@ -1379,7 +1380,7 @@ void LLVMTFBuilder::VisitLoad(int id, MachineRepresentation rep,
 void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
                                compiler::WriteBarrierKind barrier, int base,
                                int offset, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue pointer = buildAccessPointer(
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
       GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
@@ -1436,7 +1437,7 @@ void LLVMTFBuilder::VisitStore(int id, MachineRepresentation rep,
 
 void LLVMTFBuilder::VisitUnalignedLoad(int id, MachineRepresentation rep,
                                        int base, int offset) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue pointer = buildAccessPointer(
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
       GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
@@ -1447,7 +1448,7 @@ void LLVMTFBuilder::VisitUnalignedLoad(int id, MachineRepresentation rep,
 
 void LLVMTFBuilder::VisitUnalignedStore(int id, MachineRepresentation rep,
                                         int base, int offset, int value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue pointer = buildAccessPointer(
       output(), GetBuilderImpl(current_bb_)->GetLLVMValue(base),
       GetBuilderImpl(current_bb_)->GetLLVMValue(offset), rep);
@@ -1485,7 +1486,7 @@ void LLVMTFBuilder::VisitUnalignedStore(int id, MachineRepresentation rep,
 }
 
 void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMIntToPtr,
@@ -1494,7 +1495,7 @@ void LLVMTFBuilder::VisitBitcastWordToTagged(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitBitcastTaggedToWord(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMPtrToInt,
@@ -1503,7 +1504,7 @@ void LLVMTFBuilder::VisitBitcastTaggedToWord(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(
@@ -1513,7 +1514,7 @@ void LLVMTFBuilder::VisitChangeInt32ToFloat64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeFloat32ToFloat64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPExt,
@@ -1522,7 +1523,7 @@ void LLVMTFBuilder::VisitChangeFloat32ToFloat64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMUIToFP,
@@ -1531,7 +1532,7 @@ void LLVMTFBuilder::VisitChangeUint32ToFloat64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeFloat64ToInt32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPToSI,
@@ -1540,7 +1541,7 @@ void LLVMTFBuilder::VisitChangeFloat64ToInt32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeFloat64ToUint32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPToUI,
@@ -1549,7 +1550,7 @@ void LLVMTFBuilder::VisitChangeFloat64ToUint32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeFloat64ToUint64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPToUI,
@@ -1558,7 +1559,7 @@ void LLVMTFBuilder::VisitChangeFloat64ToUint64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeUint32ToUint64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMZExt,
@@ -1567,7 +1568,7 @@ void LLVMTFBuilder::VisitChangeUint32ToUint64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitChangeInt32ToInt64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMSExt,
@@ -1576,7 +1577,7 @@ void LLVMTFBuilder::VisitChangeInt32ToInt64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitBitcastInt32ToFloat32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value_storage =
       output().buildBitCast(output().bitcast_space(), output().repo().ref32);
   output().buildStore(GetBuilderImpl(current_bb_)->GetLLVMValue(e),
@@ -1588,7 +1589,7 @@ void LLVMTFBuilder::VisitBitcastInt32ToFloat32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitBitcastInt64ToFloat64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value_storage =
       output().buildBitCast(output().bitcast_space(), output().repo().ref64);
   output().buildStore(GetBuilderImpl(current_bb_)->GetLLVMValue(e),
@@ -1600,7 +1601,7 @@ void LLVMTFBuilder::VisitBitcastInt64ToFloat64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitBitcastFloat64ToInt64(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue double_storage = output().buildBitCast(output().bitcast_space(),
                                                 output().repo().refDouble);
   output().buildStore(GetBuilderImpl(current_bb_)->GetLLVMValue(e),
@@ -1612,7 +1613,7 @@ void LLVMTFBuilder::VisitBitcastFloat64ToInt64(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitBitcastFloat32ToInt32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value_storage =
       output().buildBitCast(output().bitcast_space(), output().repo().refFloat);
   output().buildStore(GetBuilderImpl(current_bb_)->GetLLVMValue(e),
@@ -1624,7 +1625,7 @@ void LLVMTFBuilder::VisitBitcastFloat32ToInt32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
@@ -1632,7 +1633,7 @@ void LLVMTFBuilder::VisitTruncateFloat64ToWord32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateInt64ToWord32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue int64_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue int32_value =
       output().buildCast(LLVMTrunc, int64_value, output().repo().int32);
@@ -1640,7 +1641,7 @@ void LLVMTFBuilder::VisitTruncateInt64ToWord32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateFloat64ToFloat32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
@@ -1650,7 +1651,7 @@ void LLVMTFBuilder::VisitTruncateFloat64ToFloat32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateFloat64ToUint32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   TruncateFloat64ToWord32Resolver resolver(current_bb_, output(), id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
@@ -1660,7 +1661,7 @@ void LLVMTFBuilder::VisitTruncateFloat64ToUint32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitTruncateFloat32ToInt32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPToSI,
@@ -1669,7 +1670,7 @@ void LLVMTFBuilder::VisitTruncateFloat32ToInt32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMFPToSI,
@@ -1678,7 +1679,7 @@ void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat64ExtractHighWord32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value_storage = output().buildBitCast(output().bitcast_space(),
                                                output().repo().refDouble);
@@ -1691,7 +1692,7 @@ void LLVMTFBuilder::VisitFloat64ExtractHighWord32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat64ExtractLowWord32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value_storage = output().buildBitCast(output().bitcast_space(),
                                                output().repo().refDouble);
@@ -1703,7 +1704,7 @@ void LLVMTFBuilder::VisitFloat64ExtractLowWord32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMSIToFP,
@@ -1712,7 +1713,7 @@ void LLVMTFBuilder::VisitRoundInt32ToFloat32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitRoundUint32ToFloat32(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   GetBuilderImpl(current_bb_)
       ->SetLLVMValue(
           id, output().buildCast(LLVMUIToFP,
@@ -1721,7 +1722,7 @@ void LLVMTFBuilder::VisitRoundUint32ToFloat32(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildNSWAdd(e1_value, e2_value);
@@ -1729,7 +1730,7 @@ void LLVMTFBuilder::VisitInt32Add(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt64Add(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildNSWAdd(e1_value, e2_value);
@@ -1737,7 +1738,7 @@ void LLVMTFBuilder::VisitInt64Add(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32AddWithOverflow(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildCall(
@@ -1746,7 +1747,7 @@ void LLVMTFBuilder::VisitInt32AddWithOverflow(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32Sub(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildNSWSub(e1_value, e2_value);
@@ -1754,7 +1755,7 @@ void LLVMTFBuilder::VisitInt32Sub(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt64Sub(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildNSWSub(e1_value, e2_value);
@@ -1762,7 +1763,7 @@ void LLVMTFBuilder::VisitInt64Sub(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32SubWithOverflow(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildCall(
@@ -1771,7 +1772,7 @@ void LLVMTFBuilder::VisitInt32SubWithOverflow(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildMul(e1_value, e2_value);
@@ -1779,7 +1780,7 @@ void LLVMTFBuilder::VisitInt32Mul(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt64Mul(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildMul(e1_value, e2_value);
@@ -1787,7 +1788,7 @@ void LLVMTFBuilder::VisitInt64Mul(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
 #if 0
@@ -1805,7 +1806,7 @@ void LLVMTFBuilder::VisitInt32Div(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint32Mod(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
 #if 0
@@ -1825,7 +1826,7 @@ void LLVMTFBuilder::VisitUint32Mod(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint32Div(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
 #if 0
@@ -1843,7 +1844,7 @@ void LLVMTFBuilder::VisitUint32Div(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32Mod(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
 #if 0
@@ -1863,7 +1864,7 @@ void LLVMTFBuilder::VisitInt32Mod(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64InsertLowWord32(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue float64_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue word32_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue float64_storage = output().buildBitCast(
@@ -1877,7 +1878,7 @@ void LLVMTFBuilder::VisitFloat64InsertLowWord32(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64InsertHighWord32(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue float64_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue word32_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue float64_storage = output().buildBitCast(
@@ -1892,7 +1893,7 @@ void LLVMTFBuilder::VisitFloat64InsertHighWord32(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32MulWithOverflow(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildCall(
@@ -1901,7 +1902,7 @@ void LLVMTFBuilder::VisitInt32MulWithOverflow(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Shl(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildShl(e1_value, e2_value);
@@ -1909,7 +1910,7 @@ void LLVMTFBuilder::VisitWord32Shl(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Xor(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildXor(e1_value, e2_value);
@@ -1917,7 +1918,7 @@ void LLVMTFBuilder::VisitWord32Xor(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Ror(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue right_part = output().buildShr(e1_value, e2_value);
@@ -1929,7 +1930,7 @@ void LLVMTFBuilder::VisitWord32Ror(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Shr(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildShr(e1_value, e2_value);
@@ -1937,7 +1938,7 @@ void LLVMTFBuilder::VisitWord32Shr(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Sar(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildSar(e1_value, e2_value);
@@ -1945,7 +1946,7 @@ void LLVMTFBuilder::VisitWord32Sar(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Mul(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildMul(e1_value, e2_value);
@@ -1953,7 +1954,7 @@ void LLVMTFBuilder::VisitWord32Mul(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32And(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildAnd(e1_value, e2_value);
@@ -1961,7 +1962,7 @@ void LLVMTFBuilder::VisitWord32And(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Or(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildOr(e1_value, e2_value);
@@ -1969,7 +1970,7 @@ void LLVMTFBuilder::VisitWord32Or(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Equal(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntEQ, e1_value, e2_value);
@@ -1977,7 +1978,7 @@ void LLVMTFBuilder::VisitWord32Equal(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord64Equal(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntEQ, e1_value, e2_value);
@@ -1985,7 +1986,7 @@ void LLVMTFBuilder::VisitWord64Equal(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32Clz(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e));
   LValue result = output().buildCall(output().repo().ctlz32Intrinsic(), e_value,
                                      output().repo().booleanTrue);
@@ -1993,7 +1994,7 @@ void LLVMTFBuilder::VisitWord32Clz(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitWord64Clz(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e));
   LValue result = output().buildCall(output().repo().ctlz64Intrinsic(), e_value,
                                      output().repo().booleanTrue);
@@ -2001,7 +2002,7 @@ void LLVMTFBuilder::VisitWord64Clz(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitInt32LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntSLE, e1_value, e2_value);
@@ -2009,7 +2010,7 @@ void LLVMTFBuilder::VisitInt32LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint32LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntULE, e1_value, e2_value);
@@ -2017,7 +2018,7 @@ void LLVMTFBuilder::VisitUint32LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint32LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntULT, e1_value, e2_value);
@@ -2025,7 +2026,7 @@ void LLVMTFBuilder::VisitUint32LessThan(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt32LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord32(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntSLT, e1_value, e2_value);
@@ -2034,7 +2035,7 @@ void LLVMTFBuilder::VisitInt32LessThan(int id, int e1, int e2) {
 
 #define DEFINE_WORD64_BINOP(name, llvm_op)                           \
   void LLVMTFBuilder::VisitWord64##name(int id, int e1, int e2) {    \
-    output().setLineNumber(id);                                      \
+    SetDebugLine(id);                                                \
     LValue e1_value =                                                \
         EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1)); \
     LValue e2_value =                                                \
@@ -2051,7 +2052,7 @@ DEFINE_WORD64_BINOP(Or, Or)
 DEFINE_WORD64_BINOP(Xor, Xor)
 
 void LLVMTFBuilder::VisitInt64LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntSLE, e1_value, e2_value);
@@ -2059,7 +2060,7 @@ void LLVMTFBuilder::VisitInt64LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint64LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntULE, e1_value, e2_value);
@@ -2067,7 +2068,7 @@ void LLVMTFBuilder::VisitUint64LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitUint64LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntULT, e1_value, e2_value);
@@ -2075,7 +2076,7 @@ void LLVMTFBuilder::VisitUint64LessThan(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitInt64LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e1));
   LValue e2_value = EnsureWord64(GetBuilderImpl(current_bb_)->GetLLVMValue(e2));
   LValue result = output().buildICmp(LLVMIntSLT, e1_value, e2_value);
@@ -2083,7 +2084,7 @@ void LLVMTFBuilder::VisitInt64LessThan(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   BasicBlock* bbTrue = basic_block_manager().ensureBB(btrue);
   BasicBlock* bbFalse = basic_block_manager().ensureBB(bfalse);
   EnsureNativeBB(bbTrue, output());
@@ -2107,7 +2108,7 @@ void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
 
 void LLVMTFBuilder::VisitSwitch(int id, int val,
                                 const OperandsVector& successors) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   // Last successor must be Default.
   BasicBlock* default_block = basic_block_manager().ensureBB(successors.back());
   LValue cmp_val = GetBuilderImpl(current_bb_)->GetLLVMValue(val);
@@ -2118,7 +2119,7 @@ void LLVMTFBuilder::VisitSwitch(int id, int val,
 }
 
 void LLVMTFBuilder::VisitIfValue(int id, int val) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   BasicBlock* pred = current_bb_->predecessors().front();
   EMASSERT(IsBBEndedToBuild(pred));
   LValue switch_val =
@@ -2126,10 +2127,10 @@ void LLVMTFBuilder::VisitIfValue(int id, int val) {
   LLVMAddCase(switch_val, output().constInt32(val), GetNativeBB(current_bb_));
 }
 
-void LLVMTFBuilder::VisitIfDefault(int id) { output().setLineNumber(id); }
+void LLVMTFBuilder::VisitIfDefault(int id) { SetDebugLine(id); }
 
 void LLVMTFBuilder::VisitIfException(int id) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue exception =
       output().buildCall(output().repo().gcExceptionIntrinsic(),
                          GetBuilderImpl(current_bb_)->landing_pad);
@@ -2137,7 +2138,7 @@ void LLVMTFBuilder::VisitIfException(int id) {
 }
 
 void LLVMTFBuilder::VisitHeapConstant(int id, uintptr_t magic) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kHeapConstant);
   LValue value = output().buildLoadMagic(output().taggedType(), magic);
@@ -2145,7 +2146,7 @@ void LLVMTFBuilder::VisitHeapConstant(int id, uintptr_t magic) {
 }
 
 void LLVMTFBuilder::VisitExternalConstant(int id, uintptr_t magic) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   magic = load_constant_recorder_->Register(
       magic, LoadConstantRecorder::kExternalReference);
   LValue value = output().buildLoadMagic(output().repo().ref8, magic);
@@ -2154,7 +2155,7 @@ void LLVMTFBuilder::VisitExternalConstant(int id, uintptr_t magic) {
 
 void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
                              const OperandsVector& operands) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LType phi_type = getMachineRepresentationType(output(), rep);
   LValue phi = output().buildPhi(phi_type);
   auto operands_iterator = operands.cbegin();
@@ -2184,14 +2185,14 @@ void LLVMTFBuilder::VisitPhi(int id, MachineRepresentation rep,
 void LLVMTFBuilder::VisitCall(int id, CallMode mode,
                               const CallDescriptor& call_desc,
                               const OperandsVector& operands) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   DoCall(id, mode, call_desc, operands, false);
 }
 
 void LLVMTFBuilder::VisitTailCall(int id, CallMode mode,
                                   const CallDescriptor& call_desc,
                                   const OperandsVector& operands) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   DoTailCall(id, mode, call_desc, operands);
 }
 
@@ -2199,7 +2200,7 @@ void LLVMTFBuilder::VisitInvoke(int id, CallMode mode,
                                 const CallDescriptor& call_desc,
                                 const OperandsVector& operands, int then,
                                 int exception) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   BasicBlock* then_bb = basic_block_manager().ensureBB(then);
   BasicBlock* exception_bb = basic_block_manager().ensureBB(exception);
   EnsureNativeBB(then_bb, output());
@@ -2211,7 +2212,7 @@ void LLVMTFBuilder::VisitInvoke(int id, CallMode mode,
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
     int id, const OperandsVector& operands) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   std::vector<LType> types;
   std::vector<LValue> values;
   auto it = operands.begin();
@@ -2236,7 +2237,7 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
 }
 
 void LLVMTFBuilder::VisitRoot(int id, RootIndex index) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue offset = output().buildGEPWithByteOffset(
       output().root(),
       output().constInt32(
@@ -2247,7 +2248,7 @@ void LLVMTFBuilder::VisitRoot(int id, RootIndex index) {
 }
 
 void LLVMTFBuilder::VisitRootRelative(int id, int offset, bool tagged) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LType type =
       pointerType(tagged ? output().taggedType() : output().repo().ref8);
   LValue offset_value = output().buildGEPWithByteOffset(
@@ -2257,7 +2258,7 @@ void LLVMTFBuilder::VisitRootRelative(int id, int offset, bool tagged) {
 }
 
 void LLVMTFBuilder::VisitRootOffset(int id, int offset) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LType type = output().repo().ref8;
   LValue offset_value = output().buildGEPWithByteOffset(
       output().root(), output().constInt32(offset), type);
@@ -2265,7 +2266,7 @@ void LLVMTFBuilder::VisitRootOffset(int id, int offset) {
 }
 
 void LLVMTFBuilder::VisitLoadFromConstantTable(int id, int constant_index) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue constant_table_offset = output().buildGEPWithByteOffset(
       output().root(),
       output().constInt32(TurboAssemblerBase::RootRegisterOffsetForRootIndex(
@@ -2282,7 +2283,7 @@ void LLVMTFBuilder::VisitLoadFromConstantTable(int id, int constant_index) {
 }
 
 void LLVMTFBuilder::VisitCodeForCall(int id, uintptr_t magic, bool relative) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   ValueDesc value;
   if (relative) {
     value.type = ValueType::RelativeCallTarget;
@@ -2298,13 +2299,13 @@ void LLVMTFBuilder::VisitCodeForCall(int id, uintptr_t magic, bool relative) {
 }
 
 void LLVMTFBuilder::VisitSmiConstant(int id, uintptr_t smi_value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = output().constTagged(smi_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitFloat64Sqrt(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue result =
       output().buildCall(output().repo().doubleSqrtIntrinsic(), e_value);
@@ -2313,7 +2314,7 @@ void LLVMTFBuilder::VisitFloat64Sqrt(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat32Sqrt(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue result =
       output().buildCall(output().repo().floatSqrtIntrinsic(), e_value);
@@ -2322,26 +2323,26 @@ void LLVMTFBuilder::VisitFloat32Sqrt(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat64Constant(int id, double float_value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = constReal(output().repo().doubleType, float_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitFloat32Constant(int id, double float_value) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue value = constReal(output().repo().floatType, float_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitProjection(int id, int e, int index) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue projection = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value = output().buildExtractValue(projection, index);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitFloat64Add(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFAdd(e1_value, e2_value);
@@ -2349,7 +2350,7 @@ void LLVMTFBuilder::VisitFloat64Add(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Sub(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFSub(e1_value, e2_value);
@@ -2357,7 +2358,7 @@ void LLVMTFBuilder::VisitFloat64Sub(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Mul(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFMul(e1_value, e2_value);
@@ -2365,7 +2366,7 @@ void LLVMTFBuilder::VisitFloat64Mul(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Div(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFDiv(e1_value, e2_value);
@@ -2373,7 +2374,7 @@ void LLVMTFBuilder::VisitFloat64Div(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Mod(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LType double_type = output().repo().doubleType;
   LType function_type = functionType(double_type, double_type, double_type);
   LValue function = CallGetModTwoDoubleFunction();
@@ -2385,7 +2386,7 @@ void LLVMTFBuilder::VisitFloat64Mod(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOLT, e1_value, e2_value);
@@ -2393,7 +2394,7 @@ void LLVMTFBuilder::VisitFloat64LessThan(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOLE, e1_value, e2_value);
@@ -2401,7 +2402,7 @@ void LLVMTFBuilder::VisitFloat64LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Equal(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOEQ, e1_value, e2_value);
@@ -2409,14 +2410,14 @@ void LLVMTFBuilder::VisitFloat64Equal(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat64Neg(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value = output().buildFNeg(e_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value =
       output().buildCall(output().repo().doubleAbsIntrinsic(), e_value);
@@ -2424,7 +2425,7 @@ void LLVMTFBuilder::VisitFloat64Abs(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat32Abs(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value =
       output().buildCall(output().repo().floatAbsIntrinsic(), e_value);
@@ -2432,7 +2433,7 @@ void LLVMTFBuilder::VisitFloat32Abs(int id, int e) {
 }
 
 void LLVMTFBuilder::VisitFloat32Equal(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOEQ, e1_value, e2_value);
@@ -2440,7 +2441,7 @@ void LLVMTFBuilder::VisitFloat32Equal(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32LessThan(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOLT, e1_value, e2_value);
@@ -2448,7 +2449,7 @@ void LLVMTFBuilder::VisitFloat32LessThan(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32LessThanOrEqual(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFCmp(LLVMRealOLE, e1_value, e2_value);
@@ -2456,7 +2457,7 @@ void LLVMTFBuilder::VisitFloat32LessThanOrEqual(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32Add(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFAdd(e1_value, e2_value);
@@ -2464,7 +2465,7 @@ void LLVMTFBuilder::VisitFloat32Add(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32Sub(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFSub(e1_value, e2_value);
@@ -2472,7 +2473,7 @@ void LLVMTFBuilder::VisitFloat32Sub(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32Mul(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFMul(e1_value, e2_value);
@@ -2480,7 +2481,7 @@ void LLVMTFBuilder::VisitFloat32Mul(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32Div(int id, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFDiv(e1_value, e2_value);
@@ -2488,14 +2489,14 @@ void LLVMTFBuilder::VisitFloat32Div(int id, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitFloat32Neg(int id, int e) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue e_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e);
   LValue value = output().buildFNeg(e_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
 void LLVMTFBuilder::VisitInt32PairAdd(int id, int e0, int e1, int e2, int e3) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = BuildInt64FromPair(e2, e3);
   LValue result = output().buildNSWAdd(n0, n1);
@@ -2503,7 +2504,7 @@ void LLVMTFBuilder::VisitInt32PairAdd(int id, int e0, int e1, int e2, int e3) {
 }
 
 void LLVMTFBuilder::VisitInt32PairSub(int id, int e0, int e1, int e2, int e3) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = BuildInt64FromPair(e2, e3);
   LValue result = output().buildNSWSub(n0, n1);
@@ -2511,7 +2512,7 @@ void LLVMTFBuilder::VisitInt32PairSub(int id, int e0, int e1, int e2, int e3) {
 }
 
 void LLVMTFBuilder::VisitInt32PairMul(int id, int e0, int e1, int e2, int e3) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = BuildInt64FromPair(e2, e3);
   LValue result = output().buildMul(n0, n1);
@@ -2519,7 +2520,7 @@ void LLVMTFBuilder::VisitInt32PairMul(int id, int e0, int e1, int e2, int e3) {
 }
 
 void LLVMTFBuilder::VisitWord32PairShl(int id, int e0, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
@@ -2528,7 +2529,7 @@ void LLVMTFBuilder::VisitWord32PairShl(int id, int e0, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32PairShr(int id, int e0, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
@@ -2537,7 +2538,7 @@ void LLVMTFBuilder::VisitWord32PairShr(int id, int e0, int e1, int e2) {
 }
 
 void LLVMTFBuilder::VisitWord32PairSar(int id, int e0, int e1, int e2) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   LValue n0 = BuildInt64FromPair(e0, e1);
   LValue n1 = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   n1 = output().buildCast(LLVMZExt, n1, output().repo().int64);
@@ -2547,7 +2548,7 @@ void LLVMTFBuilder::VisitWord32PairSar(int id, int e0, int e1, int e2) {
 
 void LLVMTFBuilder::VisitReturn(int id, int pop_count,
                                 const OperandsVector& operands) {
-  output().setLineNumber(id);
+  SetDebugLine(id);
   int instructions_count = 2;
   EMASSERT(operands.size() <= 2);
   LValue undefined_value = LLVMGetUndef(output().repo().intPtr);
@@ -2648,6 +2649,16 @@ void LLVMTFBuilder::SetInt32PairFromInt64(int id, LValue n) {
   ret = output().buildInsertValue(ret, 0, e0_value);
   ret = output().buildInsertValue(ret, 1, e1_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, ret);
+}
+
+void LLVMTFBuilder::SetDebugLine(int id) {
+  int line_no = id;
+  if (line_number_ != -1) line_no = line_number_;
+  output().setLineNumber(line_no);
+}
+
+void LLVMTFBuilder::SetSourcePosition(int line, int fileid) {
+  line_number_ = line;
 }
 }  // namespace tf_llvm
 }  // namespace internal

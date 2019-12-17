@@ -167,6 +167,8 @@ class TFVisitor {
   virtual void VisitBlock(int id, bool is_deferred,
                           const OperandsVector& predecessors) = 0;
   virtual void VisitGoto(int bid) = 0;
+  virtual void SetSourcePosition(int line, int fileid) {}
+
 #define DECL_METHOD(name, signature) virtual void Visit##name signature = 0;
 
   INSTRUCTIONS(DECL_METHOD)

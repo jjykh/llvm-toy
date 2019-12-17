@@ -2,6 +2,7 @@
 
 #ifndef SCHEDULE_EMITTER_H
 #define SCHEDULE_EMITTER_H
+#include "src/compiler/compiler-source-position-table.h"
 #include "src/handles/handles.h"
 #include "src/heap/heap.h"
 namespace v8 {
@@ -11,6 +12,7 @@ namespace compiler {
 class Schedule;
 class BasicBlock;
 class CallDescriptor;
+class SourcePositionTable;
 class Node;
 }  // namespace compiler
 namespace tf_llvm {
@@ -18,6 +20,7 @@ class TFVisitor;
 class ScheduleEmitter final {
  public:
   explicit ScheduleEmitter(Isolate* isolate, compiler::Schedule*,
+                           compiler::SourcePositionTable*,
                            compiler::CallDescriptor*, int32_t builtin_index);
   ~ScheduleEmitter();
   void Visit(TFVisitor* visitor);
@@ -35,6 +38,7 @@ class ScheduleEmitter final {
     return incoming_descriptor_;
   }
   Isolate* isolate() { return isolate_; }
+  SourcePosition GetSourcePosition(compiler::Node* node) const;
 
   bool IsMaterializableFromRoot(Handle<HeapObject> object,
                                 RootIndex* index_return);
@@ -49,6 +53,7 @@ class ScheduleEmitter final {
 
   Isolate* isolate_;
   compiler::Schedule* schedule_;
+  compiler::SourcePositionTable* source_positions_;
   compiler::CallDescriptor* incoming_descriptor_;
   compiler::BasicBlock* current_block_;
   int32_t builtin_index_;

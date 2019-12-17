@@ -9,14 +9,16 @@ class TurboAssembler;
 namespace compiler {
 class Schedule;
 class CallDescriptor;
+class SourcePositionTable;
 }  // namespace compiler
 namespace tf_llvm {
 struct CompilerState;
 class V8PassManager {
  public:
   std::unique_ptr<CompilerState> SelectInstructions(
-      Isolate* isolate, compiler::Schedule*, compiler::CallDescriptor*,
-      const char* name, Code::Kind kind, int32_t builtin_index);
+      Isolate* isolate, compiler::Schedule*, compiler::SourcePositionTable*,
+      compiler::CallDescriptor*, const char* name, Code::Kind kind,
+      int32_t builtin_index);
 };
 }  // namespace tf_llvm
 }  // namespace internal

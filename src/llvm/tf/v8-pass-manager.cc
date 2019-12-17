@@ -147,6 +147,7 @@ void BuiltinFunctionClientImpl::BuildLoadExternalRef(
 
 std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
     Isolate* isolate, compiler::Schedule* schedule,
+    compiler::SourcePositionTable* source_positions,
     compiler::CallDescriptor* call_descriptor, const char* name,
     Code::Kind kind, int32_t builtin_index) {
   static bool llvm_initialized = false;
@@ -158,8 +159,8 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
     tf_llvm::initLLVM();
     llvm_initialized = true;
   }
-  tf_llvm::ScheduleEmitter llvm_emitter(isolate, schedule, call_descriptor,
-                                        builtin_index);
+  tf_llvm::ScheduleEmitter llvm_emitter(isolate, schedule, source_positions,
+                                        call_descriptor, builtin_index);
   tf_llvm::BasicBlockManager BBM;
   {
     tf_llvm::LivenessAnalysisVisitor lav(BBM);
