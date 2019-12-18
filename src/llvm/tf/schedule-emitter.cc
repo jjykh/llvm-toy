@@ -446,7 +446,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kBitcastTaggedSignedToWord:
     case compiler::IrOpcode::kBitcastTaggedToWord:
       visitor->VisitBitcastTaggedToWord(node->id(), node->InputAt(0)->id());
-      break;
+      return;
     // I don't think kBitcastWordToTaggedSigned has difference with
     // kBitcastWordToTagged for llvm.
     case compiler::IrOpcode::kBitcastWordToTaggedSigned:
@@ -1029,7 +1029,7 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitStackPointerGreaterThan(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kAbortCSAAssert:
-      // ignore this.
+      visitor->VisitAbortCSAAssert(node->id());
       return;
     default:
 #ifdef DEBUG

@@ -142,6 +142,7 @@ enum class CallMode { kCode, kAddress, kBuiltin };
   V(IfValue, (int id, int val))                                               \
   V(IfDefault, (int id))                                                      \
   V(IfException, (int id))                                                    \
+  V(AbortCSAAssert, (int id))                                                 \
   V(HeapConstant, (int id, uintptr_t magic))                                  \
   V(SmiConstant, (int id, uintptr_t smi_value))                               \
   V(Float64Constant, (int id, double value))                                  \

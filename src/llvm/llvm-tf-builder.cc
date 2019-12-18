@@ -2137,6 +2137,11 @@ void LLVMTFBuilder::VisitIfException(int id) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, exception);
 }
 
+void LLVMTFBuilder::VisitAbortCSAAssert(int id) {
+  SetDebugLine(id);
+  output().buildCall(output().repo().trapIntrinsic());
+}
+
 void LLVMTFBuilder::VisitHeapConstant(int id, uintptr_t magic) {
   SetDebugLine(id);
   magic = load_constant_recorder_->Register(

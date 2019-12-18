@@ -713,6 +713,7 @@ void LivenessAnalysisVisitor::VisitIfValue(int id, int val) {}
 void LivenessAnalysisVisitor::VisitIfDefault(int id) {}
 
 void LivenessAnalysisVisitor::VisitIfException(int id) { Define(id); }
+void LivenessAnalysisVisitor::VisitAbortCSAAssert(int id) {}
 
 void LivenessAnalysisVisitor::VisitHeapConstant(int id, uintptr_t magic) {
   Define(id);
