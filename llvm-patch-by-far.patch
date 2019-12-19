@@ -444,7 +444,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    LLVM_DEBUG({
      dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
             << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
-@@ -3666,6 +3674,93 @@
+@@ -3666,6 +3674,103 @@
    lateLiveIntervalUpdate();
  }
  
@@ -471,21 +471,31 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +                                 const MachineRegisterInfo &MRI, int64_t *imm) {
 +  if (!MO.isReg())
 +    return false;
-+  auto defs_iterator = MRI.def_begin(MO.getReg());
-+  auto defs_end = MRI.def_end();
 +  bool changed = false;
-+  for (; defs_iterator != defs_end; ++defs_iterator) {
-+    // Could not handle more than one defs.
-+    if (changed)
++  const MachineOperand *Target = &MO;
++  while (!changed) {
++    auto defs_iterator = MRI.def_begin(Target->getReg());
++    auto defs_end = MRI.def_end();
++    if (defs_end == defs_iterator)
 +      return false;
++    for (; defs_iterator != defs_end; ++defs_iterator) {
++      // Could not handle more than one defs.
++      if (changed)
++        return false;
 +
-+    const MachineInstr *MI = defs_iterator->getParent();
-+    if (!MI->isMoveImmediate())
-+      return false;
-+    const MachineOperand &ImmOperand = MI->getOperand(1);
-+    assert(ImmOperand.isImm());
-+    *imm = ImmOperand.getImm();
-+    changed = true;
++      const MachineInstr *MI = defs_iterator->getParent();
++      if (MI->isFullCopy() &&
++          TargetRegisterInfo::isVirtualRegister(MI->getOperand(1).getReg())) {
++        Target = &MI->getOperand(1);
++        break;
++      }
++      if (!MI->isMoveImmediate())
++        return false;
++      const MachineOperand &ImmOperand = MI->getOperand(1);
++      assert(ImmOperand.isImm());
++      *imm = ImmOperand.getImm();
++      changed = true;
++    }
 +  }
 +  return changed;
 +}
@@ -538,7 +548,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
  void RegisterCoalescer::releaseMemory() {
    ErasedInstrs.clear();
    WorkList.clear();
-@@ -3701,6 +3796,7 @@
+@@ -3701,6 +3806,7 @@
  
    RegClassInfo.runOnMachineFunction(fn);
  
