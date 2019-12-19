@@ -1211,12 +1211,24 @@ bool ScheduleEmitter::HandleCodeForCall(compiler::Node* node,
                                         bool relative_call) {
   auto uses = node->uses();
   if (uses.empty()) return false;  // WTF???
-  auto iterator = uses.begin();
-  auto expected_call = *iterator;
-  ++iterator;
-  if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
-       (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
-      (iterator == uses.end())) {
+  bool should_proceed = true;
+  for (auto iterator = uses.begin(); iterator != uses.end(); ++iterator) {
+    auto user = *iterator;
+    switch (user->opcode()) {
+      case compiler::IrOpcode::kCall:
+      case compiler::IrOpcode::kTailCall:
+        // Should only used as callee.
+        if (user->InputAt(0) != node) {
+          should_proceed = false;
+        }
+        break;
+      default:
+        should_proceed = false;
+        break;
+    }
+  }
+  // uses are all calls.
+  if (should_proceed) {
     if (relative_call) {
       visitor->VisitCodeForCall(node->id(),
                                 reinterpret_cast<uintptr_t>(object.location()),

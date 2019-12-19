@@ -124,6 +124,8 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
     Safepoint safepoint =
         safepoint_table_builder_.DefineSafepoint(&tasm_, Safepoint::kLazyDeopt);
     for (auto& location : record.locations) {
+      if (location.kind == StackMaps::Location::Register)
+        LOGD("Register location! Maybe bug!\n");
       if (location.kind != StackMaps::Location::Indirect) continue;
       // only understand stack slot
       if (location.dwarfReg == 13) {

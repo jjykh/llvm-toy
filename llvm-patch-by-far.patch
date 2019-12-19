@@ -254,10 +254,9 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +    }
 +  }
 +  VisitedSet.emplace(InputReg);
-+  LiveInterval &OldLI = LIS.getInterval(InputReg);
++  LiveInterval &OldLI = LIS.getInterval(Original);
 +  while (!WorkList.empty()) {
 +    unsigned Reg = WorkList.pop_back_val();
-+    LiveInterval &LI = LIS.getInterval(Reg);
 +    // Fold the use of state point.
 +    for (MachineRegisterInfo::use_instr_nodbg_iterator
 +             UI = MRI.use_instr_nodbg_begin(Reg),
@@ -279,9 +278,10 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        // Ignore if the input reg's live range does not contain
 +        // the MI.
 +        SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
-+        if ((OldLI.end() == OldLI.FindSegmentContaining(Idx)) &&
-+            (LI.end() == LI.FindSegmentContaining(Idx)))
++        auto Segment = OldLI.FindSegmentContaining(Idx);
++        if ((OldLI.end() == Segment) || (Segment->end <= Idx)) {
 +          continue;
++        }
 +        // Analyze instruction.
 +        SmallVector<std::pair<MachineInstr *, unsigned>, 8> Ops;
 +        MIBundleOperands(MI).analyzeVirtReg(Reg, &Ops);
