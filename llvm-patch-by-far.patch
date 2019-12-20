@@ -1799,7 +1799,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
-@@ -2580,3 +2675,467 @@
+@@ -2580,3 +2675,470 @@
    MF.verify();
  #endif
  }
@@ -1812,6 +1812,9 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 +  if (!AFI->isJSStub() && !AFI->isJSFunction())
 +    return false;
 +  MachineFrameInfo &MFI = MF.getFrameInfo();
++  // No need to do anything.
++  if (CSI.empty())
++    return true;
 +  int FixedOffset;
 +  if (AFI->isJSStub()) {
 +    MFI.CreateFixedSpillStackObject(4, -12);
