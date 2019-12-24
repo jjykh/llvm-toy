@@ -108,6 +108,17 @@ Index: include/llvm/Support/TargetOpcodes.def
  
  /// This pseudo-instruction loads the stack guard value. Targets which need
  /// to prevent the stack guard value or address from being spilled to the
+@@ -133,6 +134,10 @@
+ /// collectors and deoptimizations in either the callee or caller.
+ HANDLE_TARGET_OPCODE(STATEPOINT)
+ 
++/// Define a new register from old register, used by gc relocate intrinsic.
++/// It is intended to cause a value to split in MIR.
++HANDLE_TARGET_OPCODE(RELOCATE_DEF)
++
+ /// Instruction that records the offset of a local stack allocation passed to
+ /// llvm.localescape. It has two arguments: the symbol for the label and the
+ /// frame index of the local stack allocation.
 Index: include/llvm/Target/Target.td
 ===================================================================
 --- include/llvm/Target/Target.td	(revision 375507)
@@ -130,6 +141,20 @@ Index: include/llvm/Target/Target.td
  def STATEPOINT : StandardPseudoInstruction {
    let OutOperandList = (outs);
    let InOperandList = (ins variable_ops);
+@@ -1110,6 +1121,13 @@
+   let hasSideEffects = 1;
+   let isCall = 1;
+ }
++def RELOCATE_DEF: StandardPseudoInstruction {
++  let OutOperandList = (outs unknown:$dst);
++  let InOperandList = (ins unknown:$src);
++  let AsmString = "";
++  let hasSideEffects = 0;
++  let isAsCheapAsAMove = 1;
++}
+ def LOAD_STACK_GUARD : StandardPseudoInstruction {
+   let OutOperandList = (outs ptr_rc:$dst);
+   let InOperandList = (ins);
 Index: include/llvm/Transforms/IPO/SampleProfile.h
 ===================================================================
 --- include/llvm/Transforms/IPO/SampleProfile.h	(revision 375507)
@@ -423,7 +448,15 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
  #include "llvm/CodeGen/TargetInstrInfo.h"
  #include "llvm/CodeGen/TargetOpcodes.h"
  #include "llvm/CodeGen/TargetRegisterInfo.h"
-@@ -181,6 +182,11 @@
+@@ -56,6 +57,7 @@
+ #include <tuple>
+ #include <utility>
+ #include <vector>
++#include <unordered_set>
+ 
+ using namespace llvm;
+ 
+@@ -181,6 +183,13 @@
      /// Join compatible live intervals
      void joinAllIntervals();
  
@@ -431,11 +464,13 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +    void removeMoveImmediateFromPatchpoint();
 +
 +    void removeMoveImmediateFromPatchpoint(MachineInstr *MI);
++    /// fold RELOCATE_DEF target opcode to COPY.
++    void foldRelocateDef();
 +
      /// Coalesce copies in the specified MBB, putting
      /// copies that cannot yet be coalesced into WorkList.
      void copyCoalesceInMBB(MachineBasicBlock *MBB);
-@@ -1960,6 +1966,8 @@
+@@ -1960,6 +1969,8 @@
    // Update regalloc hint.
    TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
  
@@ -444,7 +479,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    LLVM_DEBUG({
      dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
             << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
-@@ -3666,6 +3674,103 @@
+@@ -3666,6 +3677,122 @@
    lateLiveIntervalUpdate();
  }
  
@@ -467,37 +502,46 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +    removeMoveImmediateFromPatchpoint(MI);
 +}
 +
++static const MachineInstr *getSingleDef(const MachineRegisterInfo &MRI,
++                                        Register Reg) {
++  auto defs_iterator = MRI.def_begin(Reg);
++  auto defs_end = MRI.def_end();
++  int count = 0;
++  MachineInstr *MI = nullptr;
++  for (; defs_iterator != defs_end; ++defs_iterator, ++count) {
++    if (count != 0)
++      return nullptr;
++    MI = defs_iterator->getParent();
++  }
++  return MI;
++}
++
 +static bool shouldFoldAsConstant(const MachineOperand &MO,
 +                                 const MachineRegisterInfo &MRI, int64_t *imm) {
 +  if (!MO.isReg())
 +    return false;
-+  bool changed = false;
 +  const MachineOperand *Target = &MO;
-+  while (!changed) {
-+    auto defs_iterator = MRI.def_begin(Target->getReg());
-+    auto defs_end = MRI.def_end();
-+    if (defs_end == defs_iterator)
++  std::unordered_set<unsigned> Visited;
++  while (true) {
++    auto InsertResult = Visited.emplace(Target->getReg());
++    // Avoid loop.
++    if (!InsertResult.second)
 +      return false;
-+    for (; defs_iterator != defs_end; ++defs_iterator) {
-+      // Could not handle more than one defs.
-+      if (changed)
-+        return false;
-+
-+      const MachineInstr *MI = defs_iterator->getParent();
-+      if (MI->isFullCopy() &&
-+          TargetRegisterInfo::isVirtualRegister(MI->getOperand(1).getReg())) {
-+        Target = &MI->getOperand(1);
-+        break;
-+      }
-+      if (!MI->isMoveImmediate())
-+        return false;
-+      const MachineOperand &ImmOperand = MI->getOperand(1);
-+      assert(ImmOperand.isImm());
-+      *imm = ImmOperand.getImm();
-+      changed = true;
++    const MachineInstr *MI = getSingleDef(MRI, Target->getReg());
++    if (!MI)
++      return false;
++    if (MI->isFullCopy() &&
++        TargetRegisterInfo::isVirtualRegister(MI->getOperand(1).getReg())) {
++      Target = &MI->getOperand(1);
++      continue;
 +    }
++    if (!MI->isMoveImmediate())
++      return false;
++    const MachineOperand &ImmOperand = MI->getOperand(1);
++    assert(ImmOperand.isImm());
++    *imm = ImmOperand.getImm();
++    return true;
 +  }
-+  return changed;
 +}
 +
 +void RegisterCoalescer::removeMoveImmediateFromPatchpoint(
@@ -545,14 +589,25 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +  MBB->erase(PatchPoint);
 +}
 +
++void RegisterCoalescer::foldRelocateDef() {
++  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
++    MachineBasicBlock *MBB = &*I;
++    for (MachineInstr &MI : *MBB) {
++      if (MI.getOpcode() == TargetOpcode::RELOCATE_DEF)
++        MI.setDesc(TII->get(TargetOpcode::COPY));
++    }
++  }
++}
++
  void RegisterCoalescer::releaseMemory() {
    ErasedInstrs.clear();
    WorkList.clear();
-@@ -3701,6 +3806,7 @@
+@@ -3701,6 +3828,8 @@
  
    RegClassInfo.runOnMachineFunction(fn);
  
 +  removeMoveImmediateFromPatchpoint();
++  foldRelocateDef();
    // Join (coalesce) intervals if requested.
    if (EnableJoining)
      joinAllIntervals();
@@ -759,6 +814,22 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
  void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
  #ifndef NDEBUG
    // Consistency check
+@@ -1007,7 +1031,14 @@
+   // We didn't need to spill these special cases (constants and allocas).
+   // See the handling in spillIncomingValueForStatepoint for detail.
+   if (!DerivedPtrLocation) {
+-    setValue(&Relocate, SD);
++    SDVTList NodeTys = DAG.getVTList(SD.getValueType());
++
++    SmallVector<SDValue, 1> Ops;
++    Ops.emplace_back(SD);
++    MachineSDNode *RelocateMCNode = DAG.getMachineNode(
++        TargetOpcode::RELOCATE_DEF, getCurSDLoc(), NodeTys, Ops);
++
++    setValue(&Relocate, SDValue(RelocateMCNode, 0));
+     return;
+   }
+ 
 Index: lib/CodeGen/SelectionDAG/TargetLowering.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/TargetLowering.cpp	(revision 375507)
