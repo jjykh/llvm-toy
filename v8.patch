@@ -360,6 +360,23 @@ index 624517283e..1894567193 100644
  
    // We retain a reference the bytecode array specifically to ensure it doesn't
    // get flushed while we are optimizing the code.
+diff --git a/src/common/globals.h b/src/common/globals.h
+index a0584b95c4..2250b20920 100644
+--- a/src/common/globals.h
++++ b/src/common/globals.h
+@@ -538,7 +538,12 @@ constexpr uint64_t kSlotsZapValue = uint64_t{0xbeefdeadbeefdeef};
+ constexpr uint64_t kFreeListZapValue = 0xfeed1eaffeed1eaf;
+ #else
+ constexpr uint32_t kClearedFreeMemoryValue = 0;
++#if defined(UC_BUILD_BUG_FIX)
++// use 3 at lowest bits for weak object reference.
++constexpr uint32_t kZapValue = 0xf0f0f1f1;
++#else
+ constexpr uint32_t kZapValue = 0xdeadbeef;
++#endif
+ constexpr uint32_t kHandleZapValue = 0xbaddeaf;
+ constexpr uint32_t kGlobalHandleZapValue = 0xbaffedf;
+ constexpr uint32_t kFromSpaceZapValue = 0xbeefdaf;
 diff --git a/src/compiler/backend/code-generator.cc b/src/compiler/backend/code-generator.cc
 index e7702bcdf6..31b312bb6c 100644
 --- a/src/compiler/backend/code-generator.cc
@@ -571,7 +588,7 @@ index c9adb1601d..25328c0ad0 100644
    VariableId NextVariableId() { return next_variable_id_++; }
  
 diff --git a/src/compiler/pipeline.cc b/src/compiler/pipeline.cc
-index 8b2f424789..bdeec77781 100644
+index 8b2f424789..0f9a855eca 100644
 --- a/src/compiler/pipeline.cc
 +++ b/src/compiler/pipeline.cc
 @@ -92,6 +92,10 @@
@@ -644,7 +661,7 @@ index 8b2f424789..bdeec77781 100644
  
    if (poisoning_level != PoisoningMitigationLevel::kDontPoison) {
      info.SetPoisoningMitigationLevel(poisoning_level);
-@@ -2793,6 +2821,29 @@ bool PipelineImpl::SelectInstructions(Linkage* linkage) {
+@@ -2793,6 +2821,30 @@ bool PipelineImpl::SelectInstructions(Linkage* linkage) {
          info(), data->graph(), data->schedule(), data->isolate()));
    }
  
@@ -653,8 +670,9 @@ index 8b2f424789..bdeec77781 100644
 +    tf_llvm::V8PassManager pass_manager;
 +    auto debug_name = info()->GetDebugName();
 +    auto compiler_state = pass_manager.SelectInstructions(
-+        data->isolate(), data->schedule(), call_descriptor, debug_name.get(),
-+        info()->code_kind(), info()->builtin_index());
++        data->isolate(), data->schedule(), data->source_positions(),
++        call_descriptor, debug_name.get(), info()->code_kind(),
++        info()->builtin_index());
 +    // Allocate frame slots.
 +    int frame_slots_count = compiler_state->sm_.stackSize() / kPointerSize;
 +    // fake instruction sequence.
