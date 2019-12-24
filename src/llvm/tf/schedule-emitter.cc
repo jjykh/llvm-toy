@@ -1066,6 +1066,10 @@ bool ScheduleEmitter::IsMaterializableFromRoot(Handle<HeapObject> object,
   return false;
 }
 
+BranchHint ConvertBranchHint(compiler::BranchHint hint) {
+  return static_cast<BranchHint>(hint);
+}
+
 void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
                                         TFVisitor* visitor) {
   compiler::Node* input = block->control_input();
@@ -1092,7 +1096,8 @@ void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
         visitor->VisitGoto(tbranch->rpo_number());
       } else {
         visitor->VisitBranch(input->id(), input->InputAt(0)->id(),
-                             tbranch->rpo_number(), fbranch->rpo_number());
+                             tbranch->rpo_number(), fbranch->rpo_number(),
+                             ConvertBranchHint(BranchHintOf(input->op())));
       }
     }
       return;

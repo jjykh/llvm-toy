@@ -2083,14 +2083,27 @@ void LLVMTFBuilder::VisitInt64LessThan(int id, int e1, int e2) {
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
 }
 
-void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse) {
+void LLVMTFBuilder::VisitBranch(int id, int cmp, int btrue, int bfalse,
+                                BranchHint hint) {
   SetDebugLine(id);
   BasicBlock* bbTrue = basic_block_manager().ensureBB(btrue);
   BasicBlock* bbFalse = basic_block_manager().ensureBB(bfalse);
   EnsureNativeBB(bbTrue, output());
   EnsureNativeBB(bbFalse, output());
   int expected_value = -1;
-  if (bbTrue->is_deferred()) {
+  if (hint != BranchHint::kNone) {
+    switch (hint) {
+      case BranchHint::kTrue:
+        expected_value = 1;
+        break;
+      case BranchHint::kFalse:
+        expected_value = 0;
+        break;
+      default:
+        EMASSERT(false);
+        break;
+    }
+  } else if (bbTrue->is_deferred()) {
     if (!bbFalse->is_deferred()) expected_value = 0;
   } else if (bbFalse->is_deferred()) {
     expected_value = 1;
