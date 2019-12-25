@@ -891,6 +891,7 @@ LLVMTFBuilder::LLVMTFBuilder(Output& output,
       get_mod_two_double_function_(nullptr),
       int32_pair_type_(nullptr),
       line_number_(-1),
+      debug_file_name_(nullptr),
       state_point_id_next_(0) {
   int32_pair_type_ = structType(output.repo().context_, output.repo().int32,
                                 output.repo().int32);
@@ -2672,11 +2673,12 @@ void LLVMTFBuilder::SetInt32PairFromInt64(int id, LValue n) {
 void LLVMTFBuilder::SetDebugLine(int id) {
   int line_no = id;
   if (line_number_ != -1) line_no = line_number_;
-  output().setLineNumber(line_no);
+  output().setDebugInfo(line_no, debug_file_name_);
 }
 
-void LLVMTFBuilder::SetSourcePosition(int line, int fileid) {
+void LLVMTFBuilder::SetSourcePosition(int line, const char* file_name) {
   line_number_ = line;
+  debug_file_name_ = file_name;
 }
 }  // namespace tf_llvm
 }  // namespace internal

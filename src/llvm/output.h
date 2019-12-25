@@ -114,7 +114,7 @@ class Output {
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
-  void setLineNumber(int linenum);
+  void setDebugInfo(int linenum, const char* source_file_name);
   void finalize();
   LValue addFunction(const char* name, LType type);
   LType getLLVMTypeFromMachineType(const MachineType& mt);

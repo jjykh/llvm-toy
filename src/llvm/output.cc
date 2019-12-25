@@ -528,9 +528,16 @@ LValue Output::buildLandingPad() {
   return setInstrDebugLoc(landing_pad);
 }
 
-void Output::setLineNumber(int linenum) {
+void Output::setDebugInfo(int linenum, const char* source_file_name) {
+  LLVMMetadataRef scope = subprogram_;
+  if (source_file_name) {
+    LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
+        di_builder_, source_file_name, strlen(source_file_name), nullptr, 0);
+    scope = LLVMDIBuilderCreateLexicalBlockFile(di_builder_, subprogram_,
+                                                file_name_meta, 0);
+  }
   LLVMMetadataRef loc = LLVMDIBuilderCreateDebugLocation(
-      state_.context_, linenum, 0, subprogram_, nullptr);
+      state_.context_, linenum, 0, scope, nullptr);
   LValue loc_value = LLVMMetadataAsValue(state_.context_, loc);
   LLVMSetCurrentDebugLocation(builder_, loc_value);
 }

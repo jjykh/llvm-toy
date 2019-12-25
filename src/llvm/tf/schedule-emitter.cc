@@ -60,9 +60,10 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
   if (source_position.IsKnown()) {
     if (source_position.IsExternal())
       visitor->SetSourcePosition(source_position.ExternalLine(),
-                                 source_position.ExternalFileId());
+                                 isolate_->GetExternallyCompiledFilename(
+                                     source_position.ExternalFileId()));
     else
-      visitor->SetSourcePosition(source_position.ScriptOffset(), -1);
+      visitor->SetSourcePosition(source_position.ScriptOffset(), nullptr);
   }
   switch (node->opcode()) {
     case compiler::IrOpcode::kStart:
