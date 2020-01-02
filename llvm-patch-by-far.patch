@@ -196,6 +196,30 @@ Index: include/llvm-c/Target.h
  /** Converts target data to a target layout string. The string must be disposed
      with LLVMDisposeMessage.
      See the constructor llvm::DataLayout::DataLayout. */
+Index: lib/Analysis/ScalarEvolution.cpp
+===================================================================
+--- lib/Analysis/ScalarEvolution.cpp	(revision 365284)
++++ lib/Analysis/ScalarEvolution.cpp	(working copy)
+@@ -6455,6 +6455,7 @@
+     }
+     return getSignExtendExpr(getSCEV(U->getOperand(0)), U->getType());
+ 
++  case Instruction::AddrSpaceCast:
+   case Instruction::BitCast:
+     // BitCasts are no-op casts so we just eliminate the cast.
+     if (isSCEVable(U->getType()) && isSCEVable(U->getOperand(0)->getType()))
+Index: lib/Analysis/ScalarEvolutionExpander.cpp
+===================================================================
+--- lib/Analysis/ScalarEvolutionExpander.cpp	(revision 365284)
++++ lib/Analysis/ScalarEvolutionExpander.cpp	(working copy)
+@@ -112,6 +112,7 @@
+ Value *SCEVExpander::InsertNoopCastOfTo(Value *V, Type *Ty) {
+   Instruction::CastOps Op = CastInst::getCastOpcode(V, false, Ty, false);
+   assert((Op == Instruction::BitCast ||
++          Op == Instruction::AddrSpaceCast ||
+           Op == Instruction::PtrToInt ||
+           Op == Instruction::IntToPtr) &&
+          "InsertNoopCastOfTo cannot perform non-noop casts!");
 Index: lib/AsmParser/LLLexer.cpp
 ===================================================================
 --- lib/AsmParser/LLLexer.cpp	(revision 365284)
