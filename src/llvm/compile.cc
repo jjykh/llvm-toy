@@ -32,7 +32,6 @@ static uint8_t* mmAllocateCodeSection(void* opaqueState, uintptr_t size,
 
   tf_llvm::ByteBuffer& bb(state.codeSectionList_.back());
   bb.resize(size);
-  EMASSERT((reinterpret_cast<uintptr_t>(bb.data()) & (alignment - 1)) == 0);
 
   return const_cast<uint8_t*>(bb.data());
 }

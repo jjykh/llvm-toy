@@ -376,9 +376,7 @@ LValue Output::buildRetVoid(void) {
   return setInstrDebugLoc(v8::internal::tf_llvm::buildRetVoid(builder_));
 }
 
-void Output::buildReturnForTailCall() {
-  buildRet(LLVMGetUndef(taggedType()));
-}
+void Output::buildReturnForTailCall() { buildUnreachable(); }
 
 LValue Output::buildCast(LLVMOpcode Op, LLVMValueRef Val, LLVMTypeRef DestTy) {
   return setInstrDebugLoc(LLVMBuildCast(builder_, Op, Val, DestTy, ""));
@@ -529,6 +527,7 @@ LValue Output::buildLandingPad() {
 }
 
 void Output::setDebugInfo(int linenum, const char* source_file_name) {
+#if defined(FEATURE_DEBUG_INFO)
   LLVMMetadataRef scope = subprogram_;
   if (source_file_name) {
     LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
@@ -540,8 +539,10 @@ void Output::setDebugInfo(int linenum, const char* source_file_name) {
       state_.context_, linenum, 0, scope, nullptr);
   LValue loc_value = LLVMMetadataAsValue(state_.context_, loc);
   LLVMSetCurrentDebugLocation(builder_, loc_value);
+#endif
 }
 
+#if defined(FEATURE_DEBUG_INFO)
 static bool ValueKindIsFind(LValue v) {
   switch (LLVMGetValueKind(v)) {
     case LLVMConstantExprValueKind:
@@ -554,9 +555,12 @@ static bool ValueKindIsFind(LValue v) {
       return true;
   }
 }
+#endif
 
 LValue Output::setInstrDebugLoc(LValue v) {
+#if defined(FEATURE_DEBUG_INFO)
   if (ValueKindIsFind(v)) LLVMSetInstDebugLocation(builder_, v);
+#endif
   return v;
 }
 
