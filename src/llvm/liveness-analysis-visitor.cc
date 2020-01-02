@@ -681,7 +681,7 @@ void LivenessAnalysisVisitor::VisitUint64LessThan(int id, int e1, int e2) {
 }
 
 void LivenessAnalysisVisitor::VisitBranch(int id, int cmp, int btrue,
-                                          int bfalse) {
+                                          int bfalse, BranchHint) {
   AddIfNotInDefines(cmp);
   BasicBlock* bb_true = basicBlockManager().ensureBB(btrue);
   BasicBlock* bb_false = basicBlockManager().ensureBB(bfalse);

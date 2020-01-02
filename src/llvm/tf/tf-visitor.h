@@ -16,6 +16,7 @@ struct CallDescriptor {
   RegistersForOperands registers_for_operands;
   ReturnTypes return_types;
 };
+enum class BranchHint { kNone, kTrue, kFalse };
 
 #define INSTRUCTIONS(V)                                                       \
   V(Parameter, (int id, int pid))                                             \
@@ -131,7 +132,7 @@ struct CallDescriptor {
   V(Word32PairShl, (int id, int e0, int e1, int e2))                          \
   V(Word32PairShr, (int id, int e0, int e1, int e2))                          \
   V(Word32PairSar, (int id, int e0, int e1, int e2))                          \
-  V(Branch, (int id, int cmp, int btrue, int bfalse))                         \
+  V(Branch, (int id, int cmp, int btrue, int bfalse, BranchHint))             \
   V(Switch, (int id, int val, const OperandsVector& blocks))                  \
   V(IfValue, (int id, int val))                                               \
   V(IfDefault, (int id))                                                      \

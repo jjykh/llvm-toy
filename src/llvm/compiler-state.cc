@@ -18,7 +18,8 @@ CompilerState::CompilerState(const char* function_name)
       code_kind_(0),
       prologue_kind_(PrologueKind::Unset),
       needs_frame_(false),
-      is_wasm_(false) {
+      is_wasm_(false),
+      embedded_enabled_(false) {
   context_ = LLVMContextCreate();
   module_ = LLVMModuleCreateWithNameInContext("main", context_);
 #if 0

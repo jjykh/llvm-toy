@@ -64,6 +64,7 @@ class LLVMTFBuilder final : public TFVisitor {
   void BuildGetModTwoDoubleFunction(
       BuiltinFunctionClient* builtin_function_client);
   void BuildFunctionUtil(LValue func, std::function<void(LValue)> f);
+  void SetDebugLine(int);
 
   Output* output_;
   BasicBlockManager* basic_block_manager_;
@@ -78,6 +79,7 @@ class LLVMTFBuilder final : public TFVisitor {
 
   std::vector<BasicBlock*> phi_rebuild_worklist_;
   std::vector<BasicBlock*> tf_phi_rebuild_worklist_;
+  int line_number_;
   int64_t state_point_id_next_;
 };
 }  // namespace tf_llvm

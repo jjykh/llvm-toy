@@ -1054,6 +1054,10 @@ bool ScheduleEmitter::IsMaterializableFromRoot(
   return false;
 }
 
+BranchHint ConvertBranchHint(compiler::BranchHint hint) {
+  return static_cast<BranchHint>(hint);
+}
+
 void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
                                         TFVisitor* visitor) {
   compiler::Node* input = block->control_input();
@@ -1080,7 +1084,8 @@ void ScheduleEmitter::VisitBlockControl(compiler::BasicBlock* block,
         visitor->VisitGoto(tbranch->rpo_number());
       } else {
         visitor->VisitBranch(input->id(), input->InputAt(0)->id(),
-                             tbranch->rpo_number(), fbranch->rpo_number());
+                             tbranch->rpo_number(), fbranch->rpo_number(),
+                             ConvertBranchHint(BranchHintOf(input->op())));
       }
     }
       return;
@@ -1192,12 +1197,24 @@ bool ScheduleEmitter::HandleCodeForCall(compiler::Node* node,
                                         bool relative_call) {
   auto uses = node->uses();
   if (uses.empty()) return false;  // WTF???
-  auto iterator = uses.begin();
-  auto expected_call = *iterator;
-  ++iterator;
-  if (((expected_call->opcode() == compiler::IrOpcode::kCall) ||
-       (expected_call->opcode() == compiler::IrOpcode::kTailCall)) &&
-      (iterator == uses.end())) {
+  bool should_proceed = true;
+  for (auto iterator = uses.begin(); iterator != uses.end(); ++iterator) {
+    auto user = *iterator;
+    switch (user->opcode()) {
+      case compiler::IrOpcode::kCall:
+      case compiler::IrOpcode::kTailCall:
+        // Should only used as callee.
+        if (user->InputAt(0) != node) {
+          should_proceed = false;
+        }
+        break;
+      default:
+        should_proceed = false;
+        break;
+    }
+  }
+  // uses are all calls.
+  if (should_proceed) {
     if (relative_call) {
       visitor->VisitCodeForCall(node->id(),
                                 reinterpret_cast<uintptr_t>(object.location()),

@@ -176,7 +176,8 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   else
     setFunctionCallingConv(state_.function_, LLVMV8SBCallConv);
 
-  if (state_.needs_frame_) {
+  // Setup function's frame.
+  {
     static const char kJSFunctionCall[] = "js-function-call";
     static const char kJSStubCall[] = "js-stub-call";
     switch (state_.prologue_kind_) {
@@ -218,6 +219,8 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
       LLVMDIFlagZero, true);
   LLVMSetSubprogram(state_.function_, subprogram_);
 }
+
+void Output::buildReturnForTailCall() { buildUnreachable(); }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
   return v8::internal::tf_llvm::appendBasicBlock(state_.context_,
@@ -524,22 +527,30 @@ LValue Output::buildLandingPad() {
   return setInstrDebugLoc(landing_pad);
 }
 
-void Output::setLineNumber(int linenum) {
-#if defined(FEATURE_SAMPLE_PGO)
+void Output::setDebugInfo(int linenum, const char* source_file_name) {
+#if defined(FEATURE_DEBUG_INFO)
+  LLVMMetadataRef scope = subprogram_;
+  if (source_file_name) {
+    LLVMMetadataRef file_name_meta = LLVMDIBuilderCreateFile(
+        di_builder_, source_file_name, strlen(source_file_name), nullptr, 0);
+    scope = LLVMDIBuilderCreateLexicalBlockFile(di_builder_, subprogram_,
+                                                file_name_meta, 0);
+  }
   LLVMMetadataRef loc = LLVMDIBuilderCreateDebugLocation(
-      state_.context_, linenum, 0, subprogram_, nullptr);
+      state_.context_, linenum, 0, scope, nullptr);
   LValue loc_value = LLVMMetadataAsValue(state_.context_, loc);
   LLVMSetCurrentDebugLocation(builder_, loc_value);
 #endif
 }
 
-#if defined(FEATURE_SAMPLE_PGO)
+#if defined(FEATURE_DEBUG_INFO)
 static bool ValueKindIsFind(LValue v) {
   switch (LLVMGetValueKind(v)) {
     case LLVMConstantExprValueKind:
     case LLVMConstantIntValueKind:
     case LLVMConstantFPValueKind:
     case LLVMConstantPointerNullValueKind:
+    case LLVMArgumentValueKind:
       return false;
     default:
       return true;
@@ -548,9 +559,9 @@ static bool ValueKindIsFind(LValue v) {
 #endif
 
 LValue Output::setInstrDebugLoc(LValue v) {
-#if defined(FEATURE_SAMPLE_PGO)
+#if defined(FEATURE_DEBUG_INFO)
   if (ValueKindIsFind(v)) LLVMSetInstDebugLocation(builder_, v);
-#endif  // FEATURE_SAMPLE_PGO
+#endif
   return v;
 }
 
@@ -602,6 +613,8 @@ void Output::AddFunctionCommonAttr(LValue function) {
       "+armv7-a,+dsp,+neon,+vfp3,-crypto,-fp-armv8,-fp16,-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
 }
+
+bool Output::embedded_enabled() const { return state_.embedded_enabled_; }
 }  // namespace tf_llvm
 }  // namespace internal
 }  // namespace v8

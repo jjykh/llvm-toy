@@ -72,6 +72,7 @@ class Output {
   LValue buildSwitch(LValue, LBasicBlock, unsigned);
   LValue buildCondBr(LValue condition, LBasicBlock taken, LBasicBlock notTaken);
   LValue buildRet(LValue ret);
+  void buildReturnForTailCall();
   LValue buildRetVoid(void);
   LValue buildSelect(LValue condition, LValue taken, LValue notTaken);
   LValue buildICmp(LIntPredicate cond, LValue left, LValue right);
@@ -112,10 +113,11 @@ class Output {
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
-  void setLineNumber(int linenum);
+  void setDebugInfo(int linenum, const char* source_file_name);
   void finalize();
   LValue addFunction(const char* name, LType type);
   LType getLLVMTypeFromMachineType(const MachineType& mt);
+  bool embedded_enabled() const;
 
   inline IntrinsicRepository& repo() { return repo_; }
   inline LBasicBlock prologue() const { return prologue_; }

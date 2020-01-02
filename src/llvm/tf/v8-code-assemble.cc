@@ -77,6 +77,7 @@ class CodeAssemblerLLVM {
   int& handler_table_offset_;
   uint32_t reference_instruction_;
   int slot_count_ = 0;
+  bool embedded_enabled_ = false;
 };
 
 CodeAssemblerLLVM::CodeAssemblerLLVM(
@@ -125,6 +126,8 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
     Safepoint safepoint = safepoint_table_builder_.DefineSafepoint(
         &tasm_, Safepoint::kSimple, 0, Safepoint::kLazyDeopt);
     for (auto& location : record.locations) {
+      if (location.kind == StackMaps::Location::Register)
+        LOGD("Register location! Maybe bug!\n");
       if (location.kind != StackMaps::Location::Indirect) continue;
       // only understand stack slot
       if (location.dwarfReg == 13) {
@@ -145,7 +148,17 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
 
 int CodeAssemblerLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   int pc_offset = tasm_.pc_offset();
-  tasm_.blx(ip);
+  if (!embedded_enabled_) {
+    tasm_.blx(ip);
+  } else {
+    int builtin_index;
+    builtin_index = Builtins::kRecordWrite;
+    Handle<Code> code =
+        tasm_.isolate()->builtins()->builtin_handle(builtin_index);
+    int code_target_index = tasm_.LLVMAddCodeTarget(code);
+    relocation_processor_.EmitRelativeCall(tasm_.pc_offset());
+    tasm_.bl(code_target_index * Instruction::kInstrSize);
+  }
   CHECK(0 == ((tasm_.pc_offset() - pc_offset) % sizeof(uint32_t)));
   return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
@@ -192,6 +205,7 @@ bool CodeAssemblerLLVM::Assemble(const CompilerState& state) {
   ProcessRecordMap(rm, state.stack_map_info_map_);
 
   slot_count_ = state.sm_.stackSize() / kPointerSize;
+  embedded_enabled_ = state.embedded_enabled_;
 
   int incremental = 0;
   int base_offset = tasm_.pc_offset();

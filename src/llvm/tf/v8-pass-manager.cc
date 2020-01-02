@@ -193,6 +193,8 @@ std::unique_ptr<CompilerState> V8PassManager::SelectInstructions(
         new tf_llvm::CompilerState(name));
     tf_llvm::CompilerState& compiler_state = *compiler_state_storage.get();
     compiler_state.code_kind_ = static_cast<int>(kind);
+    compiler_state.embedded_enabled_ =
+        FLAG_embedded_builtins && (builtin_index != -1);
 #ifdef DEBUG
     BBM.set_needs_frame(true);
 #endif
