@@ -2715,6 +2715,19 @@ Index: lib/Target/ARM/ARMTargetTransformInfo.h
      // In the ROPI and RWPI relocation models we can't have pointers to global
      // variables or functions in constant data, so don't convert switches to
      // lookup tables if any of the values would need relocation.
+Index: lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp
+===================================================================
+--- lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp	(revision 365284)
++++ lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp	(working copy)
+@@ -1592,6 +1592,8 @@
+   case 16: Align = 0x02; break;
+   case 32: Align = 0x03; break;
+   }
++  // FIXME: Hardcode for JS code gen.
++  Align = 0;
+ 
+   return RegNo | (Align << 4);
+ }
 Index: lib/Target/Target.cpp
 ===================================================================
 --- lib/Target/Target.cpp	(revision 365284)
