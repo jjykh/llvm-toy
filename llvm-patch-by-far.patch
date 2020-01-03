@@ -1361,6 +1361,16 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    // This hook gets to expand COPY instructions before they become
    // copyPhysReg() calls.  Look for VMOVS instructions that can legally be
    // widened to VMOVD.  We prefer the VMOVD when possible because it may be
+@@ -1892,6 +1967,9 @@
+ isProfitableToIfCvt(MachineBasicBlock &MBB,
+                     unsigned NumCycles, unsigned ExtraPredCycles,
+                     BranchProbability Probability) const {
++  CallingConv::ID CallingConv = MBB.getParent()->getFunction().getCallingConv();
++  if (CallingConv == CallingConv::V8CC || CallingConv == CallingConv::V8SBCC)
++    return false;
+   if (!NumCycles)
+     return false;
+ 
 Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 365284)
