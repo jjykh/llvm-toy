@@ -609,6 +609,10 @@ void Output::AddFunctionCommonAttr(LValue function) {
   static const char kFSValue[] =
       "+armv7-a,+dsp,+neon,+vfp3,-crypto,-fp-armv8,-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
+
+  static const char kNoRealignStack[] = "no-realign-stack";
+  static const char kTrue[] = "true";
+  LLVMAddTargetDependentFunctionAttr(function, kNoRealignStack, kTrue);
 }
 }  // namespace tf_llvm
 }  // namespace internal

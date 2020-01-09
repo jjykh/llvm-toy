@@ -196,6 +196,34 @@ Index: include/llvm-c/Target.h
  /** Converts target data to a target layout string. The string must be disposed
      with LLVMDisposeMessage.
      See the constructor llvm::DataLayout::DataLayout. */
+Index: lib/Analysis/BasicAliasAnalysis.cpp
+===================================================================
+--- lib/Analysis/BasicAliasAnalysis.cpp	(revision 365284)
++++ lib/Analysis/BasicAliasAnalysis.cpp	(working copy)
+@@ -609,6 +609,14 @@
+   return true;
+ }
+ 
++static bool IsJSRootPointer(const Function *F, const Value *V) {
++  CallingConv::ID CC = F->getCallingConv();
++  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
++    return false;
++  // FIXME: consider put register index into TRI.
++  return V == &F->arg_begin()[10];
++}
++
+ /// Returns whether the given pointer value points to memory that is local to
+ /// the function, with global constants being considered local to all
+ /// functions.
+@@ -664,6 +672,8 @@
+ 
+     // Otherwise be conservative.
+     Visited.clear();
++    if (IsJSRootPointer(&F, V))
++      return true;
+     return AAResultBase::pointsToConstantMemory(Loc, OrLocal);
+   } while (!Worklist.empty() && --MaxLookup);
+ 
 Index: lib/Analysis/BranchProbabilityInfo.cpp
 ===================================================================
 --- lib/Analysis/BranchProbabilityInfo.cpp	(revision 365284)
@@ -332,7 +360,7 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +    }
 +  }
 +  VisitedSet.emplace(InputReg);
-+  LiveInterval &OldLI = LIS.getInterval(Original);
++  LiveInterval &OldLI = LIS.getInterval(InputReg);
 +  while (!WorkList.empty()) {
 +    unsigned Reg = WorkList.pop_back_val();
 +    // Fold the use of state point.
@@ -1550,7 +1578,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
-+def CSR_V8CC : CalleeSavedRegs<(add LR, R11)>;
++def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, (sequence "D%u", 31, 0))>;
 +
@@ -2695,6 +2723,24 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
+Index: lib/Target/ARM/ARMTargetTransformInfo.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetTransformInfo.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetTransformInfo.cpp	(working copy)
+@@ -130,6 +130,13 @@
+   if (Opcode == Instruction::Xor && Imm.isAllOnesValue())
+     return 0;
+ 
++  if ((Opcode == Instruction::GetElementPtr) &&
++      (!ST->isThumb() || ST->isThumb2())) {
++    int64_t SImmVal = Imm.getSExtValue();
++    if (SImmVal < 4096 && SImmVal > -4096)
++      return 0;
++  }
++
+   return getIntImmCost(Imm, Ty);
+ }
+ 
 Index: lib/Target/ARM/ARMTargetTransformInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMTargetTransformInfo.h	(revision 365284)
@@ -2806,25 +2852,6 @@ Index: lib/Transforms/IPO/SampleProfile.cpp
 +std::string SampleProfileLoaderPass::SampleProfileFileFromOption() {
 +  return SampleProfileFile;
 +}
-Index: lib/Transforms/Vectorize/LoopVectorize.cpp
-===================================================================
---- lib/Transforms/Vectorize/LoopVectorize.cpp	(revision 365284)
-+++ lib/Transforms/Vectorize/LoopVectorize.cpp	(working copy)
-@@ -7512,6 +7512,14 @@
-   }
- 
-   // Process each loop nest in the function.
-+  if (Changed) {
-+    // Add alignstack attribute to function.
-+    if (F.hasFnAttribute("js-wasm-call")) {
-+      F.addAttribute(
-+          AttributeList::FunctionIndex,
-+          Attribute::get(F.getContext(), Attribute::StackAlignment, 4));
-+    }
-+  }
-   return Changed;
- }
- 
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 365284)
