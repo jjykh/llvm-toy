@@ -332,16 +332,18 @@ Index: lib/CodeGen/InlineSpiller.cpp
  #include <utility>
  #include <vector>
  
-@@ -213,6 +214,8 @@
+@@ -213,6 +214,10 @@
    bool isSibling(unsigned Reg);
    bool hoistSpillInsideBB(LiveInterval &SpillLI, MachineInstr &CopyMI);
    void eliminateRedundantSpills(LiveInterval &LI, VNInfo *VNI);
++  /// Fold all the regs that related to InputReg and live through a
++  /// statepoint.
 +  void foldStatePoints(unsigned Reg);
 +  void removeRegFromStatePoint(MachineInstr *MI, unsigned Reg);
  
    void markValueUsed(LiveInterval*, VNInfo*);
    bool reMaterializeFor(LiveInterval &, MachineInstr &MI);
-@@ -552,6 +555,11 @@
+@@ -552,6 +557,11 @@
      return false;
    }
  
@@ -353,10 +355,18 @@ Index: lib/CodeGen/InlineSpiller.cpp
    // If the instruction also writes VirtReg.reg, it had better not require the
    // same register for uses and defs.
    if (RI.Tied) {
-@@ -924,11 +932,80 @@
+@@ -924,11 +934,85 @@
      HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
  }
  
++static bool CheckIdxInsideLI(SlotIndex Idx, const LiveInterval &LI) {
++  auto Segment = LI.FindSegmentContaining(Idx.getPrevSlot());
++  if (LI.end() == Segment) {
++    return false;
++  }
++  return true;
++}
++
 +void InlineSpiller::foldStatePoints(unsigned InputReg) {
 +  SmallVector<unsigned, 8> WorkList;
 +  std::unordered_set<unsigned> VisitedSet;
@@ -373,7 +383,6 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +    }
 +  }
 +  VisitedSet.emplace(InputReg);
-+  LiveInterval &OldLI = LIS.getInterval(InputReg);
 +  while (!WorkList.empty()) {
 +    unsigned Reg = WorkList.pop_back_val();
 +    // Fold the use of state point.
@@ -397,10 +406,8 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        // Ignore if the input reg's live range does not contain
 +        // the MI.
 +        SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
-+        auto Segment = OldLI.FindSegmentContaining(Idx);
-+        if ((OldLI.end() == Segment) || (Segment->end <= Idx)) {
-+          if (Segment->end == Idx)
-+            removeRegFromStatePoint(&MI, Reg);
++        // Check both to ensure the case that reloads for STATEPOINT.
++        if (!CheckIdxInsideLI(Idx, *StackInt)) {
 +          continue;
 +        }
 +        // Analyze instruction.
