@@ -196,34 +196,6 @@ Index: include/llvm-c/Target.h
  /** Converts target data to a target layout string. The string must be disposed
      with LLVMDisposeMessage.
      See the constructor llvm::DataLayout::DataLayout. */
-Index: lib/Analysis/BasicAliasAnalysis.cpp
-===================================================================
---- lib/Analysis/BasicAliasAnalysis.cpp	(revision 365284)
-+++ lib/Analysis/BasicAliasAnalysis.cpp	(working copy)
-@@ -609,6 +609,14 @@
-   return true;
- }
- 
-+static bool IsJSRootPointer(const Function *F, const Value *V) {
-+  CallingConv::ID CC = F->getCallingConv();
-+  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
-+    return false;
-+  // FIXME: consider put register index into TRI.
-+  return V == &F->arg_begin()[10];
-+}
-+
- /// Returns whether the given pointer value points to memory that is local to
- /// the function, with global constants being considered local to all
- /// functions.
-@@ -664,6 +672,8 @@
- 
-     // Otherwise be conservative.
-     Visited.clear();
-+    if (IsJSRootPointer(&F, V))
-+      return true;
-     return AAResultBase::pointsToConstantMemory(Loc, OrLocal);
-   } while (!Worklist.empty() && --MaxLookup);
- 
 Index: lib/Analysis/BranchProbabilityInfo.cpp
 ===================================================================
 --- lib/Analysis/BranchProbabilityInfo.cpp	(revision 365284)
@@ -453,6 +425,36 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
            MI.getOpcode() == TargetOpcode::PATCHPOINT)
          continue;
  
+Index: lib/CodeGen/MachineInstr.cpp
+===================================================================
+--- lib/CodeGen/MachineInstr.cpp	(revision 365284)
++++ lib/CodeGen/MachineInstr.cpp	(working copy)
+@@ -1289,6 +1289,14 @@
+   });
+ }
+ 
++static bool IsJSRootPointer(const Function &F, const Value *V) {
++  CallingConv::ID CC = F.getCallingConv();
++  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
++    return false;
++  // FIXME: consider put register index into TRI.
++  return V == &F.arg_begin()[10];
++}
++
+ /// isDereferenceableInvariantLoad - Return true if this instruction will never
+ /// trap and is loading from a location whose value is invariant across a run of
+ /// this function.
+@@ -1323,6 +1331,10 @@
+         continue;
+     }
+ 
++    if (IsJSRootPointer(getParent()->getParent()->getFunction(),
++                        MMO->getValue()))
++      continue;
++
+     // Otherwise assume conservatively.
+     return false;
+   }
 Index: lib/CodeGen/MachineRegisterInfo.cpp
 ===================================================================
 --- lib/CodeGen/MachineRegisterInfo.cpp	(revision 365284)
