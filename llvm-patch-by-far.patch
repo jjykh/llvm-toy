@@ -425,36 +425,6 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
            MI.getOpcode() == TargetOpcode::PATCHPOINT)
          continue;
  
-Index: lib/CodeGen/MachineInstr.cpp
-===================================================================
---- lib/CodeGen/MachineInstr.cpp	(revision 365284)
-+++ lib/CodeGen/MachineInstr.cpp	(working copy)
-@@ -1289,6 +1289,14 @@
-   });
- }
- 
-+static bool IsJSRootPointer(const Function &F, const Value *V) {
-+  CallingConv::ID CC = F.getCallingConv();
-+  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
-+    return false;
-+  // FIXME: consider put register index into TRI.
-+  return V == &F.arg_begin()[10];
-+}
-+
- /// isDereferenceableInvariantLoad - Return true if this instruction will never
- /// trap and is loading from a location whose value is invariant across a run of
- /// this function.
-@@ -1323,6 +1331,10 @@
-         continue;
-     }
- 
-+    if (IsJSRootPointer(getParent()->getParent()->getFunction(),
-+                        MMO->getValue()))
-+      continue;
-+
-     // Otherwise assume conservatively.
-     return false;
-   }
 Index: lib/CodeGen/MachineRegisterInfo.cpp
 ===================================================================
 --- lib/CodeGen/MachineRegisterInfo.cpp	(revision 365284)
