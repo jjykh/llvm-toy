@@ -10,7 +10,7 @@ index b3e9762a93..06558cde43 100644
 +*.so binary
 +
 diff --git a/BUILD.gn b/BUILD.gn
-index c486f1a1c8..31de69230a 100644
+index c486f1a1c8..b238fcd824 100644
 --- a/BUILD.gn
 +++ b/BUILD.gn
 @@ -202,6 +202,20 @@ declare_args() {
@@ -52,7 +52,7 @@ index c486f1a1c8..31de69230a 100644
 +if (v8_enable_llvm) {
 +  config("llvm_configs") {
 +    include_dirs = [ "src/llvm/include" ]
-+    libs = [ "LLVM-9" ]
++    libs = [ "LLVM-8" ]
 +    defines = [ "LLVMLOG_LEVEL=1" ]
 +    ldflags = [ "-Wl,-rpath,../../v8/lib" ]
 +
@@ -1139,6 +1139,25 @@ index f5f7184613..fcfd1577bd 100644
    }
  
    if (FLAG_prof_browser_mode) {
+diff --git a/src/snapshot/embedded/platform-embedded-file-writer-generic.cc b/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
+index f4183b4b87..a25b860417 100644
+--- a/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
++++ b/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
+@@ -108,6 +108,14 @@ void PlatformEmbeddedFileWriterGeneric::DeclareFunctionBegin(const char* name) {
+     // to create a DWARF subprogram entry.
+     fprintf(fp_, ".type %s, @function\n", name);
+   }
++#if defined(UC_BUILD_BUG_FIX)
++  // Impose arm instruction set.
++  if (target_arch_ == EmbeddedTargetArch::kArm) {
++    fprintf(fp_, ".arm\n");
++    fprintf(fp_, ".hidden %s\n", name);
++    fprintf(fp_, ".globl %s\n", name);
++  }
++#endif
+ }
+ 
+ void PlatformEmbeddedFileWriterGeneric::DeclareFunctionEnd(const char* name) {}
 diff --git a/src/snapshot/serializer-common.h b/src/snapshot/serializer-common.h
 index 2a30fefe33..2bc0c5d399 100644
 --- a/src/snapshot/serializer-common.h
