@@ -1411,7 +1411,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    if (!NumCycles)
      return false;
  
-@@ -5107,3 +5186,88 @@
+@@ -5107,3 +5186,87 @@
        {MO_NONLAZY, "arm-nonlazy"}};
    return makeArrayRef(TargetFlags);
  }
@@ -1424,7 +1424,6 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +/// Chases pointers until we find a V8's root region or not.
 +static bool pointsToV8RootRegion(const Value *V, const Function &F,
 +                                 const DataLayout &DL) {
-+  assert(Visited.empty() && "Visited must be cleared after use!");
 +  CallingConv::ID CC = F.getCallingConv();
 +  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
 +    return false;
