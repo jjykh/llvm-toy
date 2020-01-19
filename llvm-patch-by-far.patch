@@ -1,3 +1,15 @@
+Index: include/llvm/ADT/Triple.h
+===================================================================
+--- include/llvm/ADT/Triple.h	(revision 365284)
++++ include/llvm/ADT/Triple.h	(working copy)
+@@ -211,6 +211,7 @@
+     Cygnus,
+     CoreCLR,
+     Simulator,  // Simulator variants of other systems, e.g., Apple's iOS
++    V8,
+     LastEnvironmentType = Simulator
+   };
+   enum ObjectFormatType {
 Index: include/llvm/CodeGen/MachineRegisterInfo.h
 ===================================================================
 --- include/llvm/CodeGen/MachineRegisterInfo.h	(revision 365284)
@@ -1094,6 +1106,39 @@ Index: lib/MC/MCAsmStreamer.cpp
  
      // We couldn't handle the requested integer size so we fallback by breaking
      // the request down into several, smaller, integers.
+Index: lib/Support/ARMTargetParser.cpp
+===================================================================
+--- lib/Support/ARMTargetParser.cpp	(revision 365284)
++++ lib/Support/ARMTargetParser.cpp	(working copy)
+@@ -567,6 +567,8 @@
+   case Triple::EABIHF:
+   case Triple::EABI:
+     return "aapcs";
++  case Triple::V8:
++    return "v8";
+   default:
+     if (TT.isOSNetBSD())
+       return "apcs-gnu";
+Index: lib/Support/Triple.cpp
+===================================================================
+--- lib/Support/Triple.cpp	(revision 365284)
++++ lib/Support/Triple.cpp	(working copy)
+@@ -235,6 +235,7 @@
+   case Cygnus: return "cygnus";
+   case CoreCLR: return "coreclr";
+   case Simulator: return "simulator";
++  case V8: return "v8";
+   }
+ 
+   llvm_unreachable("Invalid EnvironmentType!");
+@@ -530,6 +531,7 @@
+     .StartsWith("cygnus", Triple::Cygnus)
+     .StartsWith("coreclr", Triple::CoreCLR)
+     .StartsWith("simulator", Triple::Simulator)
++    .StartsWith("v8", Triple::V8)
+     .Default(Triple::UnknownEnvironment);
+ }
+ 
 Index: lib/Target/ARM/ARMAsmPrinter.cpp
 ===================================================================
 --- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 365284)
@@ -2825,6 +2870,110 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  };
  
  } // end namespace llvm
+Index: lib/Target/ARM/ARMSubtarget.cpp
+===================================================================
+--- lib/Target/ARM/ARMSubtarget.cpp	(revision 365284)
++++ lib/Target/ARM/ARMSubtarget.cpp	(working copy)
+@@ -207,6 +207,8 @@
+     stackAlignment = 8;
+   if (isTargetNaCl() || isAAPCS16_ABI())
+     stackAlignment = 16;
++  if (isV8_ABI())
++    stackAlignment = 4;
+ 
+   // FIXME: Completely disable sibcall for Thumb1 since ThumbRegisterInfo::
+   // emitEpilogue is not ready for them. Thumb tail calls also use t2B, as
+@@ -325,6 +327,10 @@
+   assert(TM.TargetABI != ARMBaseTargetMachine::ARM_ABI_UNKNOWN);
+   return TM.TargetABI == ARMBaseTargetMachine::ARM_ABI_AAPCS16;
+ }
++bool ARMSubtarget::isV8_ABI() const {
++  assert(TM.TargetABI != ARMBaseTargetMachine::ARM_ABI_UNKNOWN);
++  return TM.TargetABI == ARMBaseTargetMachine::ARM_ABI_V8;
++}
+ 
+ bool ARMSubtarget::isROPI() const {
+   return TM.getRelocationModel() == Reloc::ROPI ||
+Index: lib/Target/ARM/ARMSubtarget.h
+===================================================================
+--- lib/Target/ARM/ARMSubtarget.h	(revision 365284)
++++ lib/Target/ARM/ARMSubtarget.h	(working copy)
+@@ -702,6 +702,7 @@
+   bool isAPCS_ABI() const;
+   bool isAAPCS_ABI() const;
+   bool isAAPCS16_ABI() const;
++  bool isV8_ABI() const;
+ 
+   bool isROPI() const;
+   bool isRWPI() const;
+Index: lib/Target/ARM/ARMTargetMachine.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetMachine.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetMachine.cpp	(working copy)
+@@ -119,6 +119,8 @@
+     return ARMBaseTargetMachine::ARM_ABI_AAPCS;
+   else if (ABIName.startswith("apcs"))
+     return ARMBaseTargetMachine::ARM_ABI_APCS;
++  else if (ABIName == "v8")
++    return ARMBaseTargetMachine::ARM_ABI_V8;
+ 
+   llvm_unreachable("Unhandled/unknown ABI Name!");
+   return ARMBaseTargetMachine::ARM_ABI_UNKNOWN;
+@@ -143,7 +145,8 @@
+   Ret += "-p:32:32";
+ 
+   // ABIs other than APCS have 64 bit integers with natural alignment.
+-  if (ABI != ARMBaseTargetMachine::ARM_ABI_APCS)
++  if (ABI != ARMBaseTargetMachine::ARM_ABI_APCS &&
++      ABI != ARMBaseTargetMachine::ARM_ABI_V8)
+     Ret += "-i64:64";
+ 
+   // We have 64 bits floats. The APCS ABI requires them to be aligned to 32
+@@ -153,7 +156,8 @@
+ 
+   // We have 128 and 64 bit vectors. The APCS ABI aligns them to 32 bits, others
+   // to 64. We always ty to give them natural alignment.
+-  if (ABI == ARMBaseTargetMachine::ARM_ABI_APCS)
++  if (ABI == ARMBaseTargetMachine::ARM_ABI_APCS ||
++      ABI == ARMBaseTargetMachine::ARM_ABI_V8)
+     Ret += "-v64:32:64-v128:32:128";
+   else if (ABI != ARMBaseTargetMachine::ARM_ABI_AAPCS16)
+     Ret += "-v128:64:128";
+Index: lib/Target/ARM/ARMTargetMachine.h
+===================================================================
+--- lib/Target/ARM/ARMTargetMachine.h	(revision 365284)
++++ lib/Target/ARM/ARMTargetMachine.h	(working copy)
+@@ -31,7 +31,8 @@
+     ARM_ABI_UNKNOWN,
+     ARM_ABI_APCS,
+     ARM_ABI_AAPCS, // ARM EABI
+-    ARM_ABI_AAPCS16
++    ARM_ABI_AAPCS16,
++    ARM_ABI_V8
+   } TargetABI;
+ 
+ protected:
+Index: lib/Target/ARM/ARMTargetObjectFile.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetObjectFile.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetObjectFile.cpp	(working copy)
+@@ -32,6 +32,7 @@
+                                         const TargetMachine &TM) {
+   const ARMBaseTargetMachine &ARM_TM = static_cast<const ARMBaseTargetMachine &>(TM);
+   bool isAAPCS_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_AAPCS;
++  bool isV8_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_V8;
+   bool genExecuteOnly =
+       ARM_TM.getMCSubtargetInfo()->hasFeature(ARM::FeatureExecuteOnly);
+ 
+@@ -38,7 +39,7 @@
+   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
+   InitializeELF(isAAPCS_ABI);
+ 
+-  if (isAAPCS_ABI) {
++  if (isAAPCS_ABI || isV8_ABI) {
+     LSDASection = nullptr;
+   }
+ 
 Index: lib/Target/ARM/ARMTargetTransformInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMTargetTransformInfo.cpp	(revision 365284)
@@ -2873,19 +3022,6 @@ Index: lib/Target/ARM/ARMTargetTransformInfo.h
      // In the ROPI and RWPI relocation models we can't have pointers to global
      // variables or functions in constant data, so don't convert switches to
      // lookup tables if any of the values would need relocation.
-Index: lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp
-===================================================================
---- lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp	(revision 365284)
-+++ lib/Target/ARM/MCTargetDesc/ARMMCCodeEmitter.cpp	(working copy)
-@@ -1592,6 +1592,8 @@
-   case 16: Align = 0x02; break;
-   case 32: Align = 0x03; break;
-   }
-+  // FIXME: Hardcode for JS code gen.
-+  Align = 0;
- 
-   return RegNo | (Align << 4);
- }
 Index: lib/Target/Target.cpp
 ===================================================================
 --- lib/Target/Target.cpp	(revision 365284)
