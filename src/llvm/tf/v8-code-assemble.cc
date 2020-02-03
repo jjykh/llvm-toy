@@ -14,6 +14,7 @@
 #include "src/llvm/compiler-state.h"
 #include "src/llvm/exception-table-arm.h"
 #include "src/llvm/stack-maps.h"
+#include "src/llvm/target-specific.h"
 
 namespace v8 {
 namespace internal {
@@ -143,9 +144,26 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
   return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
+static bool IsLiveOutHasNoneGPRegister(
+    const std::vector<StackMaps::LiveOut>& liveouts) {
+  for (auto& e : liveouts) {
+    if (e.dwarfReg > kDwarfGenernalRegEnd) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int CodeAssemblerLLVM::HandleStoreBarrier(const StoreBarrierInfo* info,
-                                          const StackMaps::Record& r) {
+                                          const StackMaps::Record& record) {
   int pc_offset = tasm_.pc_offset();
+  // Set save_fp_regs parameter.
+  unsigned save_fp_mode = kDontSaveFPRegs;
+  if (IsLiveOutHasNoneGPRegister(record.liveOuts)) {
+    save_fp_mode = kSaveFPRegs;
+  }
+  tasm_.mov(r3, Operand(save_fp_mode << 1));
+
   if (!FLAG_embedded_builtins) {
     tasm_.blx(ip);
   } else {

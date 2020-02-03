@@ -256,7 +256,6 @@ class StoreBarrierResolver final : public ContinuationResolver {
  private:
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
-                      LValue save_fp_mode,
                       compiler::WriteBarrierKind barrier_kind,
                       std::function<LValue()> record_write);
   void CheckSmi(LValue value);
@@ -647,12 +646,10 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
       barrier_kind > compiler::kMapWriteBarrier ? EMIT_REMEMBERED_SET
                                                 : OMIT_REMEMBERED_SET;
   // now v8cc clobbers all fp.
-  SaveFPRegsMode const save_fp_mode = kDontSaveFPRegs;
   CallPatchpoint(
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
-      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), barrier_kind,
-      record_write);
+      barrier_kind, record_write);
   output().buildBr(impl_->continuation);
   output().positionToBBEnd(impl_->continuation);
 }
@@ -686,14 +683,15 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
 
 void StoreBarrierResolver::CallPatchpoint(
     LValue base, LValue offset, LValue remembered_set_action,
-    LValue save_fp_mode, compiler::WriteBarrierKind barrier_kind,
+    compiler::WriteBarrierKind barrier_kind,
     std::function<LValue()> get_record_write) {
   // blx ip
   // 1 instructions.
-  int instructions_count = 1;
+  int instructions_count = 2;
   int patchid = patch_point_id_;
   // will not be true again.
   LValue stub_entry = LLVMGetUndef(output().repo().ref8);
+  LValue save_fp_mode = LLVMGetUndef(output().repo().intPtr);
   if (!FLAG_embedded_builtins) {
     LValue stub = get_record_write();
     stub_entry = output().buildGEPWithByteOffset(

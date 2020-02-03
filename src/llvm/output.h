@@ -7,6 +7,7 @@
 #include <vector>
 #include "src/codegen/machine-type.h"
 #include "src/llvm/intrinsic-repository.h"
+#include "src/llvm/target-specific.h"
 namespace v8 {
 namespace internal {
 namespace tf_llvm {
@@ -18,15 +19,6 @@ struct RegisterParameter {
 };
 
 using RegisterParameterDesc = std::vector<RegisterParameter>;
-
-static const int kV8CCRegisterParameterCount = 12;
-static const int kV8CCMaxStackParameterToReg = 6;
-static const int kARMRegParameterNotAllocatable = (1 << 10 | 1 << 11);
-static const int kRootReg = 10;
-static const int kFPReg = 11;
-
-static const int kTargetRegParameterNotAllocatable =
-    kARMRegParameterNotAllocatable;
 
 class Output {
  public:
