@@ -118,6 +118,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     v_null_index++;
   }
   bitcast_space_ = buildAlloca(arrayType(repo().int8, 16));
+  is_v8cc_ = v8cc;
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
@@ -613,6 +614,13 @@ void Output::AddFunctionCommonAttr(LValue function) {
   static const char kNoRealignStack[] = "no-realign-stack";
   static const char kTrue[] = "true";
   LLVMAddTargetDependentFunctionAttr(function, kNoRealignStack, kTrue);
+}
+
+LLVMAttributeRef Output::createStringAttr(const char* key, unsigned key_len,
+                                          const char* value,
+                                          unsigned value_len) {
+  return LLVMCreateStringAttribute(state_.context_, key, key_len, value,
+                                   value_len);
 }
 }  // namespace tf_llvm
 }  // namespace internal

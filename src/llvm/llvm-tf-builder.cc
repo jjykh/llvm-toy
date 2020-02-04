@@ -2228,7 +2228,7 @@ void LLVMTFBuilder::VisitInvoke(int id, CallMode mode,
 }
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
-    int id, const OperandsVector& operands) {
+    int id, const OperandsVector& operands, bool save_fp) {
   SetDebugLine(id);
   std::vector<LType> types;
   std::vector<LValue> values;
@@ -2251,6 +2251,13 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
       output().buildBitCast(function, pointerType(function_type)),
       values.data(), values.size());
   impl->SetLLVMValue(id, result);
+  // Only enable when the function itself is v8sbcc.
+  if (save_fp && !output().is_v8cc()) {
+    static const char kSaveFp[] = "save-fp";
+    LLVMAttributeRef attr =
+        output().createStringAttr(kSaveFp, sizeof(kSaveFp) - 1, nullptr, 0);
+    LLVMAddCallSiteAttribute(result, ~0U, attr);
+  }
 }
 
 void LLVMTFBuilder::VisitRoot(int id, RootIndex index) {

@@ -29,7 +29,8 @@ class ScheduleEmitter final {
   void VisitNode(compiler::Node*, TFVisitor*);
   void VisitCall(compiler::Node*, TFVisitor*, bool tail, int successor_bid = -1,
                  int exception_bid = -1);
-  void VisitCCall(compiler::Node*, TFVisitor*, int operands_count);
+  void VisitCCall(compiler::Node*, TFVisitor*, int operands_count,
+                  bool save_fp);
 
  private:
   void DoVisit(TFVisitor* visitor);

@@ -106,6 +106,8 @@ class Output {
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
+  LLVMAttributeRef createStringAttr(const char* key, unsigned key_len,
+                                    const char* value, unsigned value_len);
   void setDebugInfo(int linenum, const char* source_file_name);
   void finalize();
   LValue addFunction(const char* name, LType type);
@@ -120,6 +122,7 @@ class Output {
   inline LValue parent_fp() { return parent_fp_; }
   inline LValue bitcast_space() { return bitcast_space_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
+  inline bool is_v8cc() const { return is_v8cc_; }
 
  private:
   LValue setInstrDebugLoc(LValue);
@@ -138,6 +141,7 @@ class Output {
   size_t stack_parameter_count_;
   std::vector<LValue> parameters_;
   std::unordered_map<LType, LValue> gc_function_map_;
+  bool is_v8cc_;
 };
 }  // namespace tf_llvm
 }  // namespace internal

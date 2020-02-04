@@ -47,7 +47,7 @@ Index: include/llvm/IR/CallingConv.h
 ===================================================================
 --- include/llvm/IR/CallingConv.h	(revision 365284)
 +++ include/llvm/IR/CallingConv.h	(working copy)
-@@ -220,8 +220,14 @@
+@@ -220,8 +220,16 @@
      /// shader if tessellation is in use, or otherwise the vertex shader.
      AMDGPU_ES = 96,
  
@@ -56,10 +56,12 @@ Index: include/llvm/IR/CallingConv.h
 +
 +    // Calling convention for v8 store barrier stub
 +    V8SBCC = 98,
++    // Calling convention for v8 C call with fp saved
++    V8FPSave = 99,
 +
      // Calling convention between AArch64 Advanced SIMD functions
 -    AArch64_VectorCall = 97,
-+    AArch64_VectorCall = 99,
++    AArch64_VectorCall = 100,
  
      /// The highest possible calling convention ID. Must be some 2^k - 1.
      MaxID = 1023
@@ -1570,11 +1572,11 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    return CSR_V8CC_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8SBCC) {
-+    return CSR_V8SBCC_SaveList;
++    return CSR_V8CC_SaveList;
    }
  
    if (STI.getTargetLowering()->supportSwiftError() &&
-@@ -124,6 +128,10 @@
+@@ -124,6 +128,12 @@
    if (CC == CallingConv::GHC)
      // This is academic because all GHC calls are (supposed to be) tail calls
      return CSR_NoRegs_RegMask;
@@ -1582,10 +1584,12 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +    return CSR_V8CC_RegMask;
 +  if (CC == CallingConv::V8SBCC)
 +    return CSR_V8SBCC_RegMask;
++  if (CC == CallingConv::V8FPSave)
++    return CSR_V8FPSave_RegMask;
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +213,19 @@
+@@ -205,6 +215,19 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -1605,7 +1609,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
  }
-@@ -369,6 +390,8 @@
+@@ -369,6 +392,8 @@
    const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
    const ARMFrameLowering *TFI = getFrameLowering(MF);
  
@@ -1614,7 +1618,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // When outgoing call frames are so large that we adjust the stack pointer
    // around the call, we can no longer use the stack pointer to reach the
    // emergency spill slot.
-@@ -403,6 +426,8 @@
+@@ -403,6 +428,8 @@
    // 2. There are VLAs in the function and the base pointer is disabled.
    if (!TargetRegisterInfo::canRealignStack(MF))
      return false;
@@ -1623,7 +1627,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // Stack realignment requires a frame pointer.  If we already started
    // register allocation with frame pointer elimination, it is too late now.
    if (!MRI->canReserveReg(getFramePointerReg(MF.getSubtarget<ARMSubtarget>())))
-@@ -862,3 +887,18 @@
+@@ -862,3 +889,18 @@
    }
    return false;
  }
@@ -1721,11 +1725,14 @@ Index: lib/Target/ARM/ARMCallingConv.td
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
  
-@@ -248,6 +303,10 @@
+@@ -248,6 +303,13 @@
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
 +def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
++
++def CSR_V8FPSave: CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
++                                     (sequence "D%u", 31, 0))>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, (sequence "D%u", 31, 0))>;
 +
@@ -2650,18 +2657,65 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      if (!isTailCall && CLI.CS && CLI.CS.isMustTailCall())
        report_fatal_error("failed to perform tail call elimination on a call "
                           "site marked musttail");
-@@ -1849,8 +1863,30 @@
+@@ -1849,8 +1863,77 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
 +  if (CLI.CS.isCall()) {
-+    if (CallerIsJS && (CLI.CallConv == CallingConv::C) &&
-+        !MF.getFunction().hasFnAttribute(Attribute::StackAlignment)) {
++    if (CallerIsJS && (CLI.CallConv == CallingConv::C)) {
 +      hasJSCCall = true;
 +    }
 +  }
  
 -  SDValue StackPtr =
++  // Add a register mask operand representing the call-preserved registers.
++  bool IsCCallInsideJSSaveFP = [&]() {
++    if (CallerCC != CallingConv::V8SBCC)
++      return false;
++    if (!hasJSCCall)
++      return false;
++    const CallInst *Call = dyn_cast<CallInst>(CLI.CS.getInstruction());
++    if (!Call)
++      return false;
++    return Call->hasFnAttr("save-fp");
++  }();
++  SDValue FPSaveArea0, FPSaveArea1, CCAL, CCR;
++  // Save the FP.
++  if (IsCCallInsideJSSaveFP) {
++    MachineFrameInfo &MFI = MF.getFrameInfo();
++    int FIFPSaveArea0, FIFPSaveArea1;
++    ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++    FIFPSaveArea0 = AFI->getFIFPSaveArea0();
++    if (FIFPSaveArea0 == -1) {
++      FIFPSaveArea0 = MFI.CreateStackObject(8 * 16, 4, false);
++      FIFPSaveArea1 = MFI.CreateStackObject(8 * 8, 4, false);
++      AFI->setFIFPSaveArea0(FIFPSaveArea0);
++      AFI->setFIFPSaveArea1(FIFPSaveArea1);
++    }
++    FIFPSaveArea1 = AFI->getFIFPSaveArea1();
++    FPSaveArea0 =
++        DAG.getFrameIndex(FIFPSaveArea0, getFrameIndexTy(DAG.getDataLayout()));
++    FPSaveArea1 =
++        DAG.getFrameIndex(FIFPSaveArea1, getFrameIndexTy(DAG.getDataLayout()));
++    CCAL = DAG.getConstant(ARMCC::AL, dl, MVT::i32, true);
++    CCR = DAG.getRegister(0, MVT::i32);
++    std::vector<SDValue> Ops;
++    Ops.emplace_back(FPSaveArea0);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 16; i < 32; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VSTMDIA, dl, MVT::Other, Ops), 0);
++    Ops.clear();
++    Ops.emplace_back(FPSaveArea1);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 0; i < 8; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VSTMDIA, dl, MVT::Other, Ops), 0);
++  }
 +  SDValue StackPtr;
 +  if (hasJSCCall) {
 +    SDValue OldStackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
@@ -2682,7 +2736,24 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2191,6 +2227,12 @@
+@@ -2159,7 +2242,6 @@
+     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
+                                   RegsToPass[i].second.getValueType()));
+ 
+-  // Add a register mask operand representing the call-preserved registers.
+   if (!isTailCall) {
+     const uint32_t *Mask;
+     const ARMBaseRegisterInfo *ARI = Subtarget->getRegisterInfo();
+@@ -2173,6 +2255,8 @@
+         isThisReturn = false;
+         Mask = ARI->getCallPreservedMask(MF, CallConv);
+       }
++    } else if (IsCCallInsideJSSaveFP) {
++      Mask = ARI->getCallPreservedMask(MF, CallingConv::V8FPSave);
+     } else
+       Mask = ARI->getCallPreservedMask(MF, CallConv);
+ 
+@@ -2191,6 +2275,35 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
@@ -2692,10 +2763,33 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 +                        DAG.getVTList(MVT::Other, MVT::Glue), Chain);
 +  }
 +
++  // Restore the FP.
++  if (IsCCallInsideJSSaveFP) {
++    std::vector<SDValue> Ops;
++    Ops.emplace_back(FPSaveArea1);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 0; i < 8; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VLDMDIA, dl, MVT::Other, Ops), 0);
++    Ops.clear();
++    Ops.emplace_back(FPSaveArea0);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 16; i < 32; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain =
++        SDValue(DAG.getMachineNode(ARM::VLDMDIA, dl,
++                                   DAG.getVTList(MVT::Other, MVT::Glue), Ops),
++                0);
++  }
++
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9254,6 +9296,17 @@
+@@ -9254,6 +9367,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -2713,7 +2807,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -10961,6 +11014,10 @@
+@@ -10961,6 +11085,10 @@
    unsigned Mask = MaskC->getZExtValue();
    if (Mask == 0xffff)
      return SDValue();
@@ -2724,7 +2818,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    SDValue Res;
    // Case (1): or (and A, mask), val => ARMbfi A, val, mask
    ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
-@@ -13136,6 +13193,23 @@
+@@ -13136,6 +13264,23 @@
    return -1;
  }
  
@@ -2823,11 +2917,13 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    unsigned DPRCSAlignGapSize = 0;
    unsigned DPRCSSize = 0;
  
-@@ -127,6 +128,11 @@
+@@ -127,6 +128,13 @@
    /// The amount the literal pool has been increasedby due to promoted globals.
    int PromotedGlobalsIncrease = 0;
  
 +  mutable int LastSPAdjust = 0;
++  int FIFPSaveArea0 = -1;
++  int FIFPSaveArea1 = -1;
 +  bool IsJSFunction = false;
 +  bool IsJSStub = false;
 +  bool IsWASM = false;
@@ -2835,7 +2931,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  public:
    ARMFunctionInfo() = default;
  
-@@ -170,11 +176,13 @@
+@@ -170,11 +178,13 @@
  
    unsigned getGPRCalleeSavedArea1Size() const { return GPRCS1Size; }
    unsigned getGPRCalleeSavedArea2Size() const { return GPRCS2Size; }
@@ -2849,7 +2945,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    void setDPRCalleeSavedGapSize(unsigned s)   { DPRCSAlignGapSize = s; }
    void setDPRCalleeSavedAreaSize(unsigned s)  { DPRCSSize = s; }
  
-@@ -239,6 +247,20 @@
+@@ -239,6 +249,25 @@
    void setPromotedConstpoolIncrease(int Sz) {
      PromotedGlobalsIncrease = Sz;
    }
@@ -2867,6 +2963,11 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 +    LastSPAdjust = 0;
 +    return r;
 +  }
++  int getFIFPSaveArea0() const { return FIFPSaveArea0; }
++  int getFIFPSaveArea1() const { return FIFPSaveArea1; }
++
++  void setFIFPSaveArea0(int a) { FIFPSaveArea0 = a; }
++  void setFIFPSaveArea1(int a) { FIFPSaveArea1 = a; }
  };
  
  } // end namespace llvm
