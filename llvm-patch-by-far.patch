@@ -569,18 +569,16 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
      /// Coalesce copies in the specified MBB, putting
      /// copies that cannot yet be coalesced into WorkList.
      void copyCoalesceInMBB(MachineBasicBlock *MBB);
-@@ -1929,6 +1938,10 @@
+@@ -1929,6 +1938,8 @@
    // Update regalloc hint.
    TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
  
 +  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
 +
-+  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
-+
    LLVM_DEBUG({
      dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
             << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
-@@ -3615,6 +3628,122 @@
+@@ -3615,6 +3626,122 @@
    lateLiveIntervalUpdate();
  }
  
@@ -703,7 +701,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
  void RegisterCoalescer::releaseMemory() {
    ErasedInstrs.clear();
    WorkList.clear();
-@@ -3649,6 +3778,8 @@
+@@ -3649,6 +3776,8 @@
  
    RegClassInfo.runOnMachineFunction(fn);
  
