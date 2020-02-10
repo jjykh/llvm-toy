@@ -710,6 +710,41 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    // Join (coalesce) intervals if requested.
    if (EnableJoining)
      joinAllIntervals();
+@@ -3690,6 +3819,34 @@
+     }
+   }
+ 
++  // Fold all the reg with single def with others are phi-def.
++  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
++    unsigned Reg = TargetRegisterInfo::index2VirtReg(i);
++    if (MRI->reg_nodbg_empty(Reg))
++      continue;
++    if (!LIS->hasInterval(Reg))
++      continue;
++    LiveInterval &Interval = LIS->getInterval(Reg);
++    size_t defnum = 0;
++    VNInfo *LastDef = nullptr;
++    for (VNInfo *info : Interval.valnos) {
++      if (!info->isUnused() && !info->isPHIDef()) {
++        defnum++;
++        LastDef = info;
++      }
++    }
++    if (defnum == 1) {
++      LLVM_DEBUG(dbgs() << "Found one def reg: " << i << "\n");
++      for (auto &s : Interval) {
++        s.valno = LastDef;
++      }
++      for (VNInfo *info : Interval.valnos) {
++        if (info != LastDef && !info->isUnused())
++          info->markUnused();
++      }
++    }
++  }
++
+   LLVM_DEBUG(dump());
+   if (VerifyCoalescing)
+     MF->verify(this, "After register coalescing");
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 365284)
