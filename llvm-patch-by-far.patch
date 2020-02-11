@@ -439,6 +439,29 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
            MI.getOpcode() == TargetOpcode::PATCHPOINT)
          continue;
  
+Index: lib/CodeGen/MachineInstr.cpp
+===================================================================
+--- lib/CodeGen/MachineInstr.cpp	(revision 365284)
++++ lib/CodeGen/MachineInstr.cpp	(working copy)
+@@ -1304,11 +1304,18 @@
+ 
+   const MachineFrameInfo &MFI = getParent()->getParent()->getFrameInfo();
+ 
++  bool IsJSFunction = false;
++  CallingConv::ID CC = getParent()->getParent()->getFunction().getCallingConv();
++  if (CC == CallingConv::V8CC || CC == CallingConv::V8SBCC)
++    IsJSFunction = true;
++
+   for (MachineMemOperand *MMO : memoperands()) {
+     if (MMO->isVolatile()) return false;
+     if (MMO->isStore()) return false;
+     if (MMO->isInvariant() && MMO->isDereferenceable())
+       continue;
++    if (IsJSFunction && MMO->isInvariant())
++      continue;
+ 
+     // A load from a constant PseudoSourceValue is invariant.
+     if (const PseudoSourceValue *PSV = MMO->getPseudoValue())
 Index: lib/CodeGen/MachineRegisterInfo.cpp
 ===================================================================
 --- lib/CodeGen/MachineRegisterInfo.cpp	(revision 365284)
@@ -1491,106 +1514,16 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    if (!NumCycles)
      return false;
  
-@@ -5107,3 +5186,87 @@
-       {MO_NONLAZY, "arm-nonlazy"}};
-   return makeArrayRef(TargetFlags);
- }
-+
-+static bool IsJSRootPointer(const Value *V, const Function &F) {
-+  // FIXME: consider put register index into TRI.
-+  return V == &F.arg_begin()[10];
-+}
-+
-+/// Chases pointers until we find a V8's root region or not.
-+static bool pointsToV8RootRegion(const Value *V, const Function &F,
-+                                 const DataLayout &DL) {
-+  CallingConv::ID CC = F.getCallingConv();
-+  if (CC != CallingConv::V8CC && CC != CallingConv::V8SBCC)
-+    return false;
-+
-+  unsigned MaxLookup = 8;
-+  SmallVector<const Value *, 16> Worklist;
-+  Worklist.push_back(V);
-+  SmallPtrSet<const Value *, 16> Visited;
-+  do {
-+    const Value *V = GetUnderlyingObject(Worklist.pop_back_val(), DL);
-+    if (!Visited.insert(V).second) {
-+      return false;
-+    }
-+
-+    if (IsJSRootPointer(V, F)) {
-+      continue;
-+    }
-+
-+    // If both select values point to local memory, then so does the select.
-+    if (const SelectInst *SI = dyn_cast<SelectInst>(V)) {
-+      Worklist.push_back(SI->getTrueValue());
-+      Worklist.push_back(SI->getFalseValue());
-+      continue;
-+    }
-+
-+    // If all values incoming to a phi node point to local memory, then so does
-+    // the phi.
-+    if (const PHINode *PN = dyn_cast<PHINode>(V)) {
-+      // Don't bother inspecting phi nodes with many operands.
-+      if (PN->getNumIncomingValues() > MaxLookup) {
-+        return false;
-+      }
-+      for (Value *IncValue : PN->incoming_values())
-+        Worklist.push_back(IncValue);
-+      continue;
-+    }
-+
-+    return false;
-+  } while (!Worklist.empty() && --MaxLookup);
-+
-+  return Worklist.empty();
-+}
-+
-+bool ARMBaseInstrInfo::isReallyTriviallyReMaterializable(
-+    const MachineInstr &MI, AliasAnalysis *AA) const {
-+  if (!MI.mayLoad())
-+    return false;
-+
-+  // If the instruction has lost its memoperands, conservatively assume that
-+  // it may not be an invariant load.
-+  if (MI.memoperands_empty())
-+    return false;
-+  const MachineFunction *MF = MI.getParent()->getParent();
-+
-+  for (MachineMemOperand *MMO : MI.memoperands()) {
-+    if (MMO->isVolatile())
-+      return false;
-+    if (MMO->isStore())
-+      return false;
-+    if (MMO->isInvariant() && MMO->isDereferenceable())
-+      continue;
-+
-+    if (const Value *V = MMO->getValue()) {
-+      // If we have an AliasAnalysis, ask it whether the memory is constant.
-+      if (pointsToV8RootRegion(V, MF->getFunction(), MF->getDataLayout()))
-+        continue;
-+    }
-+
-+    // Otherwise assume conservatively.
-+    return false;
-+  }
-+
-+  // Everything checks out.
-+  return true;
-+}
 Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 365284)
 +++ lib/Target/ARM/ARMBaseInstrInfo.h	(working copy)
-@@ -398,6 +398,10 @@
+@@ -398,6 +398,8 @@
    virtual void expandLoadStackGuard(MachineBasicBlock::iterator MI) const = 0;
  
    void expandMEMCPY(MachineBasicBlock::iterator) const;
 +  void expandRESTORESP(MachineBasicBlock::iterator) const;
 +  int getSPAdjust(const MachineInstr &MI) const final override;
-+  bool isReallyTriviallyReMaterializable(const MachineInstr &MI,
-+                                         AliasAnalysis *AA) const final override;
  
  private:
    /// Modeling special VFP / NEON fp MLA / MLS hazards.

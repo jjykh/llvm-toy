@@ -264,6 +264,14 @@ LValue Output::buildLoad(LValue toLoad) {
   return setInstrDebugLoc(v8::internal::tf_llvm::buildLoad(builder_, toLoad));
 }
 
+LValue Output::buildInvariantLoad(LValue toLoad) {
+  LValue load = v8::internal::tf_llvm::buildLoad(builder_, toLoad);
+  LValue mdnode = LLVMMDNodeInContext(state_.context_, nullptr, 0);
+  constexpr static const unsigned kMD_invariant_load = 6;
+  LLVMSetMetadata(load, kMD_invariant_load, mdnode);
+  return setInstrDebugLoc(load);
+}
+
 LValue Output::buildStore(LValue val, LValue pointer) {
   return setInstrDebugLoc(
       v8::internal::tf_llvm::buildStore(builder_, val, pointer));

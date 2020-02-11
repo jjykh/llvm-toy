@@ -19,7 +19,6 @@ namespace tf_llvm {
 namespace {
 // copy from v8.
 enum RememberedSetAction { EMIT_REMEMBERED_SET, OMIT_REMEMBERED_SET };
-enum SaveFPRegsMode { kDontSaveFPRegs, kSaveFPRegs };
 
 struct NotMergedPhiDesc {
   BasicBlock* pred;
@@ -2267,7 +2266,7 @@ void LLVMTFBuilder::VisitRoot(int id, RootIndex index) {
       output().constInt32(
           TurboAssemblerBase::RootRegisterOffsetForRootIndex(index)),
       pointerType(output().taggedType()));
-  LValue value = output().buildLoad(offset);
+  LValue value = output().buildInvariantLoad(offset);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2277,7 +2276,7 @@ void LLVMTFBuilder::VisitRootRelative(int id, int offset, bool tagged) {
       pointerType(tagged ? output().taggedType() : output().repo().ref8);
   LValue offset_value = output().buildGEPWithByteOffset(
       output().root(), output().constInt32(offset), type);
-  LValue value = output().buildLoad(offset_value);
+  LValue value = output().buildInvariantLoad(offset_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
