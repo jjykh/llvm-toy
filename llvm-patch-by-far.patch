@@ -122,7 +122,7 @@ Index: include/llvm/Support/TargetOpcodes.def
  
  /// This pseudo-instruction loads the stack guard value. Targets which need
  /// to prevent the stack guard value or address from being spilled to the
-@@ -133,6 +134,13 @@
+@@ -133,6 +134,17 @@
  /// collectors and deoptimizations in either the callee or caller.
  HANDLE_TARGET_OPCODE(STATEPOINT)
  
@@ -132,6 +132,10 @@ Index: include/llvm/Support/TargetOpcodes.def
 +
 +/// Restore SP from FP, used by V8 functions.
 +HANDLE_TARGET_OPCODE(RESTORESP)
++
++/// V8 ignition bytecode handlers use it to represent the frame pointer of
++/// the parent frame.
++HANDLE_TARGET_OPCODE(PARENTFP)
 +
  /// Instruction that records the offset of a local stack allocation passed to
  /// llvm.localescape. It has two arguments: the symbol for the label and the
@@ -158,7 +162,7 @@ Index: include/llvm/Target/Target.td
  def STATEPOINT : StandardPseudoInstruction {
    let OutOperandList = (outs);
    let InOperandList = (ins variable_ops);
-@@ -1077,6 +1088,20 @@
+@@ -1077,6 +1088,28 @@
    let hasSideEffects = 1;
    let isCall = 1;
  }
@@ -175,6 +179,14 @@ Index: include/llvm/Target/Target.td
 +  let AsmString = "";
 +  let hasSideEffects = 0;
 +  let mayLoad = 1;
++}
++def PARENTFP: StandardPseudoInstruction {
++  let OutOperandList = (outs ptr_rc:$dst);
++  let InOperandList = (ins);
++  let AsmString = "";
++  let hasSideEffects = 0;
++  let mayLoad = 1;
++  bit isReMaterializable = 1;
 +}
  def LOAD_STACK_GUARD : StandardPseudoInstruction {
    let OutOperandList = (outs ptr_rc:$dst);
@@ -504,6 +516,92 @@ Index: lib/CodeGen/MachineVerifier.cpp
  
    // The first MCID.NumDefs operands must be explicit register defines
    if (MONum < NumDefs) {
+Index: lib/CodeGen/PrologEpilogInserter.cpp
+===================================================================
+--- lib/CodeGen/PrologEpilogInserter.cpp	(revision 365284)
++++ lib/CodeGen/PrologEpilogInserter.cpp	(working copy)
+@@ -125,6 +125,7 @@
+   void spillCalleeSavedRegs(MachineFunction &MF);
+ 
+   void calculateFrameObjectOffsets(MachineFunction &MF);
++  void lowerPARENTFP(MachineFunction &MF);
+   void replaceFrameIndices(MachineFunction &MF);
+   void replaceFrameIndices(MachineBasicBlock *BB, MachineFunction &MF,
+                            int &SPAdj);
+@@ -162,6 +163,7 @@
+   AU.setPreservesCFG();
+   AU.addPreserved<MachineLoopInfo>();
+   AU.addPreserved<MachineDominatorTree>();
++  AU.addRequired<MachineDominatorTree>();
+   AU.addRequired<MachineOptimizationRemarkEmitterPass>();
+   MachineFunctionPass::getAnalysisUsage(AU);
+ }
+@@ -199,7 +201,8 @@
+   // Allow the target machine to make final modifications to the function
+   // before the frame layout is finalized.
+   TFI->processFunctionBeforeFrameFinalized(MF, RS);
+-
++  
++  lowerPARENTFP(MF);
+   // Calculate actual frame offsets for all abstract stack objects...
+   calculateFrameObjectOffsets(MF);
+ 
+@@ -983,6 +986,55 @@
+   NumBytesStackSpace += StackSize;
+ }
+ 
++
++/// Lower the TargetOpcode::PARENTFP
++void PEI::lowerPARENTFP(MachineFunction &MF) {
++  if (MF.getFunction().getCallingConv() != CallingConv::V8CC)
++    return;
++  // Locate the frame address's frame Index first.
++  MachineFrameInfo &MFI = MF.getFrameInfo();
++  auto &CSI = MFI.getCalleeSavedInfo();
++  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
++  const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
++  unsigned FPReg = TRI->getFrameRegister(MF);
++  int FPIndex = 0;
++  for (auto &e : CSI) {
++    if (e.getReg() != FPReg)
++      continue;
++    FPIndex = e.getFrameIdx();
++    break;
++  }
++  MachineDominatorTree *MDT = &getAnalysis<MachineDominatorTree>();
++  for (MachineFunction::iterator mbbi = MF.begin(), mbbe = MF.end();
++       mbbi != mbbe; ++mbbi) {
++    for (MachineBasicBlock::iterator mi = mbbi->begin(), me = mbbi->end();
++         mi != me;) {
++      MachineInstr &MI = *mi;
++      // Advance iterator here because MI may be erased.
++      ++mi;
++      if (MI.getOpcode() != TargetOpcode::PARENTFP) {
++        continue;
++      }
++      bool ShouldLoadFromStack = false;
++      for (MachineBasicBlock *SaveBlock : SaveBlocks) {
++        if (FPIndex < 0 && MDT->dominates(SaveBlock, &*mbbi)) {
++          ShouldLoadFromStack = true;
++          break;
++        }
++      }
++      auto DstReg = MI.getOperand(0).getReg();
++      if (!ShouldLoadFromStack) {
++        TII->copyPhysReg(*mbbi, &MI, MI.getDebugLoc(), DstReg, FPReg, false);
++      } else {
++        assert(FPIndex < 0);
++        const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(DstReg);
++        TII->loadRegFromStackSlot(*mbbi, &MI, DstReg, FPIndex, RC, TRI);
++      }
++      mbbi->erase(&MI);
++    }
++  }
++}
++
+ /// insertPrologEpilogCode - Scan the function for modified callee saved
+ /// registers, insert spill code for these callee saved registers, then add
+ /// prolog and epilog code to the function.
 Index: lib/CodeGen/RegAllocBase.cpp
 ===================================================================
 --- lib/CodeGen/RegAllocBase.cpp	(revision 365284)
@@ -1088,6 +1186,16 @@ Index: lib/CodeGen/TargetInstrInfo.cpp
         MI.getOpcode() == TargetOpcode::PATCHPOINT ||
         MI.getOpcode() == TargetOpcode::STATEPOINT) &&
        isLoadFromStackSlot(LoadMI, FrameIndex)) {
+@@ -876,6 +879,9 @@
+   const MachineFunction &MF = *MI.getMF();
+   const MachineRegisterInfo &MRI = MF.getRegInfo();
+ 
++  // PARENTFP is always rematerializable.
++  if (MI.getOpcode() == TargetOpcode::PARENTFP)
++    return true;
+   // Remat clients assume operand 0 is the defined register.
+   if (!MI.getNumOperands() || !MI.getOperand(0).isReg())
+     return false;
 Index: lib/CodeGen/TargetPassConfig.cpp
 ===================================================================
 --- lib/CodeGen/TargetPassConfig.cpp	(revision 365284)
@@ -1510,7 +1618,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +    expandRESTORESP(MI);
 +    return true;
 +  }
-+  
++
    // This hook gets to expand COPY instructions before they become
    // copyPhysReg() calls.  Look for VMOVS instructions that can legally be
    // widened to VMOVD.  We prefer the VMOVD when possible because it may be
@@ -1805,7 +1913,20 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMFrameLowering.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMFrameLowering.cpp	(working copy)
-@@ -122,6 +122,9 @@
+@@ -109,6 +109,12 @@
+   if (MF.getTarget().Options.DisableFramePointerElim(MF))
+     return true;
+ 
++  // V8 always has FP.
++  CallingConv::ID CC = MF.getFunction().getCallingConv();
++  if (CC == CallingConv::V8CC || CC == CallingConv::V8SBCC) {
++    return true;
++  }
++
+   // Frame pointer required for use within this function.
+   return (RegInfo->needsStackRealignment(MF) ||
+           MFI.hasVarSizedObjects() ||
+@@ -122,6 +128,9 @@
  /// included as part of the stack frame.
  bool ARMFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
    const MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -1815,7 +1936,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned CFSize = MFI.getMaxCallFrameSize();
    // It's not always a good idea to include the call frame as part of the
    // stack frame. ARM (especially Thumb) has small immediate offset to
-@@ -351,9 +354,13 @@
+@@ -351,9 +360,13 @@
  
  void ARMFrameLowering::emitPrologue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
@@ -1830,7 +1951,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    MachineModuleInfo &MMI = MF.getMMI();
    MCContext &Context = MMI.getContext();
    const TargetMachine &TM = MF.getTarget();
-@@ -765,8 +772,12 @@
+@@ -765,8 +778,12 @@
  
  void ARMFrameLowering::emitEpilogue(MachineFunction &MF,
                                      MachineBasicBlock &MBB) const {
@@ -1844,7 +1965,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
    const ARMBaseInstrInfo &TII =
        *static_cast<const ARMBaseInstrInfo *>(MF.getSubtarget().getInstrInfo());
-@@ -906,6 +917,9 @@
+@@ -906,6 +923,9 @@
      if (isFixed) {
        FrameReg = RegInfo->getFrameRegister(MF);
        Offset = FPOffset;
@@ -1854,7 +1975,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      } else if (hasMovingSP) {
        assert(RegInfo->hasBasePointer(MF) &&
               "VLAs and dynamic stack alignment, but missing base pointer!");
-@@ -951,6 +965,9 @@
+@@ -951,6 +971,9 @@
        // Otherwise, use SP or FP, whichever is closer to the stack slot.
        FrameReg = RegInfo->getFrameRegister(MF);
        return FPOffset;
@@ -1864,7 +1985,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      }
    }
    // Use the base pointer if we have one.
-@@ -1055,7 +1072,9 @@
+@@ -1055,7 +1078,9 @@
    if (MBB.end() != MI) {
      DL = MI->getDebugLoc();
      unsigned RetOpcode = MI->getOpcode();
@@ -1875,7 +1996,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
      isInterrupt =
          RetOpcode == ARM::SUBS_PC_LR || RetOpcode == ARM::t2SUBS_PC_LR;
      isTrap =
-@@ -1414,6 +1433,47 @@
+@@ -1414,6 +1439,47 @@
    std::prev(MI)->addRegisterKilled(ARM::R4, TRI);
  }
  
@@ -1923,7 +2044,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  bool ARMFrameLowering::spillCalleeSavedRegisters(MachineBasicBlock &MBB,
                                          MachineBasicBlock::iterator MI,
                                          const std::vector<CalleeSavedInfo> &CSI,
-@@ -1429,10 +1489,19 @@
+@@ -1429,10 +1495,19 @@
      ARM::t2STR_PRE : ARM::STR_PRE_IMM;
    unsigned FltOpc = ARM::VSTMDDB_UPD;
    unsigned NumAlignedDPRCS2Regs = AFI->getNumAlignedDPRCS2Regs();
@@ -1947,7 +2068,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    emitPushInst(MBB, MI, CSI, FltOpc, 0, true, &isARMArea3Register,
                 NumAlignedDPRCS2Regs, MachineInstr::FrameSetup);
  
-@@ -1461,16 +1530,23 @@
+@@ -1461,16 +1536,23 @@
    // registers. Do that here instead.
    if (NumAlignedDPRCS2Regs)
      emitAlignedDPRCS2Restores(MBB, MI, NumAlignedDPRCS2Regs, CSI, TRI);
@@ -1976,7 +2097,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
  
    return true;
  }
-@@ -1611,6 +1687,7 @@
+@@ -1611,6 +1693,7 @@
    MachineRegisterInfo &MRI = MF.getRegInfo();
    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
    (void)TRI;  // Silence unused warning in non-assert builds.
@@ -1984,7 +2105,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    unsigned FramePtr = RegInfo->getFrameRegister(MF);
  
    // Spill R4 if Thumb2 function requires stack realignment - it will be used as
-@@ -1724,6 +1801,21 @@
+@@ -1724,6 +1807,21 @@
      }
    }
  
@@ -2006,7 +2127,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    bool ForceLRSpill = false;
    if (!LRSpilled && AFI->isThumb1OnlyFunction()) {
      unsigned FnSize = GetFunctionSizeInBytes(MF, TII);
-@@ -1783,7 +1875,10 @@
+@@ -1783,7 +1881,10 @@
      AFI->setHasStackFrame(true);
  
      if (HasFP) {
@@ -2018,7 +2139,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        // If the frame pointer is required by the ABI, also spill LR so that we
        // emit a complete frame record.
        if (MF.getTarget().Options.DisableFramePointerElim(MF) && !LRSpilled) {
-@@ -1797,7 +1892,6 @@
+@@ -1797,7 +1898,6 @@
        auto FPPos = llvm::find(UnspilledCS1GPRs, FramePtr);
        if (FPPos != UnspilledCS1GPRs.end())
          UnspilledCS1GPRs.erase(FPPos);
@@ -2026,7 +2147,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        if (FramePtr == ARM::R7)
          CS1Spilled = true;
      }
-@@ -2043,12 +2137,13 @@
+@@ -2043,12 +2143,13 @@
      DebugLoc dl = Old.getDebugLoc();
      unsigned Amount = TII.getFrameSize(Old);
      if (Amount != 0) {
@@ -2042,7 +2163,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
        assert(!AFI->isThumb1OnlyFunction() &&
               "This eliminateCallFramePseudoInstr does not support Thumb1!");
        bool isARM = !AFI->isThumbFunction();
-@@ -2063,7 +2158,7 @@
+@@ -2063,7 +2164,7 @@
        if (Opc == ARM::ADJCALLSTACKDOWN || Opc == ARM::tADJCALLSTACKDOWN) {
          emitSPUpdate(isARM, MBB, I, dl, TII, -Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
@@ -2051,7 +2172,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
          assert(Opc == ARM::ADJCALLSTACKUP || Opc == ARM::tADJCALLSTACKUP);
          emitSPUpdate(isARM, MBB, I, dl, TII, Amount, MachineInstr::NoFlags,
                       Pred, PredReg);
-@@ -2511,3 +2606,469 @@
+@@ -2511,3 +2612,469 @@
    MF.verify();
  #endif
  }
@@ -2759,7 +2880,26 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9254,6 +9368,17 @@
+@@ -5045,12 +5159,17 @@
+     *static_cast<const ARMBaseRegisterInfo*>(RegInfo);
+   MachineFunction &MF = DAG.getMachineFunction();
+   MachineFrameInfo &MFI = MF.getFrameInfo();
+-  MFI.setFrameAddressIsTaken(true);
+ 
+   EVT VT = Op.getValueType();
+   SDLoc dl(Op);  // FIXME probably not meaningful
+   unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+   unsigned FrameReg = ARI.getFrameRegister(MF);
++  if (MF.getFunction().getCallingConv() == CallingConv::V8CC && Depth == 1) {
++    return SDValue(
++        DAG.getMachineNode(TargetOpcode::PARENTFP, dl, VT, DAG.getEntryNode()),
++        0);
++  }
++  MFI.setFrameAddressIsTaken(true);
+   SDValue FrameAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, FrameReg, VT);
+   while (Depth--)
+     FrameAddr = DAG.getLoad(VT, dl, DAG.getEntryNode(), FrameAddr,
+@@ -9254,6 +9373,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -2777,7 +2917,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -10961,6 +11086,10 @@
+@@ -10961,6 +11091,10 @@
    unsigned Mask = MaskC->getZExtValue();
    if (Mask == 0xffff)
      return SDValue();
@@ -2788,7 +2928,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    SDValue Res;
    // Case (1): or (and A, mask), val => ARMbfi A, val, mask
    ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
-@@ -13136,6 +13265,23 @@
+@@ -13136,6 +13270,23 @@
    return -1;
  }
  

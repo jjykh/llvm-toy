@@ -107,6 +107,7 @@ class Output {
   LValue buildExtractValue(LValue aggVal, unsigned index);
   LValue buildInsertValue(LValue aggVal, unsigned index, LValue value);
   LValue buildLandingPad();
+  LValue buildGetParentFP();
   LLVMAttributeRef createStringAttr(const char* key, unsigned key_len,
                                     const char* value, unsigned value_len);
   void setDebugInfo(int linenum, const char* source_file_name);
@@ -120,7 +121,6 @@ class Output {
   inline LValue parameter(int i) { return parameters_[i]; }
   inline LValue root() { return root_; }
   inline LValue fp() { return fp_; }
-  inline LValue parent_fp() { return parent_fp_; }
   inline LValue bitcast_space() { return bitcast_space_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
   inline bool is_v8cc() const { return is_v8cc_; }
@@ -136,7 +136,6 @@ class Output {
   LBasicBlock prologue_;
   LValue root_;
   LValue fp_;
-  LValue parent_fp_;
   LValue bitcast_space_;
   LLVMMetadataRef subprogram_;
   size_t stack_parameter_count_;

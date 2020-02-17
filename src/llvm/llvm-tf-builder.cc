@@ -1167,7 +1167,7 @@ void LLVMTFBuilder::VisitParameter(int id, int pid) {
 
 void LLVMTFBuilder::VisitLoadParentFramePointer(int id) {
   SetDebugLine(id);
-  GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().parent_fp());
+  GetBuilderImpl(current_bb_)->SetLLVMValue(id, output().buildGetParentFP());
 }
 
 void LLVMTFBuilder::VisitIdentity(int id, int value) {

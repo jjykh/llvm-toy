@@ -40,7 +40,6 @@ Output::Output(CompilerState& state)
       prologue_(nullptr),
       root_(nullptr),
       fp_(nullptr),
-      parent_fp_(nullptr),
       bitcast_space_(nullptr),
       subprogram_(nullptr),
       stack_parameter_count_(0) {}
@@ -68,7 +67,6 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   if (v8cc) {
     root_ = LLVMGetParam(state_.function_, 10);
     fp_ = LLVMGetParam(state_.function_, 11);
-    parent_fp_ = LLVMGetParam(state_.function_, 9);
   } else {
     root_ = LLVMGetParam(state_.function_, 5);
     fp_ = LLVMGetParam(state_.function_, 6);
@@ -535,6 +533,13 @@ LValue Output::buildLandingPad() {
   return setInstrDebugLoc(landing_pad);
 }
 
+LValue Output::buildGetParentFP() {
+  LValue val = buildCall(repo().frameAddressIntrinsic(), constInt32(1));
+  setInstrDebugLoc(val);
+  return val;
+}
+
+#define FEATURE_DEBUG_INFO
 void Output::setDebugInfo(int linenum, const char* source_file_name) {
 #if defined(FEATURE_DEBUG_INFO)
   LLVMMetadataRef scope = subprogram_;
