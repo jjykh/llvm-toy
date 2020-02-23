@@ -568,6 +568,80 @@ Index: lib/CodeGen/RegAllocBase.h
  };
  
  } // end namespace llvm
+Index: lib/CodeGen/RegAllocGreedy.cpp
+===================================================================
+--- lib/CodeGen/RegAllocGreedy.cpp	(revision 365284)
++++ lib/CodeGen/RegAllocGreedy.cpp	(working copy)
+@@ -484,6 +484,8 @@
+                     SmallVectorImpl<unsigned>&, unsigned = ~0u);
+   unsigned tryRegionSplit(LiveInterval&, AllocationOrder&,
+                           SmallVectorImpl<unsigned>&);
++  bool trySplitHeadSegment(LiveInterval&, AllocationOrder&,
++                     SmallVectorImpl<unsigned>&);
+   unsigned isSplitBenefitWorthCost(LiveInterval &VirtReg);
+   /// Calculate cost of region splitting.
+   unsigned calculateRegionSplitCost(LiveInterval &VirtReg,
+@@ -798,6 +800,48 @@
+   return CheapReg ? CheapReg : PhysReg;
+ }
+ 
++/// Split the head segment if appropriate.
++bool RAGreedy::trySplitHeadSegment(LiveInterval &VirtReg,
++                                   AllocationOrder &Order,
++                                   SmallVectorImpl<unsigned> &NewVRegs) {
++  if (VirtReg.size() <= 1)
++    return false;
++  auto Head = VirtReg.begin();
++  constexpr const static int LargeSementThrottle = 400;
++  if (Head->start.distance(Head->end) < LargeSementThrottle)
++    return false;
++  if (!VirtReg.containsOneValue())
++    return false;
++  LiveInterval Pseudo(VirtReg.reg, 0.0f);
++  SmallVector<unsigned, 0> PseudoNewVRegs;
++  {
++    BumpPtrAllocator &Allocator = LIS->getVNInfoAllocator();
++    VNInfo* vinfo = Pseudo.createValueCopy(Head->valno, Allocator);
++    LiveRangeUpdater updater(&Pseudo);
++    updater.add(Head->start, Head->end, vinfo);
++  }
++  // if (!tryAssign(Pseudo, Order, PseudoNewVRegs))
++  //   return false;
++  LLVM_DEBUG(dbgs() << printReg(VirtReg.reg, TRI)
++                    << " is appropriate for head split\n");
++
++  unsigned Reg = VirtReg.reg;
++  LiveRangeEdit LREdit(&VirtReg, NewVRegs, *MF, *LIS, VRM, this, &DeadRemats);
++  SE->reset(LREdit, SplitSpillMode);
++
++  unsigned Split = SE->splitHeadSegment(VirtReg);
++
++  setStage(LIS->getInterval(Split), RS_Split);
++  // Tell LiveDebugVariables about the new ranges.
++  DebugVars->splitRegister(Reg, LREdit.regs(), *LIS);
++
++  ExtraRegInfo.resize(MRI->getNumVirtRegs());
++
++  LLVM_DEBUG(MF->print(dbgs(), Indexes));
++  if (VerifyEnabled)
++    MF->verify(this, "After splitting the head segment");
++  return true;
++}
+ //===----------------------------------------------------------------------===//
+ //                         Interference eviction
+ //===----------------------------------------------------------------------===//
+@@ -3066,6 +3110,11 @@
+ 
+   assert((NewVRegs.empty() || Depth) && "Cannot append to existing NewVRegs");
+ 
++  if (Stage == RS_Assign) {
++    if (trySplitHeadSegment(VirtReg, Order, NewVRegs))
++      return 0;
++  }
++
+   // The first time we see a live range, don't try to split or spill.
+   // Wait until the second time, when all smaller ranges have been allocated.
+   // This gives a better picture of the interference to split around.
 Index: lib/CodeGen/RegisterCoalescer.cpp
 ===================================================================
 --- lib/CodeGen/RegisterCoalescer.cpp	(revision 365284)
@@ -1028,6 +1102,54 @@ Index: lib/CodeGen/ShrinkWrap.cpp
      } else if (MO.isRegMask()) {
        // Check if this regmask clobbers any of the CSRs.
        for (unsigned Reg : getCurrentCSRs(RS)) {
+Index: lib/CodeGen/SplitKit.cpp
+===================================================================
+--- lib/CodeGen/SplitKit.cpp	(revision 365284)
++++ lib/CodeGen/SplitKit.cpp	(working copy)
+@@ -1854,3 +1854,28 @@
+   SlotIndex From = enterIntvBefore(std::min(Idx, BI.FirstInstr));
+   useIntv(From, Idx);
+ }
++
++unsigned SplitEditor::splitHeadSegment(LiveRange &LR) {
++  auto Head = LR.begin();
++  openIntv();
++  // FIXME: Use MDT to optimize this.
++  SlotIndex SegStart = enterIntvAfter(Head->start);
++  SlotIndex SegEnd = SegStart.getNextSlot();
++  useIntv(SegStart, SegEnd);
++  RegAssign.insert(SegEnd, Head->end, 0);
++  auto It = Head;
++  ++It;
++  for (; It != LR.end(); ++It) {
++    useIntv(It->start, It->end);
++  }
++  finish(nullptr);
++  unsigned VRegHead = Edit->get(0);
++  LiveInterval &LIHead = LIS.getInterval(VRegHead);
++  LIHead.begin()->end = Head->end;
++  LIS.shrinkToUses(&LIHead, nullptr);
++  unsigned VRegSplit = Edit->get(1);
++  LiveInterval &LISplit = LIS.getInterval(VRegSplit);
++  LISplit.begin()->end = Head->end;
++  LIS.shrinkToUses(&LISplit, nullptr);
++  return VRegSplit;
++}
+Index: lib/CodeGen/SplitKit.h
+===================================================================
+--- lib/CodeGen/SplitKit.h	(revision 365284)
++++ lib/CodeGen/SplitKit.h	(working copy)
+@@ -558,6 +558,10 @@
+   /// @param EnterAfter  When set, enter IntvOut after this point.
+   void splitRegOutBlock(const SplitAnalysis::BlockInfo &BI,
+                         unsigned IntvOut, SlotIndex EnterAfter);
++
++  /// Split the Head segment from LR
++  /// return the split vreg.
++  unsigned splitHeadSegment(LiveRange &LR);
+ };
+ 
+ } // end namespace llvm
 Index: lib/CodeGen/StackMaps.cpp
 ===================================================================
 --- lib/CodeGen/StackMaps.cpp	(revision 365284)
