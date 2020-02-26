@@ -743,7 +743,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    // Join (coalesce) intervals if requested.
    if (EnableJoining)
      joinAllIntervals();
-@@ -3690,6 +3819,34 @@
+@@ -3690,6 +3819,35 @@
      }
    }
  
@@ -773,6 +773,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +          info->markUnused();
 +      }
 +    }
++    Interval.RenumberValues();
 +  }
 +
    LLVM_DEBUG(dump());
@@ -1136,7 +1137,7 @@ Index: lib/CodeGen/VirtRegMap.cpp
    return true;
  }
  
-@@ -592,3 +595,130 @@
+@@ -592,3 +595,145 @@
      }
    }
  }
@@ -1176,6 +1177,15 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +      Context.LiveOut[Reg] = FrameIndex;
 +    } else if (It->second != kMergeConflict) {
 +      It->second = FrameIndex;
++    }
++  };
++
++  auto UpdateRegMask = [&](MBBContext &Context, const uint32_t *RegMask) {
++    for (auto &Pair : Context.LiveOut) {
++      if (Pair.second == kMergeConflict)
++        continue;
++      if (MachineOperand::clobbersPhysReg(RegMask, Pair.first))
++        Pair.second = kNoStack;
 +    }
 +  };
 +
@@ -1235,12 +1245,18 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +      for (auto It = MI.operands_begin(), end = MI.operands_end(); It != end;
 +           ++It) {
 +        MachineOperand &MO = *It;
-+        if (!MO.isReg() || !MO.isDef())
++        if (MO.isRegMask()) {
++          UpdateRegMask(Context, MO.getRegMask());
 +          continue;
-+        unsigned Reg = MO.getReg();
-+        UpdateRegContext(Context, Reg);
-+        LLVM_DEBUG(dbgs() << "removeRedundantReloads: remove stack def: "
-+                          << MI);
++        }
++        if (!MO.isReg())
++          continue;
++        if (MO.isDef() || MO.isImplicit()) {
++          unsigned Reg = MO.getReg();
++          UpdateRegContext(Context, Reg);
++          LLVM_DEBUG(dbgs()
++                     << "removeRedundantReloads: remove stack def: " << MI);
++        }
 +      }
 +    }
 +    // Emit BB to work list.
