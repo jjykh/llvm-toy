@@ -1136,7 +1136,7 @@ Index: lib/CodeGen/VirtRegMap.cpp
    return true;
  }
  
-@@ -592,3 +595,113 @@
+@@ -592,3 +595,130 @@
      }
    }
  }
@@ -1155,16 +1155,28 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +    ContextMap.emplace(MBB, MBBContext{});
 +  }
 +
-+  // insert pseudo pair to ensure the first propagate.
-+  ContextMap.find(&MF.front())->second.LiveIn.emplace(-1, -1);
 +  std::deque<MachineBasicBlock *> WorkList;
++  constexpr static const unsigned kNoStack = -1;
++  constexpr static const unsigned kMergeConflict = -2;
++  // insert pseudo pair to ensure the first propagate.
++  ContextMap.find(&MF.front())->second.LiveIn.emplace(-1, kMergeConflict);
 +  // 2.) Propagate until the edge's from's LiveOut == BB's context's LiveIn
 +  auto UpdateRegContext = [&](MBBContext &Context, unsigned Reg) {
-+    Context.LiveOut.erase(Reg);
++    auto It = Context.LiveOut.find(Reg);
++    if (It == Context.LiveOut.end()) {
++      Context.LiveOut[Reg] = kNoStack;
++    } else if (It->second != kMergeConflict) {
++      It->second = kNoStack;
++    }
 +  };
 +  auto UpdateStackContext = [&](MBBContext &Context, unsigned Reg,
 +                                unsigned FrameIndex) {
-+    Context.LiveOut[Reg] = FrameIndex;
++    auto It = Context.LiveOut.find(Reg);
++    if (It == Context.LiveOut.end()) {
++      Context.LiveOut[Reg] = FrameIndex;
++    } else if (It->second != kMergeConflict) {
++      It->second = FrameIndex;
++    }
 +  };
 +
 +  auto UpdateCandidate = [&](MBBContext &Context, MachineInstr *MI,
@@ -1180,17 +1192,22 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +    }
 +    UpdateStackContext(Context, Reg, FrameIndex);
 +  };
-+  auto CheckBB = [&](MachineBasicBlock *From, MachineBasicBlock *To) {
++  auto CheckAndUpdateBB = [&](MachineBasicBlock *From, MachineBasicBlock *To) {
 +    MBBContext &FromContext = ContextMap.find(From)->second;
 +    MBBContext &ToContext = ContextMap.find(To)->second;
-+    if (FromContext.LiveOut.size() != ToContext.LiveIn.size())
-+      return true;
++
++    bool Updated = false;
 +    for (auto &Pair : FromContext.LiveOut) {
 +      auto It = ToContext.LiveIn.find(Pair.first);
-+      if (It == ToContext.LiveIn.end() || It->second != Pair.second)
-+        return false;
++      if (It == ToContext.LiveIn.end()) {
++        ToContext.LiveIn[Pair.first] = Pair.second;
++        Updated = true;
++      } else if (It->second != kMergeConflict && It->second != Pair.second) {
++        It->second = kMergeConflict;
++        Updated = true;
++      }
 +    }
-+    return false;
++    return Updated;
 +  };
 +  auto ProcessBB = [&](MachineBasicBlock *MBB) {
 +    MBBContext &Context = ContextMap.find(MBB)->second;
@@ -1228,9 +1245,7 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +    }
 +    // Emit BB to work list.
 +    for (MachineBasicBlock *Successor : MBB->successors()) {
-+      if (CheckBB(MBB, Successor)) {
-+        MBBContext &SuccessorContext = ContextMap.find(Successor)->second;
-+        SuccessorContext.LiveIn = Context.LiveOut;
++      if (CheckAndUpdateBB(MBB, Successor)) {
 +        WorkList.push_back(Successor);
 +      }
 +    }
@@ -1247,6 +1262,8 @@ Index: lib/CodeGen/VirtRegMap.cpp
 +      continue;
 +    LLVM_DEBUG(dbgs() << "removeRedundantReloads: removing "
 +                      << Indexes->getInstructionIndex(*Cand) << ": " << *Cand);
++    errs() << "removeRedundantReloads: removing "
++           << Indexes->getInstructionIndex(*Cand) << ": " << *Cand;
 +    Cand->eraseFromParent();
 +  }
 +}
