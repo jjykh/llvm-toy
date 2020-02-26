@@ -1108,6 +1108,148 @@ Index: lib/CodeGen/TargetPassConfig.cpp
    addPass(&LiveDebugValuesID, false);
  
    // Insert before XRay Instrumentation.
+Index: lib/CodeGen/VirtRegMap.cpp
+===================================================================
+--- lib/CodeGen/VirtRegMap.cpp	(revision 365284)
++++ lib/CodeGen/VirtRegMap.cpp	(working copy)
+@@ -42,6 +42,7 @@
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/raw_ostream.h"
+ #include <cassert>
++#include <deque>
+ #include <iterator>
+ #include <utility>
+ 
+@@ -190,6 +191,7 @@
+   void handleIdentityCopy(MachineInstr &MI) const;
+   void expandCopyBundle(MachineInstr &MI) const;
+   bool subRegLiveThrough(const MachineInstr &MI, unsigned SuperPhysReg) const;
++  void removeRedundantReloads(MachineFunction &);
+ 
+ public:
+   static char ID;
+@@ -262,6 +264,7 @@
+   // replaced. Remove the virtual registers and release all the transient data.
+   VRM->clearAllVirt();
+   MRI->clearVirtRegs();
++  removeRedundantReloads(fn);
+   return true;
+ }
+ 
+@@ -592,3 +595,113 @@
+     }
+   }
+ }
++
++void VirtRegRewriter::removeRedundantReloads(MachineFunction &MF) {
++  std::set<MachineInstr *> RemoveCandidates;
++  std::set<MachineInstr *> ForbiddenCandicates;
++  struct MBBContext {
++    std::map<unsigned, unsigned> LiveIn;  /* RegNo/StackId, ValueId */
++    std::map<unsigned, unsigned> LiveOut; /* RegNo/StackId, ValueId */
++  };
++  std::map<MachineBasicBlock *, MBBContext> ContextMap;
++  // 1.) Ready the edges.
++  for (auto It = MF.begin(); It != MF.end(); ++It) {
++    MachineBasicBlock *MBB = &*It;
++    ContextMap.emplace(MBB, MBBContext{});
++  }
++
++  // insert pseudo pair to ensure the first propagate.
++  ContextMap.find(&MF.front())->second.LiveIn.emplace(-1, -1);
++  std::deque<MachineBasicBlock *> WorkList;
++  // 2.) Propagate until the edge's from's LiveOut == BB's context's LiveIn
++  auto UpdateRegContext = [&](MBBContext &Context, unsigned Reg) {
++    Context.LiveOut.erase(Reg);
++  };
++  auto UpdateStackContext = [&](MBBContext &Context, unsigned Reg,
++                                unsigned FrameIndex) {
++    Context.LiveOut[Reg] = FrameIndex;
++  };
++
++  auto UpdateCandidate = [&](MBBContext &Context, MachineInstr *MI,
++                             unsigned Reg, unsigned FrameIndex) {
++    auto Found = Context.LiveOut.find(Reg);
++    if (Found == Context.LiveOut.end() || Found->second != FrameIndex) {
++      ForbiddenCandicates.emplace(MI);
++      LLVM_DEBUG(dbgs() << "removeRedundantReloads: forbidden candidate: "
++                        << *MI);
++    } else {
++      RemoveCandidates.emplace(MI);
++      LLVM_DEBUG(dbgs() << "removeRedundantReloads: remove candidate: " << *MI);
++    }
++    UpdateStackContext(Context, Reg, FrameIndex);
++  };
++  auto CheckBB = [&](MachineBasicBlock *From, MachineBasicBlock *To) {
++    MBBContext &FromContext = ContextMap.find(From)->second;
++    MBBContext &ToContext = ContextMap.find(To)->second;
++    if (FromContext.LiveOut.size() != ToContext.LiveIn.size())
++      return true;
++    for (auto &Pair : FromContext.LiveOut) {
++      auto It = ToContext.LiveIn.find(Pair.first);
++      if (It == ToContext.LiveIn.end() || It->second != Pair.second)
++        return false;
++    }
++    return false;
++  };
++  auto ProcessBB = [&](MachineBasicBlock *MBB) {
++    MBBContext &Context = ContextMap.find(MBB)->second;
++    Context.LiveOut = Context.LiveIn;
++    for (auto It = MBB->begin(), end = MBB->end(); It != end; ++It) {
++      MachineInstr &MI = *It;
++      // Test stores to frame. Unlike the defs, all store to stack slot
++      // need to check if the reg's color has change.
++      // Once changed, the GlobalValueId need to update.
++      int FrameIndex;
++      if (TII->isStoreToStackSlot(MI, FrameIndex)) {
++        MachineOperand &MO = MI.getOperand(0);
++        assert(MO.isReg());
++        UpdateStackContext(Context, MO.getReg(), FrameIndex);
++        LLVM_DEBUG(dbgs() << "removeRedundantReloads: add stack def: " << MI);
++        continue;
++      }
++      if (TII->isLoadFromStackSlot(MI, FrameIndex)) {
++        MachineOperand &MO = MI.getOperand(0);
++        assert(MO.isReg());
++        UpdateCandidate(Context, &MI, MO.getReg(), FrameIndex);
++        continue;
++      }
++      // check defs.
++      for (auto It = MI.operands_begin(), end = MI.operands_end(); It != end;
++           ++It) {
++        MachineOperand &MO = *It;
++        if (!MO.isReg() || !MO.isDef())
++          continue;
++        unsigned Reg = MO.getReg();
++        UpdateRegContext(Context, Reg);
++        LLVM_DEBUG(dbgs() << "removeRedundantReloads: remove stack def: "
++                          << MI);
++      }
++    }
++    // Emit BB to work list.
++    for (MachineBasicBlock *Successor : MBB->successors()) {
++      if (CheckBB(MBB, Successor)) {
++        MBBContext &SuccessorContext = ContextMap.find(Successor)->second;
++        SuccessorContext.LiveIn = Context.LiveOut;
++        WorkList.push_back(Successor);
++      }
++    }
++  };
++  ProcessBB(&MF.front());
++  while (!WorkList.empty()) {
++    MachineBasicBlock *MBB = WorkList.front();
++    WorkList.pop_front();
++    ProcessBB(MBB);
++  }
++  // 3.) Remove the candidates
++  for (MachineInstr *Cand : RemoveCandidates) {
++    if (ForbiddenCandicates.find(Cand) != ForbiddenCandicates.end())
++      continue;
++    LLVM_DEBUG(dbgs() << "removeRedundantReloads: removing "
++                      << Indexes->getInstructionIndex(*Cand) << ": " << *Cand);
++    Cand->eraseFromParent();
++  }
++}
 Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
 ===================================================================
 --- lib/ExecutionEngine/ExecutionEngineBindings.cpp	(revision 365284)
