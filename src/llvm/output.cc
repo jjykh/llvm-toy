@@ -118,6 +118,7 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     v_null_index++;
   }
   bitcast_space_ = buildAlloca(arrayType(repo().int8, 16));
+  is_v8cc_ = v8cc;
 }
 
 void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
@@ -220,6 +221,13 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   LLVMSetSubprogram(state_.function_, subprogram_);
 }
 
+LLVMAttributeRef Output::createStringAttr(const char* key, unsigned key_len,
+                                          const char* value,
+                                          unsigned value_len) {
+  return LLVMCreateStringAttribute(state_.context_, key, key_len, value,
+                                   value_len);
+}
+
 void Output::buildReturnForTailCall() { buildUnreachable(); }
 
 LBasicBlock Output::appendBasicBlock(const char* name) {
@@ -264,6 +272,14 @@ LValue Output::buildStructGEP(LValue structVal, unsigned field) {
 
 LValue Output::buildLoad(LValue toLoad) {
   return setInstrDebugLoc(v8::internal::tf_llvm::buildLoad(builder_, toLoad));
+}
+
+LValue Output::buildInvariantLoad(LValue toLoad) {
+  LValue load = v8::internal::tf_llvm::buildLoad(builder_, toLoad);
+  LValue mdnode = LLVMMDNodeInContext(state_.context_, nullptr, 0);
+  constexpr static const unsigned kMD_invariant_load = 6;
+  LLVMSetMetadata(load, kMD_invariant_load, mdnode);
+  return setInstrDebugLoc(load);
 }
 
 LValue Output::buildStore(LValue val, LValue pointer) {
@@ -612,6 +628,10 @@ void Output::AddFunctionCommonAttr(LValue function) {
   static const char kFSValue[] =
       "+armv7-a,+dsp,+neon,+vfp3,-crypto,-fp-armv8,-fp16,-thumb-mode,-vfp4";
   LLVMAddTargetDependentFunctionAttr(function, kFS, kFSValue);
+
+  static const char kNoRealignStack[] = "no-realign-stack";
+  static const char kTrue[] = "true";
+  LLVMAddTargetDependentFunctionAttr(function, kNoRealignStack, kTrue);
 }
 
 bool Output::embedded_enabled() const { return state_.embedded_enabled_; }

@@ -17,7 +17,6 @@ namespace tf_llvm {
 namespace {
 // copy from v8.
 enum RememberedSetAction { EMIT_REMEMBERED_SET, OMIT_REMEMBERED_SET };
-enum SaveFPRegsMode { kDontSaveFPRegs, kSaveFPRegs };
 
 struct NotMergedPhiDesc {
   BasicBlock* pred;
@@ -260,7 +259,7 @@ class StoreBarrierResolver final : public ContinuationResolver {
  private:
   void CheckPageFlag(LValue base, int flags);
   void CallPatchpoint(LValue base, LValue offset, LValue remembered_set_action,
-                      LValue save_fp_mode, std::function<LValue()> isolate,
+                      std::function<LValue()> isolate,
                       std::function<LValue()> record_write);
   void CheckSmi(LValue value);
   StackMapInfoMap* stack_map_info_map_;
@@ -618,12 +617,10 @@ void StoreBarrierResolver::Resolve(LValue base, LValue offset, LValue value,
       barrier_kind > kMapWriteBarrier ? EMIT_REMEMBERED_SET
                                       : OMIT_REMEMBERED_SET;
   // now v8cc clobbers all fp.
-  SaveFPRegsMode const save_fp_mode = kDontSaveFPRegs;
   CallPatchpoint(
       base, offset,
       output().constIntPtr(static_cast<int>(remembered_set_action) << 1),
-      output().constIntPtr(static_cast<int>(save_fp_mode) << 1), isolate,
-      record_write);
+      isolate, record_write);
   output().buildBr(impl_->continuation);
   output().positionToBBEnd(impl_->continuation);
 }
@@ -659,14 +656,16 @@ void StoreBarrierResolver::CheckPageFlag(LValue base, int mask) {
 
 void StoreBarrierResolver::CallPatchpoint(
     LValue base, LValue offset, LValue remembered_set_action,
-    LValue save_fp_mode, std::function<LValue()> get_isolate,
+    std::function<LValue()> get_isolate,
     std::function<LValue()> get_record_write) {
   // blx ip
   // 1 instructions.
-  int instructions_count = 1;
+  int instructions_count = 2;
   int patchid = patch_point_id_;
   // will not be true again.
   LValue stub_entry = LLVMGetUndef(output().repo().ref8);
+  LValue save_fp_mode = LLVMGetUndef(output().repo().intPtr);
+
   LValue isolate = get_isolate();
   if (!output().embedded_enabled()) {
     LValue stub = get_record_write();
@@ -2191,7 +2190,7 @@ void LLVMTFBuilder::VisitInvoke(int id, bool code,
 }
 
 void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
-    int id, const OperandsVector& operands) {
+    int id, const OperandsVector& operands, bool save_fp) {
   SetDebugLine(id);
   std::vector<LType> types;
   std::vector<LValue> values;
@@ -2214,6 +2213,13 @@ void LLVMTFBuilder::VisitCallWithCallerSavedRegisters(
       output().buildBitCast(function, pointerType(function_type)),
       values.data(), values.size());
   impl->SetLLVMValue(id, result);
+  // Only enable when the function itself is v8sbcc.
+  if (save_fp && !output().is_v8cc()) {
+    static const char kSaveFp[] = "save-fp";
+    LLVMAttributeRef attr =
+        output().createStringAttr(kSaveFp, sizeof(kSaveFp) - 1, nullptr, 0);
+    LLVMAddCallSiteAttribute(result, ~0U, attr);
+  }
 }
 
 void LLVMTFBuilder::VisitRoot(int id, int index) {
@@ -2222,7 +2228,7 @@ void LLVMTFBuilder::VisitRoot(int id, int index) {
       output().root(),
       output().constInt32(index * sizeof(void*) - kRootRegisterBias),
       pointerType(output().taggedType()));
-  LValue value = output().buildLoad(offset);
+  LValue value = output().buildInvariantLoad(offset);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 
@@ -2232,7 +2238,7 @@ void LLVMTFBuilder::VisitRootRelative(int id, int offset, bool tagged) {
       pointerType(tagged ? output().taggedType() : output().repo().ref8);
   LValue offset_value = output().buildGEPWithByteOffset(
       output().root(), output().constInt32(offset), type);
-  LValue value = output().buildLoad(offset_value);
+  LValue value = output().buildInvariantLoad(offset_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, value);
 }
 

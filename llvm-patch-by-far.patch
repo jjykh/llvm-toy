@@ -1,3 +1,15 @@
+Index: include/llvm/ADT/Triple.h
+===================================================================
+--- include/llvm/ADT/Triple.h	(revision 365284)
++++ include/llvm/ADT/Triple.h	(working copy)
+@@ -211,6 +211,7 @@
+     Cygnus,
+     CoreCLR,
+     Simulator,  // Simulator variants of other systems, e.g., Apple's iOS
++    V8,
+     LastEnvironmentType = Simulator
+   };
+   enum ObjectFormatType {
 Index: include/llvm/CodeGen/MachineRegisterInfo.h
 ===================================================================
 --- include/llvm/CodeGen/MachineRegisterInfo.h	(revision 365284)
@@ -35,7 +47,7 @@ Index: include/llvm/IR/CallingConv.h
 ===================================================================
 --- include/llvm/IR/CallingConv.h	(revision 365284)
 +++ include/llvm/IR/CallingConv.h	(working copy)
-@@ -220,8 +220,14 @@
+@@ -220,8 +220,16 @@
      /// shader if tessellation is in use, or otherwise the vertex shader.
      AMDGPU_ES = 96,
  
@@ -44,10 +56,12 @@ Index: include/llvm/IR/CallingConv.h
 +
 +    // Calling convention for v8 store barrier stub
 +    V8SBCC = 98,
++    // Calling convention for v8 C call with fp saved
++    V8FPSave = 99,
 +
      // Calling convention between AArch64 Advanced SIMD functions
 -    AArch64_VectorCall = 97,
-+    AArch64_VectorCall = 99,
++    AArch64_VectorCall = 100,
  
      /// The highest possible calling convention ID. Must be some 2^k - 1.
      MaxID = 1023
@@ -108,13 +122,16 @@ Index: include/llvm/Support/TargetOpcodes.def
  
  /// This pseudo-instruction loads the stack guard value. Targets which need
  /// to prevent the stack guard value or address from being spilled to the
-@@ -133,6 +134,10 @@
+@@ -133,6 +134,13 @@
  /// collectors and deoptimizations in either the callee or caller.
  HANDLE_TARGET_OPCODE(STATEPOINT)
  
 +/// Define a new register from old register, used by gc relocate intrinsic.
 +/// It is intended to cause a value to split in MIR.
 +HANDLE_TARGET_OPCODE(RELOCATE_DEF)
++
++/// Restore SP from FP, used by V8 functions.
++HANDLE_TARGET_OPCODE(RESTORESP)
 +
  /// Instruction that records the offset of a local stack allocation passed to
  /// llvm.localescape. It has two arguments: the symbol for the label and the
@@ -141,7 +158,7 @@ Index: include/llvm/Target/Target.td
  def STATEPOINT : StandardPseudoInstruction {
    let OutOperandList = (outs);
    let InOperandList = (ins variable_ops);
-@@ -1077,6 +1088,13 @@
+@@ -1077,6 +1088,20 @@
    let hasSideEffects = 1;
    let isCall = 1;
  }
@@ -151,6 +168,13 @@ Index: include/llvm/Target/Target.td
 +  let AsmString = "";
 +  let hasSideEffects = 0;
 +  let isAsCheapAsAMove = 1;
++}
++def RESTORESP: StandardPseudoInstruction {
++  let OutOperandList = (outs);
++  let InOperandList = (ins);
++  let AsmString = "";
++  let hasSideEffects = 0;
++  let mayLoad = 1;
 +}
  def LOAD_STACK_GUARD : StandardPseudoInstruction {
    let OutOperandList = (outs ptr_rc:$dst);
@@ -304,18 +328,41 @@ Index: lib/CodeGen/InlineSpiller.cpp
  #include <utility>
  #include <vector>
  
-@@ -213,6 +214,7 @@
+@@ -213,6 +214,10 @@
    bool isSibling(unsigned Reg);
    bool hoistSpillInsideBB(LiveInterval &SpillLI, MachineInstr &CopyMI);
    void eliminateRedundantSpills(LiveInterval &LI, VNInfo *VNI);
++  /// Fold all the regs that related to InputReg and live through a
++  /// statepoint.
 +  void foldStatePoints(unsigned Reg);
++  void removeRegFromStatePoint(MachineInstr *MI, unsigned Reg);
  
    void markValueUsed(LiveInterval*, VNInfo*);
    bool reMaterializeFor(LiveInterval &, MachineInstr &MI);
-@@ -924,11 +926,68 @@
+@@ -552,6 +557,11 @@
+     return false;
+   }
+ 
++  if (MI.getOpcode() == TargetOpcode::STATEPOINT) {
++    removeRegFromStatePoint(&MI, VirtReg.reg);
++    return true;
++  }
++
+   // If the instruction also writes VirtReg.reg, it had better not require the
+   // same register for uses and defs.
+   if (RI.Tied) {
+@@ -924,11 +934,85 @@
      HSpiller.addToMergeableSpills(*std::next(MI), StackSlot, Original);
  }
  
++static bool CheckIdxInsideLI(SlotIndex Idx, const LiveInterval &LI) {
++  auto Segment = LI.FindSegmentContaining(Idx.getPrevSlot());
++  if (LI.end() == Segment) {
++    return false;
++  }
++  return true;
++}
++
 +void InlineSpiller::foldStatePoints(unsigned InputReg) {
 +  SmallVector<unsigned, 8> WorkList;
 +  std::unordered_set<unsigned> VisitedSet;
@@ -332,7 +379,6 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +    }
 +  }
 +  VisitedSet.emplace(InputReg);
-+  LiveInterval &OldLI = LIS.getInterval(Original);
 +  while (!WorkList.empty()) {
 +    unsigned Reg = WorkList.pop_back_val();
 +    // Fold the use of state point.
@@ -356,8 +402,8 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        // Ignore if the input reg's live range does not contain
 +        // the MI.
 +        SlotIndex Idx = LIS.getInstructionIndex(MI).getRegSlot();
-+        auto Segment = OldLI.FindSegmentContaining(Idx);
-+        if ((OldLI.end() == Segment) || (Segment->end <= Idx)) {
++        // Check both to ensure the case that reloads for STATEPOINT.
++        if (!CheckIdxInsideLI(Idx, *StackInt)) {
 +          continue;
 +        }
 +        // Analyze instruction.
@@ -369,6 +415,16 @@ Index: lib/CodeGen/InlineSpiller.cpp
 +        break;
 +      }
 +    }
++  }
++}
++
++void InlineSpiller::removeRegFromStatePoint(MachineInstr *MI, unsigned Reg) {
++  for (unsigned i = MI->getNumOperands(); i; --i) {
++    MachineOperand &MO = MI->getOperand(i - 1);
++    if (!MO.isReg())
++      continue;
++    if (MO.getReg() == Reg)
++      MI->RemoveOperand(i - 1);
 +  }
 +}
 +
@@ -393,6 +449,29 @@ Index: lib/CodeGen/LocalStackSlotAllocation.cpp
            MI.getOpcode() == TargetOpcode::PATCHPOINT)
          continue;
  
+Index: lib/CodeGen/MachineInstr.cpp
+===================================================================
+--- lib/CodeGen/MachineInstr.cpp	(revision 365284)
++++ lib/CodeGen/MachineInstr.cpp	(working copy)
+@@ -1304,11 +1304,18 @@
+ 
+   const MachineFrameInfo &MFI = getParent()->getParent()->getFrameInfo();
+ 
++  bool IsJSFunction = false;
++  CallingConv::ID CC = getParent()->getParent()->getFunction().getCallingConv();
++  if (CC == CallingConv::V8CC || CC == CallingConv::V8SBCC)
++    IsJSFunction = true;
++
+   for (MachineMemOperand *MMO : memoperands()) {
+     if (MMO->isVolatile()) return false;
+     if (MMO->isStore()) return false;
+     if (MMO->isInvariant() && MMO->isDereferenceable())
+       continue;
++    if (IsJSFunction && MMO->isInvariant())
++      continue;
+ 
+     // A load from a constant PseudoSourceValue is invariant.
+     if (const PseudoSourceValue *PSV = MMO->getPseudoValue())
 Index: lib/CodeGen/MachineRegisterInfo.cpp
 ===================================================================
 --- lib/CodeGen/MachineRegisterInfo.cpp	(revision 365284)
@@ -523,18 +602,16 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
      /// Coalesce copies in the specified MBB, putting
      /// copies that cannot yet be coalesced into WorkList.
      void copyCoalesceInMBB(MachineBasicBlock *MBB);
-@@ -1929,6 +1938,10 @@
+@@ -1929,6 +1938,8 @@
    // Update regalloc hint.
    TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
  
 +  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
 +
-+  MRI->updateVirtRegIfLivein(CP.getSrcReg(), CP.getDstReg());
-+
    LLVM_DEBUG({
      dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
             << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
-@@ -3615,6 +3628,122 @@
+@@ -3615,6 +3626,122 @@
    lateLiveIntervalUpdate();
  }
  
@@ -657,7 +734,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
  void RegisterCoalescer::releaseMemory() {
    ErasedInstrs.clear();
    WorkList.clear();
-@@ -3649,6 +3778,8 @@
+@@ -3649,6 +3776,8 @@
  
    RegClassInfo.runOnMachineFunction(fn);
  
@@ -666,6 +743,42 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    // Join (coalesce) intervals if requested.
    if (EnableJoining)
      joinAllIntervals();
+@@ -3690,6 +3819,35 @@
+     }
+   }
+ 
++  // Fold all the reg with single def with others are phi-def.
++  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
++    unsigned Reg = TargetRegisterInfo::index2VirtReg(i);
++    if (MRI->reg_nodbg_empty(Reg))
++      continue;
++    if (!LIS->hasInterval(Reg))
++      continue;
++    LiveInterval &Interval = LIS->getInterval(Reg);
++    size_t defnum = 0;
++    VNInfo *LastDef = nullptr;
++    for (VNInfo *info : Interval.valnos) {
++      if (!info->isUnused() && !info->isPHIDef()) {
++        defnum++;
++        LastDef = info;
++      }
++    }
++    if (defnum == 1) {
++      LLVM_DEBUG(dbgs() << "Found one def reg: " << Interval << "\n");
++      for (auto &s : Interval) {
++        s.valno = LastDef;
++      }
++      for (VNInfo *info : Interval.valnos) {
++        if (info != LastDef && !info->isUnused())
++          info->markUnused();
++      }
++      Interval.RenumberValues();
++    }
++  }
++
+   LLVM_DEBUG(dump());
+   if (VerifyCoalescing)
+     MF->verify(this, "After register coalescing");
 Index: lib/CodeGen/SelectionDAG/InstrEmitter.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/InstrEmitter.cpp	(revision 365284)
@@ -1062,6 +1175,39 @@ Index: lib/MC/MCAsmStreamer.cpp
  
      // We couldn't handle the requested integer size so we fallback by breaking
      // the request down into several, smaller, integers.
+Index: lib/Support/ARMTargetParser.cpp
+===================================================================
+--- lib/Support/ARMTargetParser.cpp	(revision 365284)
++++ lib/Support/ARMTargetParser.cpp	(working copy)
+@@ -567,6 +567,8 @@
+   case Triple::EABIHF:
+   case Triple::EABI:
+     return "aapcs";
++  case Triple::V8:
++    return "v8";
+   default:
+     if (TT.isOSNetBSD())
+       return "apcs-gnu";
+Index: lib/Support/Triple.cpp
+===================================================================
+--- lib/Support/Triple.cpp	(revision 365284)
++++ lib/Support/Triple.cpp	(working copy)
+@@ -235,6 +235,7 @@
+   case Cygnus: return "cygnus";
+   case CoreCLR: return "coreclr";
+   case Simulator: return "simulator";
++  case V8: return "v8";
+   }
+ 
+   llvm_unreachable("Invalid EnvironmentType!");
+@@ -530,6 +531,7 @@
+     .StartsWith("cygnus", Triple::Cygnus)
+     .StartsWith("coreclr", Triple::CoreCLR)
+     .StartsWith("simulator", Triple::Simulator)
++    .StartsWith("v8", Triple::V8)
+     .Default(Triple::UnknownEnvironment);
+ }
+ 
 Index: lib/Target/ARM/ARMAsmPrinter.cpp
 ===================================================================
 --- lib/Target/ARM/ARMAsmPrinter.cpp	(revision 365284)
@@ -1265,7 +1411,15 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMBaseInstrInfo.cpp	(working copy)
-@@ -721,6 +721,10 @@
+@@ -25,6 +25,7 @@
+ #include "llvm/ADT/SmallSet.h"
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/ADT/Triple.h"
++#include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/CodeGen/LiveVariables.h"
+ #include "llvm/CodeGen/MachineBasicBlock.h"
+ #include "llvm/CodeGen/MachineConstantPool.h"
+@@ -721,6 +722,10 @@
      return 0;
    case TargetOpcode::BUNDLE:
      return getInstBundleLength(MI);
@@ -1276,7 +1430,7 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    case ARM::MOVi16_ga_pcrel:
    case ARM::MOVTi16_ga_pcrel:
    case ARM::t2MOVi16_ga_pcrel:
-@@ -1462,6 +1466,72 @@
+@@ -1462,6 +1467,72 @@
    BB->erase(MI);
  }
  
@@ -1289,7 +1443,6 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +  for (; it != end; ++it) {
 +    bool IsDef = false, IsUse = false;
 +    if (it->isCall()) {
-+      ShouldExpand = true;
 +      break;
 +    }
 +    for (unsigned i = 0, e = it->getNumOperands(); i != e; ++i) {
@@ -1306,8 +1459,9 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
 +        IsUse = true;
 +    }
 +    // Should expand now.
-+    if (IsUse)
++    if (IsUse) {
 +      break;
++    }
 +    if (IsDef) {
 +      ShouldExpand = false;
 +      break;
@@ -1349,11 +1503,11 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
  bool ARMBaseInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
    if (MI.getOpcode() == TargetOpcode::LOAD_STACK_GUARD) {
      assert(getSubtarget().getTargetTriple().isOSBinFormatMachO() &&
-@@ -1476,6 +1546,11 @@
+@@ -1476,6 +1547,11 @@
      return true;
    }
  
-+  if (MI.getOpcode() == ARM::RESTORESP) {
++  if (MI.getOpcode() == TargetOpcode::RESTORESP) {
 +    expandRESTORESP(MI);
 +    return true;
 +  }
@@ -1361,6 +1515,16 @@ Index: lib/Target/ARM/ARMBaseInstrInfo.cpp
    // This hook gets to expand COPY instructions before they become
    // copyPhysReg() calls.  Look for VMOVS instructions that can legally be
    // widened to VMOVD.  We prefer the VMOVD when possible because it may be
+@@ -1892,6 +1968,9 @@
+ isProfitableToIfCvt(MachineBasicBlock &MBB,
+                     unsigned NumCycles, unsigned ExtraPredCycles,
+                     BranchProbability Probability) const {
++  CallingConv::ID CallingConv = MBB.getParent()->getFunction().getCallingConv();
++  if (CallingConv == CallingConv::V8CC || CallingConv == CallingConv::V8SBCC)
++    return false;
+   if (!NumCycles)
+     return false;
+ 
 Index: lib/Target/ARM/ARMBaseInstrInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMBaseInstrInfo.h	(revision 365284)
@@ -1385,11 +1549,11 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    return CSR_V8CC_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8SBCC) {
-+    return CSR_V8SBCC_SaveList;
++    return CSR_V8CC_SaveList;
    }
  
    if (STI.getTargetLowering()->supportSwiftError() &&
-@@ -124,6 +128,10 @@
+@@ -124,6 +128,12 @@
    if (CC == CallingConv::GHC)
      // This is academic because all GHC calls are (supposed to be) tail calls
      return CSR_NoRegs_RegMask;
@@ -1397,10 +1561,12 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 +    return CSR_V8CC_RegMask;
 +  if (CC == CallingConv::V8SBCC)
 +    return CSR_V8SBCC_RegMask;
++  if (CC == CallingConv::V8FPSave)
++    return CSR_V8FPSave_RegMask;
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +213,19 @@
+@@ -205,6 +215,19 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -1420,7 +1586,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
  }
-@@ -369,6 +390,8 @@
+@@ -369,6 +392,8 @@
    const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
    const ARMFrameLowering *TFI = getFrameLowering(MF);
  
@@ -1429,7 +1595,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // When outgoing call frames are so large that we adjust the stack pointer
    // around the call, we can no longer use the stack pointer to reach the
    // emergency spill slot.
-@@ -403,6 +426,8 @@
+@@ -403,6 +428,8 @@
    // 2. There are VLAs in the function and the base pointer is disabled.
    if (!TargetRegisterInfo::canRealignStack(MF))
      return false;
@@ -1438,7 +1604,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // Stack realignment requires a frame pointer.  If we already started
    // register allocation with frame pointer elimination, it is too late now.
    if (!MRI->canReserveReg(getFramePointerReg(MF.getSubtarget<ARMSubtarget>())))
-@@ -862,3 +887,18 @@
+@@ -862,3 +889,18 @@
    }
    return false;
  }
@@ -1536,11 +1702,14 @@ Index: lib/Target/ARM/ARMCallingConv.td
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
  
-@@ -248,6 +303,10 @@
+@@ -248,6 +303,13 @@
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
-+def CSR_V8CC : CalleeSavedRegs<(add LR, R11)>;
++def CSR_V8CC : CalleeSavedRegs<(add LR, R11, R10)>;
++
++def CSR_V8FPSave: CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
++                                     (sequence "D%u", 31, 0))>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, (sequence "D%u", 31, 0))>;
 +
@@ -2410,15 +2579,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
 ===================================================================
 --- lib/Target/ARM/ARMISelLowering.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMISelLowering.cpp	(working copy)
-@@ -1388,6 +1388,7 @@
-   case ARMISD::VBICIMM:       return "ARMISD::VBICIMM";
-   case ARMISD::VBSL:          return "ARMISD::VBSL";
-   case ARMISD::MEMCPY:        return "ARMISD::MEMCPY";
-+  case ARMISD::RESTORESP:     return "ARMISD::RESTORESP";
-   case ARMISD::VLD1DUP:       return "ARMISD::VLD1DUP";
-   case ARMISD::VLD2DUP:       return "ARMISD::VLD2DUP";
-   case ARMISD::VLD3DUP:       return "ARMISD::VLD3DUP";
-@@ -1601,6 +1602,10 @@
+@@ -1601,6 +1601,10 @@
    switch (CC) {
    default:
      report_fatal_error("Unsupported calling convention");
@@ -2429,7 +2590,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_AAPCS:
    case CallingConv::ARM_APCS:
    case CallingConv::GHC:
-@@ -1650,6 +1655,10 @@
+@@ -1650,6 +1654,10 @@
    switch (getEffectiveCallingConv(CC, isVarArg)) {
    default:
      report_fatal_error("Unsupported calling convention");
@@ -2440,7 +2601,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    case CallingConv::ARM_APCS:
      return (Return ? RetCC_ARM_APCS : CC_ARM_APCS);
    case CallingConv::ARM_AAPCS:
-@@ -1810,6 +1819,10 @@
+@@ -1810,6 +1818,10 @@
    bool isStructRet    = (Outs.empty()) ? false : Outs[0].Flags.isSRet();
    bool isThisReturn   = false;
    bool isSibCall      = false;
@@ -2451,7 +2612,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
  
    // Disable tail calls if they're not supported.
-@@ -1818,9 +1831,10 @@
+@@ -1818,9 +1830,10 @@
  
    if (isTailCall) {
      // Check if it's really possible to do a tail call.
@@ -2465,18 +2626,65 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
      if (!isTailCall && CLI.CS && CLI.CS.isMustTailCall())
        report_fatal_error("failed to perform tail call elimination on a call "
                           "site marked musttail");
-@@ -1849,8 +1863,30 @@
+@@ -1849,8 +1862,77 @@
    // These operations are automatically eliminated by the prolog/epilog pass
    if (!isSibCall)
      Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
 +  if (CLI.CS.isCall()) {
-+    if (CallerIsJS && (CLI.CallConv == CallingConv::C) &&
-+        !MF.getFunction().hasFnAttribute(Attribute::StackAlignment)) {
++    if (CallerIsJS && (CLI.CallConv == CallingConv::C)) {
 +      hasJSCCall = true;
 +    }
 +  }
  
 -  SDValue StackPtr =
++  // Add a register mask operand representing the call-preserved registers.
++  bool IsCCallInsideJSSaveFP = [&]() {
++    if (CallerCC != CallingConv::V8SBCC)
++      return false;
++    if (!hasJSCCall)
++      return false;
++    const CallInst *Call = dyn_cast<CallInst>(CLI.CS.getInstruction());
++    if (!Call)
++      return false;
++    return Call->hasFnAttr("save-fp");
++  }();
++  SDValue FPSaveArea0, FPSaveArea1, CCAL, CCR;
++  // Save the FP.
++  if (IsCCallInsideJSSaveFP) {
++    MachineFrameInfo &MFI = MF.getFrameInfo();
++    int FIFPSaveArea0, FIFPSaveArea1;
++    ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
++    FIFPSaveArea0 = AFI->getFIFPSaveArea0();
++    if (FIFPSaveArea0 == -1) {
++      FIFPSaveArea0 = MFI.CreateStackObject(8 * 16, 4, false);
++      FIFPSaveArea1 = MFI.CreateStackObject(8 * 8, 4, false);
++      AFI->setFIFPSaveArea0(FIFPSaveArea0);
++      AFI->setFIFPSaveArea1(FIFPSaveArea1);
++    }
++    FIFPSaveArea1 = AFI->getFIFPSaveArea1();
++    FPSaveArea0 =
++        DAG.getFrameIndex(FIFPSaveArea0, getFrameIndexTy(DAG.getDataLayout()));
++    FPSaveArea1 =
++        DAG.getFrameIndex(FIFPSaveArea1, getFrameIndexTy(DAG.getDataLayout()));
++    CCAL = DAG.getConstant(ARMCC::AL, dl, MVT::i32, true);
++    CCR = DAG.getRegister(0, MVT::i32);
++    std::vector<SDValue> Ops;
++    Ops.emplace_back(FPSaveArea0);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 16; i < 32; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VSTMDIA, dl, MVT::Other, Ops), 0);
++    Ops.clear();
++    Ops.emplace_back(FPSaveArea1);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 0; i < 8; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VSTMDIA, dl, MVT::Other, Ops), 0);
++  }
 +  SDValue StackPtr;
 +  if (hasJSCCall) {
 +    SDValue OldStackPtr = DAG.getCopyFromReg(Chain, dl, ARM::SP,
@@ -2497,20 +2705,62 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
        DAG.getCopyFromReg(Chain, dl, ARM::SP, getPointerTy(DAG.getDataLayout()));
  
    RegsToPassVector RegsToPass;
-@@ -2191,6 +2227,12 @@
+@@ -2159,7 +2241,6 @@
+     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
+                                   RegsToPass[i].second.getValueType()));
+ 
+-  // Add a register mask operand representing the call-preserved registers.
+   if (!isTailCall) {
+     const uint32_t *Mask;
+     const ARMBaseRegisterInfo *ARI = Subtarget->getRegisterInfo();
+@@ -2173,6 +2254,8 @@
+         isThisReturn = false;
+         Mask = ARI->getCallPreservedMask(MF, CallConv);
+       }
++    } else if (IsCCallInsideJSSaveFP) {
++      Mask = ARI->getCallPreservedMask(MF, CallingConv::V8FPSave);
+     } else
+       Mask = ARI->getCallPreservedMask(MF, CallConv);
+ 
+@@ -2191,6 +2274,37 @@
  
    // Returns a chain and a flag for retval copy to use.
    Chain = DAG.getNode(CallOpc, dl, NodeTys, Ops);
 +
 +  if (hasJSCCall) {
-+    Chain = DAG.getNode(ARMISD::RESTORESP, dl,
-+                        DAG.getVTList(MVT::Other, MVT::Glue), Chain);
++    Chain =
++        SDValue(DAG.getMachineNode(TargetOpcode::RESTORESP, dl,
++                                   DAG.getVTList(MVT::Other, MVT::Glue), Chain),
++                0);
++  }
++
++  // Restore the FP.
++  if (IsCCallInsideJSSaveFP) {
++    std::vector<SDValue> Ops;
++    Ops.emplace_back(FPSaveArea1);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 0; i < 8; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain = SDValue(DAG.getMachineNode(ARM::VLDMDIA, dl, MVT::Other, Ops), 0);
++    Ops.clear();
++    Ops.emplace_back(FPSaveArea0);
++    Ops.emplace_back(CCAL);
++    Ops.emplace_back(CCR);
++    for (int i = 16; i < 32; ++i)
++      Ops.emplace_back(DAG.getRegister(ARM::D0 + i, MVT::i64));
++    Ops.emplace_back(Chain);
++    Chain =
++        SDValue(DAG.getMachineNode(ARM::VLDMDIA, dl,
++                                   DAG.getVTList(MVT::Other, MVT::Glue), Ops),
++                0);
 +  }
 +
    InFlag = Chain.getValue(1);
  
    Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(NumBytes, dl, true),
-@@ -9254,6 +9296,17 @@
+@@ -9254,6 +9368,17 @@
      llvm_unreachable("Unexpected instr type to insert");
    }
  
@@ -2528,7 +2778,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    // Thumb1 post-indexed loads are really just single-register LDMs.
    case ARM::tLDR_postidx: {
      MachineOperand Def(MI.getOperand(1));
-@@ -10961,6 +11014,10 @@
+@@ -10961,6 +11086,10 @@
    unsigned Mask = MaskC->getZExtValue();
    if (Mask == 0xffff)
      return SDValue();
@@ -2539,7 +2789,7 @@ Index: lib/Target/ARM/ARMISelLowering.cpp
    SDValue Res;
    // Case (1): or (and A, mask), val => ARMbfi A, val, mask
    ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(N1);
-@@ -13136,6 +13193,23 @@
+@@ -13136,6 +13265,23 @@
    return -1;
  }
  
@@ -2567,16 +2817,7 @@ Index: lib/Target/ARM/ARMISelLowering.h
 ===================================================================
 --- lib/Target/ARM/ARMISelLowering.h	(revision 365284)
 +++ lib/Target/ARM/ARMISelLowering.h	(working copy)
-@@ -233,6 +233,8 @@
-       // Pseudo-instruction representing a memory copy using ldm/stm
-       // instructions.
-       MEMCPY,
-+      // Pseudo-instruction representing restoring sp from fp.
-+      RESTORESP,
- 
-       // Vector load N-element structure to all lanes:
-       VLD1DUP = ISD::FIRST_TARGET_MEMORY_OPCODE,
-@@ -501,6 +503,11 @@
+@@ -501,6 +501,11 @@
      bool functionArgumentNeedsConsecutiveRegisters(
          Type *Ty, CallingConv::ID CallConv, bool isVarArg) const override;
  
@@ -2588,44 +2829,6 @@ Index: lib/Target/ARM/ARMISelLowering.h
      /// If a physical register, this returns the register that receives the
      /// exception address on entry to an EH pad.
      unsigned
-Index: lib/Target/ARM/ARMInstrInfo.td
-===================================================================
---- lib/Target/ARM/ARMInstrInfo.td	(revision 365284)
-+++ lib/Target/ARM/ARMInstrInfo.td	(working copy)
-@@ -79,6 +79,7 @@
- def SDT_ARMMEMCPY  : SDTypeProfile<2, 3, [SDTCisVT<0, i32>, SDTCisVT<1, i32>,
-                                           SDTCisVT<2, i32>, SDTCisVT<3, i32>,
-                                           SDTCisVT<4, i32>]>;
-+def SDT_ARMRESTORESP: SDTypeProfile<0, 0, []>;
- 
- def SDTBinaryArithWithFlags : SDTypeProfile<2, 2,
-                                             [SDTCisSameAs<0, 2>,
-@@ -207,6 +208,10 @@
-                         [SDNPHasChain, SDNPInGlue, SDNPOutGlue,
-                          SDNPMayStore, SDNPMayLoad]>;
- 
-+def ARMrestoresp : SDNode<"ARMISD::RESTORESP", SDT_ARMRESTORESP,
-+                        [SDNPHasChain, SDNPOutGlue,
-+                         SDNPMayStore, SDNPMayLoad]>;
-+
- def ARMsmulwb       : SDNode<"ARMISD::SMULWB", SDTIntBinOp, []>;
- def ARMsmulwt       : SDNode<"ARMISD::SMULWT", SDTIntBinOp, []>;
- def ARMsmlalbb      : SDNode<"ARMISD::SMLALBB", SDT_LongMac, []>;
-@@ -4931,6 +4936,14 @@
-             (ARMmemcopy GPR:$dst, GPR:$src, imm:$nreg))]>;
- }
- 
-+let hasPostISelHook = 1, hasNoSchedulingInfo = 1 in {
-+    def RESTORESP : PseudoInst<
-+      (outs),
-+      (ins),
-+      NoItinerary,
-+      [(ARMrestoresp)]>;
-+}
-+
- def ldrex_1 : PatFrag<(ops node:$ptr), (int_arm_ldrex node:$ptr), [{
-   return cast<MemIntrinsicSDNode>(N)->getMemoryVT() == MVT::i8;
- }]>;
 Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMMachineFunctionInfo.h	(revision 365284)
@@ -2638,11 +2841,13 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    unsigned DPRCSAlignGapSize = 0;
    unsigned DPRCSSize = 0;
  
-@@ -127,6 +128,11 @@
+@@ -127,6 +128,13 @@
    /// The amount the literal pool has been increasedby due to promoted globals.
    int PromotedGlobalsIncrease = 0;
  
 +  mutable int LastSPAdjust = 0;
++  int FIFPSaveArea0 = -1;
++  int FIFPSaveArea1 = -1;
 +  bool IsJSFunction = false;
 +  bool IsJSStub = false;
 +  bool IsWASM = false;
@@ -2650,7 +2855,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
  public:
    ARMFunctionInfo() = default;
  
-@@ -170,11 +176,13 @@
+@@ -170,11 +178,13 @@
  
    unsigned getGPRCalleeSavedArea1Size() const { return GPRCS1Size; }
    unsigned getGPRCalleeSavedArea2Size() const { return GPRCS2Size; }
@@ -2664,7 +2869,7 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
    void setDPRCalleeSavedGapSize(unsigned s)   { DPRCSAlignGapSize = s; }
    void setDPRCalleeSavedAreaSize(unsigned s)  { DPRCSSize = s; }
  
-@@ -239,6 +247,20 @@
+@@ -239,6 +249,25 @@
    void setPromotedConstpoolIncrease(int Sz) {
      PromotedGlobalsIncrease = Sz;
    }
@@ -2682,9 +2887,136 @@ Index: lib/Target/ARM/ARMMachineFunctionInfo.h
 +    LastSPAdjust = 0;
 +    return r;
 +  }
++  int getFIFPSaveArea0() const { return FIFPSaveArea0; }
++  int getFIFPSaveArea1() const { return FIFPSaveArea1; }
++
++  void setFIFPSaveArea0(int a) { FIFPSaveArea0 = a; }
++  void setFIFPSaveArea1(int a) { FIFPSaveArea1 = a; }
  };
  
  } // end namespace llvm
+Index: lib/Target/ARM/ARMSubtarget.cpp
+===================================================================
+--- lib/Target/ARM/ARMSubtarget.cpp	(revision 365284)
++++ lib/Target/ARM/ARMSubtarget.cpp	(working copy)
+@@ -207,6 +207,8 @@
+     stackAlignment = 8;
+   if (isTargetNaCl() || isAAPCS16_ABI())
+     stackAlignment = 16;
++  if (isV8_ABI())
++    stackAlignment = 4;
+ 
+   // FIXME: Completely disable sibcall for Thumb1 since ThumbRegisterInfo::
+   // emitEpilogue is not ready for them. Thumb tail calls also use t2B, as
+@@ -325,6 +327,10 @@
+   assert(TM.TargetABI != ARMBaseTargetMachine::ARM_ABI_UNKNOWN);
+   return TM.TargetABI == ARMBaseTargetMachine::ARM_ABI_AAPCS16;
+ }
++bool ARMSubtarget::isV8_ABI() const {
++  assert(TM.TargetABI != ARMBaseTargetMachine::ARM_ABI_UNKNOWN);
++  return TM.TargetABI == ARMBaseTargetMachine::ARM_ABI_V8;
++}
+ 
+ bool ARMSubtarget::isROPI() const {
+   return TM.getRelocationModel() == Reloc::ROPI ||
+Index: lib/Target/ARM/ARMSubtarget.h
+===================================================================
+--- lib/Target/ARM/ARMSubtarget.h	(revision 365284)
++++ lib/Target/ARM/ARMSubtarget.h	(working copy)
+@@ -702,6 +702,7 @@
+   bool isAPCS_ABI() const;
+   bool isAAPCS_ABI() const;
+   bool isAAPCS16_ABI() const;
++  bool isV8_ABI() const;
+ 
+   bool isROPI() const;
+   bool isRWPI() const;
+Index: lib/Target/ARM/ARMTargetMachine.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetMachine.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetMachine.cpp	(working copy)
+@@ -119,6 +119,8 @@
+     return ARMBaseTargetMachine::ARM_ABI_AAPCS;
+   else if (ABIName.startswith("apcs"))
+     return ARMBaseTargetMachine::ARM_ABI_APCS;
++  else if (ABIName == "v8")
++    return ARMBaseTargetMachine::ARM_ABI_V8;
+ 
+   llvm_unreachable("Unhandled/unknown ABI Name!");
+   return ARMBaseTargetMachine::ARM_ABI_UNKNOWN;
+@@ -143,7 +145,8 @@
+   Ret += "-p:32:32";
+ 
+   // ABIs other than APCS have 64 bit integers with natural alignment.
+-  if (ABI != ARMBaseTargetMachine::ARM_ABI_APCS)
++  if (ABI != ARMBaseTargetMachine::ARM_ABI_APCS &&
++      ABI != ARMBaseTargetMachine::ARM_ABI_V8)
+     Ret += "-i64:64";
+ 
+   // We have 64 bits floats. The APCS ABI requires them to be aligned to 32
+@@ -153,7 +156,8 @@
+ 
+   // We have 128 and 64 bit vectors. The APCS ABI aligns them to 32 bits, others
+   // to 64. We always ty to give them natural alignment.
+-  if (ABI == ARMBaseTargetMachine::ARM_ABI_APCS)
++  if (ABI == ARMBaseTargetMachine::ARM_ABI_APCS ||
++      ABI == ARMBaseTargetMachine::ARM_ABI_V8)
+     Ret += "-v64:32:64-v128:32:128";
+   else if (ABI != ARMBaseTargetMachine::ARM_ABI_AAPCS16)
+     Ret += "-v128:64:128";
+Index: lib/Target/ARM/ARMTargetMachine.h
+===================================================================
+--- lib/Target/ARM/ARMTargetMachine.h	(revision 365284)
++++ lib/Target/ARM/ARMTargetMachine.h	(working copy)
+@@ -31,7 +31,8 @@
+     ARM_ABI_UNKNOWN,
+     ARM_ABI_APCS,
+     ARM_ABI_AAPCS, // ARM EABI
+-    ARM_ABI_AAPCS16
++    ARM_ABI_AAPCS16,
++    ARM_ABI_V8
+   } TargetABI;
+ 
+ protected:
+Index: lib/Target/ARM/ARMTargetObjectFile.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetObjectFile.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetObjectFile.cpp	(working copy)
+@@ -32,6 +32,7 @@
+                                         const TargetMachine &TM) {
+   const ARMBaseTargetMachine &ARM_TM = static_cast<const ARMBaseTargetMachine &>(TM);
+   bool isAAPCS_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_AAPCS;
++  bool isV8_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_V8;
+   bool genExecuteOnly =
+       ARM_TM.getMCSubtargetInfo()->hasFeature(ARM::FeatureExecuteOnly);
+ 
+@@ -38,7 +39,7 @@
+   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
+   InitializeELF(isAAPCS_ABI);
+ 
+-  if (isAAPCS_ABI) {
++  if (isAAPCS_ABI || isV8_ABI) {
+     LSDASection = nullptr;
+   }
+ 
+Index: lib/Target/ARM/ARMTargetTransformInfo.cpp
+===================================================================
+--- lib/Target/ARM/ARMTargetTransformInfo.cpp	(revision 365284)
++++ lib/Target/ARM/ARMTargetTransformInfo.cpp	(working copy)
+@@ -130,6 +130,13 @@
+   if (Opcode == Instruction::Xor && Imm.isAllOnesValue())
+     return 0;
+ 
++  if ((Opcode == Instruction::GetElementPtr) &&
++      (!ST->isThumb() || ST->isThumb2())) {
++    int64_t SImmVal = Imm.getSExtValue();
++    if (SImmVal < 4096 && SImmVal > -4096)
++      return 0;
++  }
++
+   return getIntImmCost(Imm, Ty);
+ }
+ 
 Index: lib/Target/ARM/ARMTargetTransformInfo.h
 ===================================================================
 --- lib/Target/ARM/ARMTargetTransformInfo.h	(revision 365284)
@@ -2783,25 +3115,6 @@ Index: lib/Transforms/IPO/SampleProfile.cpp
 +std::string SampleProfileLoaderPass::SampleProfileFileFromOption() {
 +  return SampleProfileFile;
 +}
-Index: lib/Transforms/Vectorize/LoopVectorize.cpp
-===================================================================
---- lib/Transforms/Vectorize/LoopVectorize.cpp	(revision 365284)
-+++ lib/Transforms/Vectorize/LoopVectorize.cpp	(working copy)
-@@ -7512,6 +7512,14 @@
-   }
- 
-   // Process each loop nest in the function.
-+  if (Changed) {
-+    // Add alignstack attribute to function.
-+    if (F.hasFnAttribute("js-wasm-call")) {
-+      F.addAttribute(
-+          AttributeList::FunctionIndex,
-+          Attribute::get(F.getContext(), Attribute::StackAlignment, 4));
-+    }
-+  }
-   return Changed;
- }
- 
 Index: tools/llvm-shlib/CMakeLists.txt
 ===================================================================
 --- tools/llvm-shlib/CMakeLists.txt	(revision 365284)

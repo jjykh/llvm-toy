@@ -152,7 +152,8 @@ enum class BranchHint { kNone, kTrue, kFalse };
            const OperandsVector& operands))                                   \
   V(Invoke, (int id, bool code, const CallDescriptor& call_desc,              \
              const OperandsVector& operands, int then, int exception))        \
-  V(CallWithCallerSavedRegisters, (int id, const OperandsVector& operands))   \
+  V(CallWithCallerSavedRegisters,                                             \
+    (int id, const OperandsVector& operands, bool))                           \
   V(TailCall, (int id, bool code, const CallDescriptor& call_desc,            \
                const OperandsVector& operands))
 

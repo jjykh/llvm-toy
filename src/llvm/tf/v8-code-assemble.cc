@@ -11,6 +11,7 @@
 #include "src/callable.h"
 #include "src/handles-inl.h"
 #include "src/heap/factory.h"
+#include "src/llvm/target-specific.h"
 #include "src/macro-assembler.h"
 #include "src/safepoint-table.h"
 
@@ -146,8 +147,25 @@ int CodeAssemblerLLVM::HandleCall(const CallInfo* call_info,
   return (tasm_.pc_offset() - pc_offset) / sizeof(uint32_t);
 }
 
+static bool IsLiveOutHasNoneGPRegister(
+    const std::vector<StackMaps::LiveOut>& liveouts) {
+  for (auto& e : liveouts) {
+    if (e.dwarfReg > kDwarfGenernalRegEnd) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int CodeAssemblerLLVM::HandleStoreBarrier(const StackMaps::Record& r) {
   int pc_offset = tasm_.pc_offset();
+  // Set save_fp_regs parameter.
+  unsigned save_fp_mode = kDontSaveFPRegs;
+  if (IsLiveOutHasNoneGPRegister(r.liveOuts)) {
+    save_fp_mode = kSaveFPRegs;
+  }
+  tasm_.mov(r4, Operand(save_fp_mode << 1));
+
   if (!embedded_enabled_) {
     tasm_.blx(ip);
   } else {

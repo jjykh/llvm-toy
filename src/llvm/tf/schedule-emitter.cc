@@ -199,7 +199,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
     case compiler::IrOpcode::kCallWithCallerSavedRegisters: {
       const compiler::CallDescriptor* descriptor =
           compiler::CallDescriptorOf(node->op());
-      VisitCCall(node, visitor, descriptor->InputCount());
+      VisitCCall(node, visitor, descriptor->InputCount(),
+                 descriptor->get_save_fp_mode() == kSaveFPRegs);
     }
       return;
     case compiler::IrOpcode::kDeoptimizeIf:
@@ -1126,7 +1127,8 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
   const compiler::CallDescriptor* descriptor =
       compiler::CallDescriptorOf(node->op());
   if (!strcmp(descriptor->debug_name(), "c-call")) {
-    VisitCCall(node, visitor, descriptor->InputCount());
+    VisitCCall(node, visitor, descriptor->InputCount(),
+               descriptor->get_save_fp_mode() == kSaveFPRegs);
     return;
   }
   bool code = false;
@@ -1176,12 +1178,12 @@ void ScheduleEmitter::VisitCall(compiler::Node* node, TFVisitor* visitor,
 }
 
 void ScheduleEmitter::VisitCCall(compiler::Node* node, TFVisitor* visitor,
-                                 int operands_count) {
+                                 int operands_count, bool save_fp) {
   OperandsVector operands;
   for (int i = 0; i < operands_count; ++i) {
     operands.push_back(node->InputAt(i)->id());
   }
-  visitor->VisitCallWithCallerSavedRegisters(node->id(), operands);
+  visitor->VisitCallWithCallerSavedRegisters(node->id(), operands, save_fp);
 }
 
 bool ScheduleEmitter::ShouldEmitCall(compiler::Node* node) {

@@ -751,7 +751,7 @@ void LivenessAnalysisVisitor::VisitInvoke(int id, bool code,
 }
 
 void LivenessAnalysisVisitor::VisitCallWithCallerSavedRegisters(
-    int id, const OperandsVector& operands) {
+    int id, const OperandsVector& operands, bool) {
   Define(id);
   for (int operand : operands) {
     AddIfNotInDefines(operand);
