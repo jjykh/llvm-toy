@@ -743,7 +743,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
    // Join (coalesce) intervals if requested.
    if (EnableJoining)
      joinAllIntervals();
-@@ -3690,6 +3819,34 @@
+@@ -3690,6 +3819,35 @@
      }
    }
  
@@ -772,6 +772,7 @@ Index: lib/CodeGen/RegisterCoalescer.cpp
 +        if (info != LastDef && !info->isUnused())
 +          info->markUnused();
 +      }
++      Interval.RenumberValues();
 +    }
 +  }
 +
