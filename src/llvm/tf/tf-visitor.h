@@ -54,6 +54,7 @@ enum class BranchHint { kNone, kTrue, kFalse };
   V(BitcastFloat32ToInt32, (int id, int e))                                   \
   V(BitcastFloat64ToInt64, (int id, int e))                                   \
   V(TruncateFloat32ToInt32, (int id, int e))                                  \
+  V(TruncateFloat32ToUint32, (int id, int e))                                 \
   V(TruncateFloat64ToWord32, (int id, int e))                                 \
   V(TruncateInt64ToWord32, (int id, int e))                                   \
   V(TruncateFloat64ToFloat32, (int id, int e))                                \
@@ -126,6 +127,8 @@ enum class BranchHint { kNone, kTrue, kFalse };
   V(Float32Mul, (int id, int e1, int e2))                                     \
   V(Float32Div, (int id, int e1, int e2))                                     \
   V(Float32Neg, (int id, int e))                                              \
+  V(Float32Max, (int id, int e1, int e2))                                     \
+  V(Float32Min, (int id, int e1, int e2))                                     \
   V(Int32PairAdd, (int id, int e0, int e1, int e2, int e3))                   \
   V(Int32PairSub, (int id, int e0, int e1, int e2, int e3))                   \
   V(Int32PairMul, (int id, int e0, int e1, int e2, int e3))                   \

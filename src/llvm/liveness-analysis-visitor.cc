@@ -323,6 +323,11 @@ void LivenessAnalysisVisitor::VisitTruncateFloat32ToInt32(int id, int e) {
   AddIfNotInDefines(e);
 }
 
+void LivenessAnalysisVisitor::VisitTruncateFloat32ToUint32(int id, int e) {
+  Define(id);
+  AddIfNotInDefines(e);
+}
+
 void LivenessAnalysisVisitor::VisitRoundFloat64ToInt32(int id, int e) {
   Define(id);
   AddIfNotInDefines(e);
@@ -371,6 +376,18 @@ void LivenessAnalysisVisitor::VisitInt64Add(int id, int e1, int e2) {
 }
 
 void LivenessAnalysisVisitor::VisitFloat64Add(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Max(int id, int e1, int e2) {
+  Define(id);
+  AddIfNotInDefines(e1);
+  AddIfNotInDefines(e2);
+}
+
+void LivenessAnalysisVisitor::VisitFloat32Min(int id, int e1, int e2) {
   Define(id);
   AddIfNotInDefines(e1);
   AddIfNotInDefines(e2);
