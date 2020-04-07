@@ -284,6 +284,15 @@ class TruncateFloat64ToWord32Resolver final : public ContinuationResolver {
   std::vector<LBasicBlock> to_merge_block_;
 };
 
+class MaxMinResolver : public ContinuationResolver {
+ public:
+  MaxMinResolver(BasicBlock* bb, Output& output, int id, bool is_max);
+  LValue Resolve(LValue v0, LValue v1);
+
+ private:
+  bool is_max_;
+};
+
 CallResolver::CallResolver(BasicBlock* current_bb, Output& output, int id,
                            StackMapInfoMap* stack_map_info_map, int patchid)
     : ContinuationResolver(current_bb, output, id),
@@ -871,6 +880,47 @@ void TruncateFloat64ToWord32Resolver::Negate(
   output().buildBr(impl_->continuation);
   to_merge_value_.push_back(final_value);
   to_merge_block_.push_back(negate_bb);
+}
+
+MaxMinResolver::MaxMinResolver(BasicBlock* bb, Output& output, int id,
+                               bool is_max)
+    : ContinuationResolver(bb, output, id), is_max_(is_max) {}
+
+LValue MaxMinResolver::Resolve(LValue v0, LValue v1) {
+  CreateContination();
+  LValue cmp = output().buildFCmp(LLVMRealOLT, v0, v1);
+  char buf[256];
+  snprintf(buf, 256, "B_value%d_maxmin_v0", id());
+  LBasicBlock v0_bb = output().appendBasicBlock(buf);
+  snprintf(buf, 256, "B_value%d_maxmin_v1", id());
+  LBasicBlock v1_bb = output().appendBasicBlock(buf);
+
+  LBasicBlock true_bb, false_bb;
+  std::vector<LValue> to_merge_value;
+  std::vector<LBasicBlock> to_merge_block;
+  if (is_max_) {
+    true_bb = v1_bb;
+    false_bb = v0_bb;
+  } else {
+    true_bb = v0_bb;
+    false_bb = v1_bb;
+  }
+  to_merge_value.emplace_back(v0);
+  to_merge_value.emplace_back(v1);
+  to_merge_block.emplace_back(v0_bb);
+  to_merge_block.emplace_back(v1_bb);
+
+  output().buildCondBr(cmp, true_bb, false_bb);
+
+  output().positionToBBEnd(v0_bb);
+  output().buildBr(impl_->continuation);
+  output().positionToBBEnd(v1_bb);
+  output().buildBr(impl_->continuation);
+  output().positionToBBEnd(impl_->continuation);
+  LValue real_return = output().buildPhi(typeOf(v0));
+  addIncoming(real_return, to_merge_value.data(), to_merge_block.data(),
+              to_merge_block.size());
+  return real_return;
 }
 
 }  // namespace
@@ -1667,6 +1717,15 @@ void LLVMTFBuilder::VisitTruncateFloat32ToInt32(int id, int e) {
                                  output().repo().int32));
 }
 
+void LLVMTFBuilder::VisitTruncateFloat32ToUint32(int id, int e) {
+  SetDebugLine(id);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(
+          id, output().buildCast(LLVMFPToUI,
+                                 GetBuilderImpl(current_bb_)->GetLLVMValue(e),
+                                 output().repo().int32));
+}
+
 void LLVMTFBuilder::VisitRoundFloat64ToInt32(int id, int e) {
   SetDebugLine(id);
   GetBuilderImpl(current_bb_)
@@ -2370,6 +2429,24 @@ void LLVMTFBuilder::VisitFloat64Add(int id, int e1, int e2) {
   LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
   LValue result = output().buildFAdd(e1_value, e2_value);
   GetBuilderImpl(current_bb_)->SetLLVMValue(id, result);
+}
+
+void LLVMTFBuilder::VisitFloat32Max(int id, int e1, int e2) {
+  SetDebugLine(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  MaxMinResolver resolver(current_bb_, output(), id, true);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(id, resolver.Resolve(e1_value, e2_value));
+}
+
+void LLVMTFBuilder::VisitFloat32Min(int id, int e1, int e2) {
+  SetDebugLine(id);
+  LValue e1_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e1);
+  LValue e2_value = GetBuilderImpl(current_bb_)->GetLLVMValue(e2);
+  MaxMinResolver resolver(current_bb_, output(), id, false);
+  GetBuilderImpl(current_bb_)
+      ->SetLLVMValue(id, resolver.Resolve(e1_value, e2_value));
 }
 
 void LLVMTFBuilder::VisitFloat64Sub(int id, int e1, int e2) {

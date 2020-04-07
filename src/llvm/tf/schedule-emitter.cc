@@ -486,7 +486,8 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
       visitor->VisitTruncateFloat32ToInt32(node->id(), node->InputAt(0)->id());
       return;
     case compiler::IrOpcode::kTruncateFloat32ToUint32:
-      UNREACHABLE();
+      visitor->VisitTruncateFloat32ToUint32(node->id(), node->InputAt(0)->id());
+      return;
     case compiler::IrOpcode::kTryTruncateFloat32ToInt64:
       UNREACHABLE();
     case compiler::IrOpcode::kTryTruncateFloat64ToInt64:
@@ -578,9 +579,13 @@ void ScheduleEmitter::VisitNode(compiler::Node* node, TFVisitor* visitor) {
                                            node->InputAt(1)->id());
       return;
     case compiler::IrOpcode::kFloat32Max:
-      UNREACHABLE();
+      visitor->VisitFloat32Max(node->id(), node->InputAt(0)->id(),
+                               node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat32Min:
-      UNREACHABLE();
+      visitor->VisitFloat32Min(node->id(), node->InputAt(0)->id(),
+                               node->InputAt(1)->id());
+      return;
     case compiler::IrOpcode::kFloat64Add:
       visitor->VisitFloat64Add(node->id(), node->InputAt(0)->id(),
                                node->InputAt(1)->id());

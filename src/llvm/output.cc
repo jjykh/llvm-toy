@@ -80,8 +80,12 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
     if ((registerParameter.type == repo().doubleType) ||
         (registerParameter.type == repo().floatType)) {
       parameters_.emplace_back(nullptr);
-      late_parameters.emplace_back(LateParameterType::FloatPoint,
-                                   registerParameter.name,
+      int name = registerParameter.name;
+#if V8_TARGET_ARCH_ARM
+      // ARM use S0, S1...;
+      if (registerParameter.type == repo().floatType) name /= 2;
+#endif
+      late_parameters.emplace_back(LateParameterType::FloatPoint, name,
                                    parameters_.size() - 1);
     } else if ((registerParameter.name >= 0)) {
       EMASSERT(registerParameter.name < 10);
@@ -143,13 +147,17 @@ void Output::initializeFunction(const RegisterParameterDesc& registerParameters,
   for (auto& registerParameter : registerParameters) {
     if ((registerParameter.type == double_type) ||
         (registerParameter.type == float_type)) {
-      EMASSERT(float_point_parameter_types.size() <=
-               static_cast<size_t>(registerParameter.name));
+      int name = registerParameter.name;
+
+#if V8_TARGET_ARCH_ARM
+      // ARM use S0, S1...;
+      if (registerParameter.type == float_type) name /= 2;
+#endif
+      EMASSERT(float_point_parameter_types.size() <= static_cast<size_t>(name));
       // FIXME: could be architecture dependent.
-      if (float_point_parameter_types.size() <
-          static_cast<size_t>(registerParameter.name)) {
-        float_point_parameter_types.resize(
-            static_cast<size_t>(registerParameter.name), float_type);
+      if (float_point_parameter_types.size() < static_cast<size_t>(name)) {
+        float_point_parameter_types.resize(static_cast<size_t>(name),
+                                           float_type);
       }
       float_point_parameter_types.emplace_back(registerParameter.type);
     } else if (registerParameter.name >= 0) {
