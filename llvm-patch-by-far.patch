@@ -69,11 +69,14 @@ Index: include/llvm/IR/Intrinsics.td
 ===================================================================
 --- include/llvm/IR/Intrinsics.td	(revision 365284)
 +++ include/llvm/IR/Intrinsics.td	(working copy)
-@@ -907,6 +907,8 @@
+@@ -907,6 +907,11 @@
  def int_experimental_gc_relocate : Intrinsic<[llvm_any_ty],
                                  [llvm_token_ty, llvm_i32_ty, llvm_i32_ty],
                                  [IntrReadMem]>;
 +def int_experimental_gc_exception : Intrinsic<[llvm_any_ty], [llvm_token_ty],
++                                             [IntrReadMem]>;
++def int_experimental_gc_exception_data : Intrinsic<[llvm_any_ty],
++                                             [llvm_token_ty],
 +                                             [IntrReadMem]>;
  
  //===------------------------ Coroutine Intrinsics ---------------===//
@@ -82,17 +85,18 @@ Index: include/llvm/IR/Statepoint.h
 ===================================================================
 --- include/llvm/IR/Statepoint.h	(revision 365284)
 +++ include/llvm/IR/Statepoint.h	(working copy)
-@@ -331,7 +331,8 @@
+@@ -331,7 +331,9 @@
  public:
    static bool classof(const IntrinsicInst *I) {
      return I->getIntrinsicID() == Intrinsic::experimental_gc_relocate ||
 -      I->getIntrinsicID() == Intrinsic::experimental_gc_result;
 +           I->getIntrinsicID() == Intrinsic::experimental_gc_result ||
-+           I->getIntrinsicID() == Intrinsic::experimental_gc_exception;
++           I->getIntrinsicID() == Intrinsic::experimental_gc_exception ||
++           I->getIntrinsicID() == Intrinsic::experimental_gc_exception_data;
    }
  
    static bool classof(const Value *V) {
-@@ -417,6 +418,17 @@
+@@ -417,6 +419,28 @@
    }
  };
  
@@ -100,6 +104,17 @@ Index: include/llvm/IR/Statepoint.h
 +public:
 +  static bool classof(const IntrinsicInst *I) {
 +    return I->getIntrinsicID() == Intrinsic::experimental_gc_exception;
++  }
++
++  static bool classof(const Value *V) {
++    return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
++  }
++};
++
++class GCExceptionDataInst : public GCProjectionInst {
++public:
++  static bool classof(const IntrinsicInst *I) {
++    return I->getIntrinsicID() == Intrinsic::experimental_gc_exception_data;
 +  }
 +
 +  static bool classof(const Value *V) {
@@ -812,17 +827,20 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp	(working copy)
-@@ -6155,6 +6155,9 @@
+@@ -6155,6 +6155,12 @@
    case Intrinsic::experimental_gc_relocate:
      visitGCRelocate(cast<GCRelocateInst>(I));
      return nullptr;
 +  case Intrinsic::experimental_gc_exception:
 +    visitGCException(cast<GCExceptionInst>(I));
 +    return nullptr;
++  case Intrinsic::experimental_gc_exception_data:
++    visitGCExceptionData(cast<GCExceptionDataInst>(I));
++    return nullptr;
    case Intrinsic::instrprof_increment:
      llvm_unreachable("instrprof failed to lower an increment");
    case Intrinsic::instrprof_value_profile:
-@@ -8187,6 +8190,32 @@
+@@ -8187,6 +8193,32 @@
    FuncInfo.MF->getFrameInfo().setHasStackMap();
  }
  
@@ -855,7 +873,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
  /// Lower llvm.experimental.patchpoint directly to its target opcode.
  void SelectionDAGBuilder::visitPatchpoint(ImmutableCallSite CS,
                                            const BasicBlock *EHPadBB) {
-@@ -8230,17 +8259,25 @@
+@@ -8230,17 +8262,25 @@
    TargetLowering::CallLoweringInfo CLI(DAG);
    populateCallLoweringInfo(CLI, CS, NumMetaOpers, NumCallArgs, Callee, ReturnTy,
                             true);
@@ -890,7 +908,7 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8311,8 +8348,9 @@
+@@ -8311,8 +8351,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
@@ -906,11 +924,12 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h
 ===================================================================
 --- lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(revision 365284)
 +++ lib/CodeGen/SelectionDAG/SelectionDAGBuilder.h	(working copy)
-@@ -947,6 +947,7 @@
+@@ -947,6 +947,8 @@
    // These two are implemented in StatepointLowering.cpp
    void visitGCRelocate(const GCRelocateInst &Relocate);
    void visitGCResult(const GCResultInst &I);
 +  void visitGCException(const GCExceptionInst &I);
++  void visitGCExceptionData(const GCExceptionDataInst &I);
  
    void visitVectorReduce(const CallInst &I, unsigned Intrinsic);
  
@@ -950,7 +969,7 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
    } else {
      ActualCallee = getValue(ISP.getCalledValue());
    }
-@@ -956,6 +962,24 @@
+@@ -956,6 +962,42 @@
    }
  }
  
@@ -972,10 +991,28 @@ Index: lib/CodeGen/SelectionDAG/StatepointLowering.cpp
 +  setValue(&CI, Op);
 +}
 +
++void SelectionDAGBuilder::visitGCExceptionData(const GCExceptionDataInst &CI) {
++  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
++  const Constant *PersonalityFn = FuncInfo.Fn->getPersonalityFn();
++  if (TLI.getExceptionPointerRegister(PersonalityFn) == 0 &&
++      TLI.getExceptionSelectorRegister(PersonalityFn) == 0)
++    return;
++  assert(FuncInfo.MBB->isEHPad() && "Call to landingpad not in landing pad!");
++  SDValue Op;
++  SDLoc dl = getCurSDLoc();
++  Type *RetTy = CI.getFunctionType()->getReturnType();
++  Op = DAG.getZExtOrTrunc(
++      DAG.getCopyFromReg(DAG.getEntryNode(), dl,
++                         FuncInfo.ExceptionSelectorVirtReg,
++                         TLI.getPointerTy(DAG.getDataLayout())),
++      dl, TLI.getValueType(DAG.getDataLayout(), RetTy));
++  setValue(&CI, Op);
++}
++
  void SelectionDAGBuilder::visitGCRelocate(const GCRelocateInst &Relocate) {
  #ifndef NDEBUG
    // Consistency check
-@@ -981,7 +1005,14 @@
+@@ -981,7 +1023,14 @@
    // We didn't need to spill these special cases (constants and allocas).
    // See the handling in spillIncomingValueForStatepoint for detail.
    if (!DerivedPtrLocation) {
@@ -1121,6 +1158,21 @@ Index: lib/ExecutionEngine/ExecutionEngineBindings.cpp
    bool JIT;
    if (Optional<CodeModel::Model> CM = unwrap(options.CodeModel, JIT))
      builder.setCodeModel(*CM);
+Index: lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp
+===================================================================
+--- lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp	(revision 365284)
++++ lib/ExecutionEngine/RuntimeDyld/RuntimeDyld.cpp	(working copy)
+@@ -1201,7 +1201,9 @@
+   // they share a single memory manager.  This can become a problem when page
+   // permissions are applied.
+   Dyld = nullptr;
+-  ProcessAllSections = false;
++  // UC_BUILD
++  // ProcessAllSections = false;
++  ProcessAllSections = true;
+   Checker = nullptr;
+ }
+ 
 Index: lib/IR/AsmWriter.cpp
 ===================================================================
 --- lib/IR/AsmWriter.cpp	(revision 365284)
@@ -1142,23 +1194,28 @@ Index: lib/IR/Verifier.cpp
 ===================================================================
 --- lib/IR/Verifier.cpp	(revision 365284)
 +++ lib/IR/Verifier.cpp	(working copy)
-@@ -2013,7 +2013,8 @@
+@@ -2013,7 +2013,9 @@
      Assert(UserCall, "illegal use of statepoint token", Call, U);
      if (!UserCall)
        continue;
 -    Assert(isa<GCRelocateInst>(UserCall) || isa<GCResultInst>(UserCall),
 +    Assert(isa<GCRelocateInst>(UserCall) || isa<GCResultInst>(UserCall) ||
-+               isa<GCExceptionInst>(UserCall),
++               isa<GCExceptionInst>(UserCall) ||
++               isa<GCExceptionDataInst>(UserCall),
             "gc.result or gc.relocate are the only value uses "
             "of a gc.statepoint",
             Call, U);
-@@ -2023,6 +2024,9 @@
+@@ -2023,6 +2025,13 @@
      } else if (isa<GCRelocateInst>(Call)) {
        Assert(UserCall->getArgOperand(0) == &Call,
               "gc.relocate connected to wrong gc.statepoint", Call, UserCall);
 +    } else if (isa<GCExceptionInst>(UserCall)) {
 +      Assert(UserCall->getArgOperand(0) == &Call,
 +             "gc.exception connected to wrong gc.statepoint", Call, UserCall);
++    } else if (isa<GCExceptionDataInst>(UserCall)) {
++      Assert(UserCall->getArgOperand(0) == &Call,
++             "gc.exception_data connected to wrong gc.statepoint", Call,
++             UserCall);
      }
    }
  
