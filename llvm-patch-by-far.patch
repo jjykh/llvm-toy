@@ -908,7 +908,45 @@ Index: lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
    bool HasGlue = Call->getGluedNode();
  
    // Replace the target specific call node with the patchable intrinsic.
-@@ -8311,8 +8351,9 @@
+@@ -8260,8 +8300,9 @@
+ 
+   // Adjust <numArgs> to account for any arguments that have been passed on the
+   // stack instead.
+-  // Call Node: Chain, Target, {Args}, RegMask, [Glue]
+-  unsigned NumCallRegArgs = Call->getNumOperands() - (HasGlue ? 4 : 3);
++  // Call Node: Chain, Target, {Args}, [RegMask], [Glue]
++  unsigned NumCallRegArgs =
++      Call->getNumOperands() + (CLI.IsTailCall ? 1 : 0) - (HasGlue ? 4 : 3);
+   NumCallRegArgs = IsAnyRegCC ? NumArgs : NumCallRegArgs;
+   Ops.push_back(DAG.getTargetConstant(NumCallRegArgs, dl, MVT::i32));
+ 
+@@ -8276,6 +8317,8 @@
+ 
+   // Push the arguments from the call instruction up to the register mask.
+   SDNode::op_iterator e = HasGlue ? Call->op_end()-2 : Call->op_end()-1;
++  if (CLI.IsTailCall)
++    e += 1;
+   Ops.append(Call->op_begin() + 2, e);
+ 
+   // Push live variables for the stack map.
+@@ -8282,10 +8325,12 @@
+   addStackMapLiveVars(CS, NumMetaOpers + NumArgs, dl, Ops, *this);
+ 
+   // Push the register mask info.
+-  if (HasGlue)
+-    Ops.push_back(*(Call->op_end()-2));
+-  else
+-    Ops.push_back(*(Call->op_end()-1));
++  if (NumCallRegArgs) {
++    if (HasGlue)
++      Ops.push_back(*(Call->op_end()-2));
++    else
++      Ops.push_back(*(Call->op_end()-1));
++  }
+ 
+   // Push the chain (this is originally the first operand of the call, but
+   // becomes now the last or second to last operand).
+@@ -8311,8 +8356,9 @@
      NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
  
    // Replace the target specific call node with a PATCHPOINT node.
@@ -2047,7 +2085,7 @@ Index: lib/Target/ARM/ARMFrameLowering.cpp
    }
  
 +  if (!CanEliminateFrame) {
-+    if (AFI->isJSFunction() || AFI->isJSStub()) {
++    if (MF.getFunction().getCallingConv() == CallingConv::V8CC) {
 +      SavedRegs.set(ARM::R11);
 +      SavedRegs.set(ARM::LR);
 +    }
