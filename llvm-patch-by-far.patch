@@ -1653,10 +1653,12 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
 ===================================================================
 --- lib/Target/ARM/ARMBaseRegisterInfo.cpp	(revision 365284)
 +++ lib/Target/ARM/ARMBaseRegisterInfo.cpp	(working copy)
-@@ -90,6 +90,10 @@
+@@ -90,6 +90,12 @@
        // exception handling.
        return CSR_GenericInt_SaveList;
      }
++  } else if (F.hasFnAttribute("dart-call")) {
++    return CSR_DARTCALL_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8CC) {
 +    return CSR_V8CC_SaveList;
 +  } else if (F.getCallingConv() == CallingConv::V8SBCC) {
@@ -1664,10 +1666,12 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    }
  
    if (STI.getTargetLowering()->supportSwiftError() &&
-@@ -124,6 +128,12 @@
+@@ -124,6 +130,14 @@
    if (CC == CallingConv::GHC)
      // This is academic because all GHC calls are (supposed to be) tail calls
      return CSR_NoRegs_RegMask;
++  if (MF.getFunction().hasFnAttribute("dart-call"))
++    return CSR_DARTCALL_RegMask;
 +  if (CC == CallingConv::V8CC)
 +    return CSR_V8CC_RegMask;
 +  if (CC == CallingConv::V8SBCC)
@@ -1677,7 +1681,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
  
    if (STI.getTargetLowering()->supportSwiftError() &&
        MF.getFunction().getAttributes().hasAttrSomewhere(Attribute::SwiftError))
-@@ -205,6 +215,19 @@
+@@ -205,6 +219,19 @@
        if (Reserved.test(*SI))
          markSuperRegs(Reserved, Reg);
  
@@ -1697,7 +1701,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    assert(checkAllSuperRegsMarked(Reserved));
    return Reserved;
  }
-@@ -369,6 +392,8 @@
+@@ -369,6 +396,8 @@
    const ARMFunctionInfo *AFI = MF.getInfo<ARMFunctionInfo>();
    const ARMFrameLowering *TFI = getFrameLowering(MF);
  
@@ -1706,7 +1710,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // When outgoing call frames are so large that we adjust the stack pointer
    // around the call, we can no longer use the stack pointer to reach the
    // emergency spill slot.
-@@ -403,6 +428,8 @@
+@@ -403,6 +432,8 @@
    // 2. There are VLAs in the function and the base pointer is disabled.
    if (!TargetRegisterInfo::canRealignStack(MF))
      return false;
@@ -1715,7 +1719,7 @@ Index: lib/Target/ARM/ARMBaseRegisterInfo.cpp
    // Stack realignment requires a frame pointer.  If we already started
    // register allocation with frame pointer elimination, it is too late now.
    if (!MRI->canReserveReg(getFramePointerReg(MF.getSubtarget<ARMSubtarget>())))
-@@ -862,3 +889,18 @@
+@@ -862,3 +893,18 @@
    }
    return false;
  }
@@ -1812,7 +1816,7 @@ Index: lib/Target/ARM/ARMCallingConv.td
  // Callee-saved register lists.
  //===----------------------------------------------------------------------===//
  
-@@ -248,6 +302,13 @@
+@@ -248,6 +302,15 @@
  def CSR_AAPCS : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, R4,
                                       (sequence "D%u", 15, 8))>;
  
@@ -1822,6 +1826,8 @@ Index: lib/Target/ARM/ARMCallingConv.td
 +                                     (sequence "D%u", 31, 0))>;
 +
 +def CSR_V8SBCC : CalleeSavedRegs<(add LR, R11, R10, R9, R8, R7, R6, R5, (sequence "D%u", 31, 0))>;
++
++def CSR_DARTCALL : CalleeSavedRegs<(add LR, R11, R10, R5)>;
 +
  // R8 is used to pass swifterror, remove it from CSR.
  def CSR_AAPCS_SwiftError : CalleeSavedRegs<(sub CSR_AAPCS, R8)>;
