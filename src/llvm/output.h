@@ -119,7 +119,7 @@ class Output {
   inline LType taggedType() const { return repo_.taggedType; }
   inline LValue parameter(int i) { return parameters_[i]; }
   inline LValue root() { return root_; }
-  inline LValue fp() { return fp_; }
+  LValue fp();
   inline LValue parent_fp() { return parent_fp_; }
   inline LValue bitcast_space() { return bitcast_space_; }
   inline int stack_parameter_count() const { return stack_parameter_count_; }
@@ -135,7 +135,6 @@ class Output {
   LLVMDIBuilderRef di_builder_;
   LBasicBlock prologue_;
   LValue root_;
-  LValue fp_;
   LValue parent_fp_;
   LValue bitcast_space_;
   LLVMMetadataRef subprogram_;

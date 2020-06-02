@@ -39,7 +39,6 @@ Output::Output(CompilerState& state)
       di_builder_(nullptr),
       prologue_(nullptr),
       root_(nullptr),
-      fp_(nullptr),
       parent_fp_(nullptr),
       bitcast_space_(nullptr),
       subprogram_(nullptr),
@@ -67,11 +66,9 @@ void Output::initializeBuild(const RegisterParameterDesc& registerParameters,
   // build parameters
   if (v8cc) {
     root_ = LLVMGetParam(state_.function_, 10);
-    fp_ = LLVMGetParam(state_.function_, 11);
     parent_fp_ = LLVMGetParam(state_.function_, 9);
   } else {
     root_ = LLVMGetParam(state_.function_, 5);
-    fp_ = LLVMGetParam(state_.function_, 6);
   }
   enum class LateParameterType { Stack, FloatPoint };
   // type, position in stack/double registers, position in parameters;
@@ -637,6 +634,10 @@ LLVMAttributeRef Output::createStringAttr(const char* key, unsigned key_len,
                                           unsigned value_len) {
   return LLVMCreateStringAttribute(state_.context_, key, key_len, value,
                                    value_len);
+}
+
+LValue Output::fp() {
+  return buildCall(repo().frameAddressIntrinsic(), constInt32(0));
 }
 }  // namespace tf_llvm
 }  // namespace internal
